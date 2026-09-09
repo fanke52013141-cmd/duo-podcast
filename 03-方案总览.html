@@ -1,0 +1,1219 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>双声播客工坊 DuoCast · 方案总览 v2.0</title>
+<style>
+:root{
+  --paper:#f4f6f9;--card:#fff;--ink:#1f2430;--ink2:#4d5666;--ink3:#858f9f;
+  --line:#e3e7ee;--line2:#d3d9e3;
+  --brand:#a96a2c;--brand-d:#8a5420;--brand-soft:#f7ede2;
+  --a:#0e7490;--a-soft:#e2f2f6;--b:#be4d6e;--b-soft:#fbe9ef;
+  --ok:#2f9e6e;--ok-soft:#e4f5ed;--warn:#b97e16;--warn-soft:#fbf1dc;--bad:#c75052;--bad-soft:#fcebeb;
+  --mono:"Cascadia Code",Consolas,"Courier New",monospace;
+  --sans:"Segoe UI","Microsoft YaHei UI","Microsoft YaHei",system-ui,sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{font-family:var(--sans);background:var(--paper);color:var(--ink);font-size:14.5px;line-height:1.75}
+.wrap{display:flex;align-items:flex-start;max-width:1400px;margin:0 auto}
+
+/* 目录 */
+.toc{width:262px;flex:none;position:sticky;top:0;height:100vh;overflow:auto;padding:24px 14px;border-right:1px solid var(--line);background:#fbfcfd}
+.toc h1{font-size:15px;line-height:1.4;margin-bottom:3px}
+.toc .sub{font-size:11.5px;color:var(--ink3);margin-bottom:14px}
+.toc .grp{font-size:10.5px;font-weight:700;letter-spacing:.6px;color:var(--ink3);margin:14px 0 5px;padding-left:10px;text-transform:uppercase}
+.toc a{display:block;padding:4.5px 10px;font-size:12.5px;color:var(--ink2);text-decoration:none;border-radius:7px;line-height:1.45}
+.toc a:hover{background:var(--brand-soft);color:var(--brand-d)}
+.toc a.lv2{padding-left:22px;font-size:12px;color:var(--ink3)}
+.content{flex:1;min-width:0;padding:28px 40px 100px;max-width:1000px}
+
+/* 封面 */
+.cover{background:linear-gradient(135deg,#232833,#2e3340);color:#fff;border-radius:18px;padding:30px 32px;margin-bottom:24px}
+.cover .kicker{font-size:11.5px;letter-spacing:2px;color:#cdb795;font-weight:700}
+.cover h2{font-size:27px;margin:8px 0 6px}
+.cover p{color:#c6ccd8;font-size:13px;max-width:720px}
+.cover .meta{display:flex;flex-wrap:wrap;gap:9px;margin-top:18px}
+.cover .meta span{font-size:11.5px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);padding:4px 11px;border-radius:20px}
+
+/* 标题 */
+h3.sec{font-size:20px;margin:40px 0 8px;padding-top:12px;border-top:2px solid var(--line2)}
+h3.sec .no{color:var(--brand);font-family:var(--mono);margin-right:9px;font-size:17px}
+h4{font-size:16px;margin:26px 0 8px;display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+h4 .pid{font-family:var(--mono);font-size:12px;background:var(--brand-soft);color:var(--brand-d);padding:2px 9px;border-radius:6px;font-weight:700}
+h5{font-size:14px;margin:18px 0 6px;color:var(--ink)}
+p.lead{color:var(--ink2);margin-bottom:10px}
+
+/* 卡片 */
+.card{background:var(--card);border:1px solid var(--line);border-radius:13px;padding:18px 20px;margin:14px 0;box-shadow:0 1px 3px rgba(31,36,48,.05)}
+.goal{background:var(--brand-soft);border:1px solid #ecd9c2;border-radius:11px;padding:12px 16px;font-size:13.5px;margin:12px 0}
+.note{border-left:3px solid var(--brand);background:#faf6f1;border-radius:0 9px 9px 0;padding:10px 15px;font-size:12.8px;color:var(--ink2);margin:12px 0}
+.note.warn{border-left-color:var(--warn);background:var(--warn-soft)}
+.note.bad{border-left-color:var(--bad);background:var(--bad-soft)}
+.note.ok{border-left-color:var(--ok);background:var(--ok-soft)}
+ul.b,ol.b{padding-left:22px;margin:8px 0}
+ul.b li,ol.b li{margin:5px 0;color:var(--ink2)}
+
+/* 表格 */
+table{width:100%;border-collapse:collapse;font-size:12.8px;margin:10px 0;background:#fff;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+th{background:#f3f5f9;text-align:left;padding:9px 11px;font-weight:700;color:var(--ink);border-bottom:1px solid var(--line2);white-space:nowrap}
+td{padding:9px 11px;border-bottom:1px solid var(--line);vertical-align:top;color:var(--ink2);line-height:1.55}
+tr:last-child td{border-bottom:none}
+td:first-child{color:var(--ink);font-weight:600}
+table.fixed td:first-child{white-space:nowrap}
+
+/* 行内元素 */
+code,.mono{font-family:var(--mono);font-size:11.8px;background:#eef1f5;padding:1.5px 6px;border-radius:5px;color:#3a4150}
+pre{background:#232833;color:#dde3ec;border-radius:11px;padding:14px 16px;overflow:auto;margin:10px 0;font-family:var(--mono);font-size:12px;line-height:1.6}
+pre code{background:none;color:inherit;padding:0}
+.tag{display:inline-block;font-size:10.5px;font-weight:700;padding:1.5px 7px;border-radius:5px;margin-right:4px}
+.tag.a{background:var(--a-soft);color:var(--a)}
+.tag.b{background:var(--b-soft);color:var(--b)}
+.tag.ok{background:var(--ok-soft);color:var(--ok)}
+.tag.warn{background:var(--warn-soft);color:var(--warn)}
+.tag.bad{background:var(--bad-soft);color:var(--bad)}
+.tag.gray{background:#eef1f5;color:var(--ink3)}
+
+/* 流程图 */
+.flow{display:flex;flex-wrap:wrap;gap:7px;align-items:center;margin:10px 0}
+.flow .node{background:#fff;border:1px solid var(--line2);border-radius:9px;padding:7px 12px;font-size:12.3px;font-weight:600}
+.flow .arr{color:var(--ink3)}
+
+/* 布局示意 */
+.wire{background:#fbfcfd;border:1px solid var(--line2);border-radius:11px;padding:12px;margin:12px 0;font-family:var(--mono);font-size:11.5px;line-height:1.55;color:#3a4150;white-space:pre;overflow:auto}
+
+/* 两栏 */
+.cols2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+@media(max-width:1100px){.cols2{grid-template-columns:1fr}}
+
+/* 徽章行 */
+.chips{display:flex;flex-wrap:wrap;gap:7px;margin:8px 0}
+.chips span{font-size:11.5px;background:#eef1f5;border-radius:20px;padding:3px 11px;color:var(--ink2)}
+
+/* 步骤轨道示意 */
+.steps{display:flex;flex-wrap:wrap;gap:6px;margin:12px 0}
+.steps .st{background:#fff;border:1px solid var(--line2);border-radius:9px;padding:8px 11px;font-size:12px;flex:1 1 120px}
+.steps .st b{display:block;font-size:11px;color:var(--brand);font-family:var(--mono)}
+.steps .st i{font-style:normal;color:var(--ink3);font-size:11px}
+
+@media(max-width:920px){.toc{display:none}.content{padding:20px 16px 70px}.cover h2{font-size:22px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<nav class="toc">
+  <h1>双声播客工坊</h1>
+  <div class="sub">DuoCast · 方案总览 v2.0</div>
+
+  <div class="grp">总览</div>
+  <a href="#s0">0 · 产品定义与核心机制</a>
+  <a href="#s0-1" class="lv2">0.1 定位与差异</a>
+  <a href="#s0-2" class="lv2">0.2 可调 / 关卡 / 一键</a>
+  <a href="#s0-3" class="lv2">0.3 生产链路</a>
+
+  <div class="grp">页面设计</div>
+  <a href="#p0">P0 · 工程管理</a>
+  <a href="#p1">P1 · 角色库</a>
+  <a href="#p2">P2 · 内容输入</a>
+  <a href="#p3">P3 · 分角脚本</a>
+  <a href="#p4">P4 · 配音锁轨</a>
+  <a href="#p5">P5 · 视觉设定</a>
+  <a href="#p6">P6 · 镜头表</a>
+  <a href="#p7">P7 · 试镜</a>
+  <a href="#p8">P8 · 渲染与导出</a>
+  <a href="#p9">P9 · 一键生成</a>
+
+  <div class="grp">实施</div>
+  <a href="#i1">1 · 技术选型</a>
+  <a href="#i2">2 · 系统架构</a>
+  <a href="#i3">3 · 环境与显存</a>
+  <a href="#i4">4 · 关键算法</a>
+  <a href="#i5">5 · 性能预算</a>
+  <a href="#i6">6 · 风险清单</a>
+  <a href="#i7">7 · 路线图</a>
+  <a href="#i8">8 · 验收标准</a>
+</nav>
+
+<main class="content">
+
+<div class="cover">
+  <div class="kicker">PRODUCT &amp; IMPLEMENTATION SPEC</div>
+  <h2>双声播客工坊 DuoCast · v2.0</h2>
+  <p>面向 Windows 本地部署的双人播客视频生产工作台。八步流程：角色库 → 内容输入 → 分角脚本 → 配音锁轨 → 视觉设定 → 镜头表 → 试镜 → 渲染导出。音频先行锁定时间轨，图生图融合出唯一首帧，切镜 + 数字运镜，三级模式：手动可调 → 确认关卡 → 一键生成。</p>
+  <div class="meta">
+    <span>版本 v2.0</span><span>载体：本地 SPA</span><span>运行：Windows 本地</span>
+    <span>前端：React + TS + Vite + Tailwind</span><span>后端：FastAPI + ComfyUI</span>
+    <span>9 个视图 · 6 个确认关卡</span>
+  </div>
+</div>
+
+<!-- ================= 0 ================= -->
+<h3 class="sec" id="s0"><span class="no">0</span>产品定义与核心机制</h3>
+
+<h4 id="s0-1">0.1 定位与 v1.0 差异</h4>
+<div class="card">
+  <table class="fixed">
+    <tbody>
+      <tr><td>一句话</td><td>面向本地部署的双人播客视频生产工作台，编排八步流程，底层调用本机 ComfyUI 与 ffmpeg，数据不出本机</td></tr>
+      <tr><td>用户</td><td>单人创作者，无登录、无多用户、无云端</td></tr>
+      <tr><td>产出</td><td>≤10 分钟（默认 1–3 分钟）双人对谈视频，固定机位 + 切镜 + 轻微推拉</td></tr>
+      <tr><td>核心角色</td><td><span class="tag a">A 主持人</span>固定音色与形象，跨期复用　<span class="tag b">B 嘉宾</span>每期可变（人 / 拟人动物 / 拟人物件）</td></tr>
+      <tr><td>隐私</td><td>仅访问 127.0.0.1，图片音频视频全部落在本地工程目录</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<h5>与 v1.0 的关键差异</h5>
+<table>
+  <thead><tr><th>维度</th><th>v1.0（旧）</th><th>v2.0（本方案）</th><th>原因</th></tr></thead>
+  <tbody>
+    <tr><td>流程顺序</td><td>场景 → 角色 → 遮罩 → 音色 → 文案 → 试镜 → 成片</td><td>角色库 → 内容 → 分角 → 配音锁轨 → 视觉 → 镜头 → 试镜 → 成片</td><td>音频先行才能锁定时间轨，时间轨是所有画面工作的坐标系</td></tr>
+    <tr><td>时间轨来源</td><td>前端按 4.2 字/秒估算</td><td>TTS 实际输出 + ASR 回填时间码</td><td>估算值偏差 10%+，会导致切点错位</td></tr>
+    <tr><td>底图生成</td><td>角色图 + 场景图 → 合成（贴图）</td><td><b>图生图融合</b>：角色设定图 + 场景图 → 模型重新生成「两人已在场景中」的同框底图</td><td>贴图会导致光照/透视/景深不匹配，且错误会放大到整片</td></tr>
+    <tr><td>遮罩</td><td>手动笔刷涂抹</td><td>自动生成（左右站位 + bbox 校正），手涂降级为精修</td><td>InfiniteTalk 多人物分支默认就是左右半幅 mask</td></tr>
+    <tr><td>说话人绑定</td><td>遮罩 + 双轨</td><td><code>add</code> 模式零音频填充 + mask 跨注意力分配</td><td>不说话的说话人收到全零音频特征，自然保持安静</td></tr>
+    <tr><td>镜头语言</td><td>分镜（同框/单拍/单拍）</td><td>切镜点 + 数字运镜（推/拉/裁切），<b>不做摇镜</b></td><td>播客语境下摇镜不真实；数字运镜零漂移、零额外算力</td></tr>
+    <tr><td>语音合成粒度</td><td>逐句</td><td><b>按说话人整段合成</b>，ASR 回填句级时间码</td><td>整段合成音色更稳；回填后仍保留句级重录能力</td></tr>
+    <tr><td>模式</td><td>单一手动</td><td>手动可调 → 确认关卡 → 一键生成</td><td>用户要求的演进路径</td></tr>
+  </tbody>
+</table>
+
+<h4 id="s0-2">0.2 三个核心机制</h4>
+
+<div class="card">
+  <h5>机制一 · 每步可调（Manual Mode）</h5>
+  <p class="lead">每个步骤都是一个「可独立重跑、可局部重跑、参数全暴露」的单元。</p>
+  <table>
+    <thead><tr><th>能力</th><th>说明</th><th>UI 体现</th></tr></thead>
+    <tbody>
+      <tr><td>单步重跑</td><td>任意步骤可单独执行</td><td>每步主视图右上角「重跑本步」</td></tr>
+      <tr><td>局部重跑</td><td>只重跑被改动的最小单元</td><td>改一句话 → 只重合成那一句；改一个镜头段 → 只重渲染那一段</td></tr>
+      <tr><td>参数全暴露</td><td>所有推理参数可见可改</td><td>高级参数默认折叠，展开后逐项可调</td></tr>
+      <tr><td>结果可对比</td><td>保留历史版本</td><td>产物卡片「版本 n」下拉，支持回退与并排对比</td></tr>
+      <tr><td>下游失效提示</td><td>标出过期产物</td><td>橙色「已过期」角标 + 一键重算下游</td></tr>
+    </tbody>
+  </table>
+
+  <h5 style="margin-top:20px">依赖失效映射</h5>
+  <table>
+    <thead><tr><th>改动了</th><th>失效的下游</th></tr></thead>
+    <tbody>
+      <tr><td>角色形象图</td><td>同框底图 → 镜头表 → 试镜 → 成片</td></tr>
+      <tr><td>角色参考音</td><td>配音锁轨 → 时间轨 → 镜头表 → 试镜 → 成片</td></tr>
+      <tr><td>某一句文本</td><td>该句音频 → 时间轨 → 镜头表 → 试镜 → 成片</td></tr>
+      <tr><td>某一句的说话人归属</td><td>两条整段音频 → 时间轨 → 镜头表 → 试镜 → 成片</td></tr>
+      <tr><td>同框底图</td><td>镜头表 → 试镜 → 成片</td></tr>
+      <tr><td>镜头表某段</td><td>该段渲染 → 成片</td></tr>
+      <tr><td>渲染参数</td><td>成片</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="card">
+  <h5>机制二 · 确认关卡（Checkpoint）</h5>
+  <p class="lead">把「需要人眼判断」的环节从流程里拎出来，做成显式暂停点。每个关卡可配置为 <b>必须确认 / 自动通过 / 跳过</b>，配置保存在工程里。</p>
+  <table>
+    <thead><tr><th>关卡</th><th>名称</th><th>确认内容</th><th>通过条件</th></tr></thead>
+    <tbody>
+      <tr><td>CP-1</td><td>角色确认</td><td>A/B 的形象图 + 音色</td><td>两角色各有形象图 + 参考音且试听通过</td></tr>
+      <tr><td>CP-2</td><td>稿件确认</td><td>分角结果：说话人分配、口语化、总时长</td><td>≥1 句台词且总时长在目标范围</td></tr>
+      <tr><td>CP-3</td><td>底图确认</td><td>两人站位、构图、风格、光照</td><td>底图已生成且两人左右分居</td></tr>
+      <tr><td>CP-4</td><td>配音确认</td><td>音色、语气、语速、停顿、总时长</td><td>A/B 两条整段音频已合成且试听通过</td></tr>
+      <tr><td>CP-5</td><td>镜头确认</td><td>切镜点、镜头类型、数字运镜</td><td>所有镜头段已配置</td></tr>
+      <tr><td>CP-6</td><td>试镜确认</td><td>5 秒样片四项验收</td><td>四项全勾</td></tr>
+    </tbody>
+  </table>
+  <div class="note"><b>编号说明：</b>CP 编号按「确认内容」分组，执行顺序为 <b>CP-1 → CP-2 → CP-3 → CP-4 → CP-5 → CP-6</b>（P4 配音之后是 CP-3 底图确认，P5 底图之后是 CP-4 配音确认）。编号一旦分配不再变动，避免与工程文件、日志中的引用冲突。</div>
+  <div class="note"><b>关键设计：</b>关卡不是「锁」，是「暂停点」。两种工作方式：<b>交互式</b>（跑到关卡停下等操作）与<b>前置式</b>（开始前先把能提前定的素材锁定，跑到时自动通过）。</div>
+</div>
+
+<div class="card">
+  <h5>机制三 · 一键生成（Auto Mode）</h5>
+  <table class="fixed">
+    <tbody>
+      <tr><td>输入</td><td>一个话题，或一篇完整文章</td></tr>
+      <tr><td>前置资产</td><td>角色 A（形象 + 音色，锁定）；角色 B（从库中选或新建）</td></tr>
+      <tr><td>自动执行</td><td>内容 → 分角 → 配音 → 视觉 → 镜头 → 试镜 → 渲染 → 导出</td></tr>
+      <tr><td>中途停顿</td><td>仅在用户勾选的确认关卡处暂停</td></tr>
+      <tr><td>失败处理</td><td>停在失败步，保留已完成产物，可「从失败步继续」</td></tr>
+      <tr><td>产物</td><td>与手动模式完全一致，保留每一步中间产物，可事后回到任意步微调</td></tr>
+    </tbody>
+  </table>
+  <div class="note ok"><b>演进路径：</b>① 手动调节打磨每一个环节 → ② 把需人工确认的环节拎出来做前置设定或中途确认 → ③ 打磨完成后收敛为一键生成。</div>
+</div>
+
+<h4 id="s0-3">0.3 完整生产链路</h4>
+<div class="wire">┌─────────────────────────────────────────────────────────────────┐
+│  P1 角色库（跨期复用资产）                                        │
+│  A：形象图 + 参考音 + 音色参数（锁定）                             │
+│  B：形象图 + 参考音 + 音色参数（每期可变）                          │
+└────────────────────────┬────────────────────────────────────────┘
+                         │ [CP-1 角色确认]
+                         ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  P2 内容输入        话题 / 文章 ──LLM──▶ 播客稿（初稿）            │
+└────────────────────────┬────────────────────────────────────────┘
+                         ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  P3 分角脚本        播客稿 ──LLM/人工──▶ 逐句 {说话人, 文本, 语气}  │
+└────────────────────────┬────────────────────────────────────────┘
+                         │ [CP-2 稿件确认]
+                         ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  P4 配音锁轨        A 整段合成 + B 整段合成 ──ASR──▶ 句级时间码    │
+│                     ▼ 产出：时间轨（唯一坐标系）                    │
+└────────────────────────┬────────────────────────────────────────┘
+                         │ [CP-3 底图确认]
+                         ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  P5 视觉设定        A 形象图 + B 形象图 + 场景图 ──图生图融合──▶    │
+│                     ▼ 产出：同框底图（唯一首帧）                    │
+└────────────────────────┬────────────────────────────────────────┘
+                         │ [CP-4 配音确认]
+                         ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  P6 镜头表         时间轨静音间隙 ──▶ 可切点 ──▶ 镜头段            │
+│                    {类型, 起止, 裁切框, 缩放, 缓动}                 │
+└────────────────────────┬────────────────────────────────────────┘
+                         │ [CP-5 镜头确认]
+                         ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  P7 试镜            5 秒样片：底图 + 双音轨片段 ──▶ 四项验收       │
+└────────────────────────┬────────────────────────────────────────┘
+                         │ [CP-6 试镜确认]
+                         ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  P8 渲染与导出      分段渲染（串行队列）──▶ 拼接 ──▶ RIFE 补帧 ──▶ 成片│
+└─────────────────────────────────────────────────────────────────┘</div>
+
+<!-- ================= P0 ================= -->
+<h3 class="sec" id="p0"><span class="no">P0</span>工程管理</h3>
+<div class="goal"><b>页面目标：</b>进入工作台前的工程选择层。管理多个播客工程，每个工程一个独立文件夹。</div>
+
+<div class="wire">┌────────────────────────────────────────────────────────────┐
+│  双声播客工坊                                    [新建工程]  │
+├────────────────────────────────────────────────────────────┤
+│  最近工程                                                   │
+│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐       │
+│  │ 缩略图    │ │ 缩略图    │ │ 缩略图    │ │  ＋      │       │
+│  │ EP003    │ │ EP002    │ │ EP001    │ │ 新建     │       │
+│  │ 2:34·已完成│ │ 5:12·渲染中│ │ 1:48·草稿│ │          │       │
+│  │ 2026-09-08│ │ 2026-09-05│ │ 2026-09-01│ │          │       │
+│  └──────────┘ └──────────┘ └──────────┘ └──────────┘       │
+├────────────────────────────────────────────────────────────┤
+│  工程目录：C:\...\DuoCast\projects\   [打开目录] [导入工程]  │
+└────────────────────────────────────────────────────────────┘</div>
+
+<div class="card">
+  <table>
+    <thead><tr><th>元素</th><th>类型</th><th>功能</th><th>交互与校验</th></tr></thead>
+    <tbody>
+      <tr><td>新建工程</td><td>主按钮</td><td>创建新工程</td><td>弹出表单：工程名（必填）、默认角色 A（从角色库选）、目标时长；创建后在工程目录生成 <code>EPxxx/</code> 骨架</td></tr>
+      <tr><td>工程卡片</td><td>卡片</td><td>打开工程</td><td>点击进入；<code>⋯</code> 菜单：重命名 / 复制 / 归档 / 删除（删除需输入工程名二次确认）</td></tr>
+      <tr><td>缩略图</td><td>图片</td><td>取第一帧成片或底图</td><td>无产物时显示占位</td></tr>
+      <tr><td>进度标签</td><td>徽章</td><td>已完成 / 渲染中 / 草稿 / 失败</td><td>渲染中带进度环</td></tr>
+      <tr><td>打开目录 / 导入工程</td><td>次级按钮</td><td>调用资源管理器 / 从 zip 导入</td><td>导入时校验目录结构</td></tr>
+    </tbody>
+  </table>
+  <div class="note"><b>工程目录结构：</b>project.json（全局状态）· assets/（角色/场景/导入素材）· script/（文章/播客稿/分角）· audio/（整段/双轨/混音/逐句切片）· images/（形象/场景/底图）· masks/（A/B/背景）· shots/（镜头表/滤镜链）· render/（队列/分段视频）· output/（成片）· logs/（运行日志）</div>
+</div>
+
+<!-- ================= P1 ================= -->
+<h3 class="sec" id="p1"><span class="no">P1</span>角色库</h3>
+<div class="goal"><b>页面目标：</b>建立并锁定角色资产。A 是跨期复用的固定角色，B 是每期可变的角色。本步产出的形象图与参考音，是后面所有推理的「身份锚点」。</div>
+
+<div class="wire">┌──────────────────────────────────────────────────────────────────────────────┐
+│ 角色库                                    [从库中导入]  [导出角色包]           │
+├──────────────────────────────────┬───────────────────────────────────────────┤
+│ 角色 A 卡片（固定）                │ 角色 B 卡片（可变）                        │
+│ ┌──────────────────────────────┐ │ ┌──────────────────────────────┐          │
+│ │ [A] 主持人              🔒锁定 │ │ │ [B] 嘉宾               [换角色 ▾] │        │
+│ ├──────────────────────────────┤ │ ├──────────────────────────────┤          │
+│ │ 形象                            │ │ 形象                            │        │
+│ │ ┌────────┐  形象类型：          │ │ ┌────────┐  形象类型：          │        │
+│ │ │ 预览图  │  ○真人 ●拟人动物    │ │ │ 预览图  │  ●真人 ○拟人动物    │        │
+│ │ │        │  ○卡通              │ │ │        │  ○卡通 ○拟人物件    │        │
+│ │ └────────┘                     │ │ └────────┘                     │        │
+│ │ [上传] [生成] [查看设定图]       │ │ [上传] [生成] [查看设定图]       │        │
+│ ├──────────────────────────────┤ │ ├──────────────────────────────┤          │
+│ │ 音色                            │ │ 音色                            │        │
+│ │ 参考音：voice_A_01.wav (18.2s)  │ │ 参考音：voice_B_ep3.wav (15.6s) │        │
+│ │ [试听] [替换]                   │ │ [试听] [替换]                   │        │
+│ │ 情绪向量 ▾ [0,0,0,0,0,0,0,0.7]  │ │ 情绪向量 ▾ [0,0,0,0,0,0,0.2,0]  │        │
+│ │ 语速 duration_factor  [1.00]    │ │ 语速 duration_factor  [0.95]    │        │
+│ │ [合成试听句]                    │ │ [合成试听句]                    │        │
+│ └──────────────────────────────┘ │ └──────────────────────────────┘          │
+├──────────────────────────────────┴───────────────────────────────────────────┤
+│ 角色一致性检查                                                                 │
+│ ☑ A 与 B 音色有明显区分度（建议一高一低、一快一慢）                              │
+│ ☑ A 与 B 形象风格统一（同一套光照与画风）                                       │
+│ ☑ 两人形象均为正面或 3/4 侧，五官清晰                                           │
+│ ☑ B 若为拟人物件，必须有可开合的嘴                                              │
+│                                          [生成角色设定图（用于后续一致性）]      │
+└──────────────────────────────────────────────────────────────────────────────┘</div>
+
+<div class="card">
+  <h5>角色卡片头部</h5>
+  <table>
+    <thead><tr><th>元素</th><th>类型</th><th>默认</th><th>交互与校验</th></tr></thead>
+    <tbody>
+      <tr><td>角色标识</td><td>徽章</td><td><span class="tag a">A</span> / <span class="tag b">B</span></td><td>全局区分，只读</td></tr>
+      <tr><td>角色名</td><td>文本</td><td>主持人 / 嘉宾</td><td>可编辑，用于文案生成时的称呼</td></tr>
+      <tr><td>锁定开关</td><td>图标按钮</td><td>A 锁定 / B 解锁</td><td>锁定后输入控件置灰 + 提示「已锁定，点击解锁」</td></tr>
+      <tr><td>换角色</td><td>下拉</td><td>仅 B 有</td><td>切换后形象图、参考音、参数全部替换，下游标过期</td></tr>
+    </tbody>
+  </table>
+
+  <h5>形象区</h5>
+  <table>
+    <thead><tr><th>元素</th><th>类型</th><th>取值</th><th>交互与校验</th></tr></thead>
+    <tbody>
+      <tr><td>形象预览</td><td>图片</td><td>空态占位</td><td>点击放大；支持对比模式</td></tr>
+      <tr><td>形象类型</td><td>单选组</td><td>A：真人 / 拟人动物 / 卡通<br>B：真人 / 拟人动物 / 卡通 / 拟人物件</td><td>切换时若已有形象图，提示建议重新生成</td></tr>
+      <tr><td>上传</td><td>次级按钮</td><td>—</td><td>接受 <code>image/*</code>；建议正面或 3/4 侧、肩部以上、五官无遮挡</td></tr>
+      <tr><td>生成</td><td>主按钮</td><td>—</td><td>展开生成面板（提示词、负面提示词、参考图、分辨率、步数、CFG、种子、批量），一次出 4 张候选供挑选</td></tr>
+      <tr><td>查看设定图</td><td>文字按钮</td><td>生成后可用</td><td>设定图 = 正面 + 3/4 侧 + 表情三视图，用于后续底图融合约束身份</td></tr>
+    </tbody>
+  </table>
+
+  <h5>音色区</h5>
+  <table>
+    <thead><tr><th>元素</th><th>类型</th><th>默认 / 取值</th><th>交互与校验</th></tr></thead>
+    <tbody>
+      <tr><td>参考音频槽</td><td>上传槽</td><td>空态「WAV/MP3 · 10–20 秒 · 无背景噪 · 无混响」</td><td>接受 <code>audio/*</code>；显示文件名 + 时长 + 波形缩略图；时长 &lt;3s 或 &gt;30s 橙色提示但不阻止</td></tr>
+      <tr><td>试听 / 替换</td><td>图标按钮 / 文字按钮</td><td>—</td><td>替换后下游全部标过期</td></tr>
+      <tr><td>情绪向量</td><td>8 维滑块组</td><td>全 0，每维 0–1 步进 0.05</td><td>顺序固定：<code>[happy, angry, sad, afraid, disgusted, melancholic, surprised, calm]</code>；右侧实时显示数组</td></tr>
+      <tr><td>情绪预设</td><td>下拉</td><td>平静</td><td>平静 / 好奇 / 严肃 / 开心 / 惊讶 / 俏皮 / 委屈 / 激动</td></tr>
+      <tr><td><code>use_random</code></td><td>开关</td><td><b>关</b>（建议保持关）</td><td>打开时橙色警告「会降低音色克隆保真度」</td></tr>
+      <tr><td><code>duration_factor</code></td><td>数值</td><td>1.00，范围 0.5–2.0</td><td>&gt;1 变慢；显示「1.20 = 时长 ×1.2」</td></tr>
+      <tr><td>合成试听句</td><td>次级按钮</td><td>—</td><td>用固定示例句合成并播放；失败显示错误条 + 重试</td></tr>
+      <tr><td>音色标签</td><td>文本</td><td>自动生成，如「低沉稳重·男」</td><td>可手动改；用于提醒 A/B 音色要区分</td></tr>
+    </tbody>
+  </table>
+
+  <h5>角色一致性检查</h5>
+  <table>
+    <thead><tr><th>检查项</th><th>自动检测方式</th><th>未通过提示</th></tr></thead>
+    <tbody>
+      <tr><td>A/B 音色区分度</td><td>比较两条参考音的基频均值与语速</td><td>「两人音色接近，建议更换 B 的参考音」</td></tr>
+      <tr><td>A/B 形象风格统一</td><td>人工确认</td><td>—</td></tr>
+      <tr><td>两人均为正面 / 3-4 侧</td><td>本地人脸 / 主体检测</td><td>「B 的形象角度偏侧，口型驱动效果可能不佳」</td></tr>
+      <tr><td>B 有可开合的嘴</td><td>人工确认（拟人物件必需）</td><td>「物件 B 必须有明确的嘴，否则无法驱动口型」</td></tr>
+    </tbody>
+  </table>
+  <div class="note ok"><b>生成角色设定图：</b>把 A、B 的形象图与风格描述一起送入图生图模型，产出<b>一张包含两人的设定图</b>（正面 + 3/4 侧 + 表情），用于后续 P5 底图融合时作为身份约束参考。这是角色一致性的关键——后续所有出图都以设定图为参考图，而不是各自的原图。</div>
+  <div class="note"><b>完成条件：</b>A、B 各有一张形象图 + 一条参考音　｜　<b>检查点：</b>CP-1　｜　<b>失效规则：</b>换形象图 → P5 及之后过期；换参考音 → P4 及之后过期</div>
+</div>
+
+<!-- ================= P2 ================= -->
+<h3 class="sec" id="p2"><span class="no">P2</span>内容输入</h3>
+<div class="goal"><b>页面目标：</b>从「话题」或「完整文章」出发，生成一份可直接配音的播客稿。</div>
+
+<div class="wire">┌──────────────────────────────────────────────────────────────────────────────┐
+│ 内容输入                                                                      │
+├────────────────────────────┬─────────────────────────────────────────────────┤
+│ 输入区                      │ 播客稿编辑区                                     │
+│ ┌────────────────────────┐ │ ┌─────────────────────────────────────────────┐ │
+│ │ 输入方式                │ │ │ 播客稿                        [重新生成] [版本▾]│ │
+│ │ ● 话题  ○ 完整文章      │ │ ├─────────────────────────────────────────────┤ │
+│ ├────────────────────────┤ │ │ # EP001 · AI 会取代创作者吗                   │ │
+│ │ ┌────────────────────┐ │ │ │ 【开场】 A：欢迎来到…                         │ │
+│ │ │ 输入话题或粘贴文章  │ │ │ │ 【第一段】 A：…  B：…                        │ │
+│ │ └────────────────────┘ │ │ └─────────────────────────────────────────────┘ │
+│ │ 字数：0 / 建议 ≤8000    │ │ 结构大纲（可拖动调整顺序）                        │ │
+│ ├────────────────────────┤ │ ┌─────────────────────────────────────────────┐ │
+│ │ 生成参数                │ │ │ 开场 (12s) · 3 段 · 结束语 (15s)              │ │
+│ │ 目标时长  [3 分钟 ▾]    │ │ └─────────────────────────────────────────────┘ │
+│ │ 风格      [轻松对谈 ▾]  │ │                                                 │
+│ │ 口语化程度 ●──────○ 中  │ │ 统计：字数 1,842 · 预估 3:12 · A 句 24 · B 句 21  │
+│ │ 含开场白/结束语  [✓][✓] │ │                                                 │
+│ │ 禁用词 / 参考视角       │ │                                                 │
+│ │ [生成播客稿]            │ │                                                 │
+│ └────────────────────────┘ │                                                 │
+└────────────────────────────┴─────────────────────────────────────────────────┘</div>
+
+<div class="card">
+  <table>
+    <thead><tr><th>元素</th><th>类型</th><th>默认 / 取值</th><th>交互与校验</th></tr></thead>
+    <tbody>
+      <tr><td>输入方式</td><td>单选组</td><td>话题（默认）/ 完整文章</td><td>切换时保留已输入内容，仅换 prompt 模板</td></tr>
+      <tr><td>输入框</td><td>多行文本</td><td>空</td><td>话题 ≤200 字；文章 ≤8000 字，超出转橙提示「超长文本会降低结构质量」</td></tr>
+      <tr><td>目标时长</td><td>下拉</td><td>1 / 3（默认）/ 5 / 10 分钟</td><td>按中文 4.2 字/秒反推目标字数并显示提示</td></tr>
+      <tr><td>风格</td><td>下拉</td><td>轻松对谈 / 深度访谈 / 犀利辩论 / 知识科普 / 故事叙述</td><td>控制语气与节奏</td></tr>
+      <tr><td>口语化程度</td><td>滑块</td><td>中</td><td>低（接近原文）/ 中 / 高（大量口语词、语气词）</td></tr>
+      <tr><td>含开场白 / 结束语</td><td>开关 ×2</td><td>均开</td><td>是否生成固定结构</td></tr>
+      <tr><td>禁用词</td><td>标签输入</td><td>空</td><td>回车添加；支持粘贴批量导入</td></tr>
+      <tr><td>参考视角</td><td>下拉</td><td>第三人称 / 第一人称 / 拟人化视角</td><td>「拟人化视角」适用于拟人物件 B</td></tr>
+      <tr><td>生成播客稿</td><td>主按钮</td><td>—</td><td>输入为空时禁用；生成中显示流式输出</td></tr>
+      <tr><td>稿件正文</td><td>富文本编辑器</td><td>—</td><td>支持 Markdown；段落前有 <code>【】</code> 结构标签；可直接改文字</td></tr>
+      <tr><td>重新生成 / 版本</td><td>次级按钮 / 下拉</td><td>—</td><td>覆盖前二次确认；每次生成存一版，可回退与并排对比</td></tr>
+      <tr><td>结构大纲</td><td>可拖拽列表</td><td>—</td><td>拖动调整段落顺序；每项显示段落名 + 预估时长</td></tr>
+      <tr><td>统计栏</td><td>文本</td><td>—</td><td>字数 / 预估时长 / A 句数 / B 句数，实时更新</td></tr>
+    </tbody>
+  </table>
+  <div class="note"><b>注意：</b>本步的播客稿是「散文式」的，尚未分句标角色。分角在 P3 完成。<br><b>完成条件：</b>稿件非空且已人工审阅　｜　<b>失效规则：</b>改动稿件 → P3 及之后全部过期</div>
+</div>
+
+<!-- ================= P3 ================= -->
+<h3 class="sec" id="p3"><span class="no">P3</span>分角脚本</h3>
+<div class="goal"><b>页面目标：</b>把播客稿拆成逐句的对话脚本，每句标注说话人（A/B）、语气、语速，形成后续配音与镜头的唯一数据源。</div>
+
+<div class="wire">┌──────────────────────────────────────────────────────────────────────────────┐
+│ 分角脚本                     [自动分角] [合并选中] [拆分] [插入 A 句] [插入 B 句]│
+├──────────────────────────────────────────────┬───────────────────────────────┤
+│ 逐句脚本                                       │ 句属性检查器（选中句）         │
+│ ┌──────────────────────────────────────────┐ │ ┌───────────────────────────┐ │
+│ │ #01 [A] 欢迎来到《AI 会取代创作者吗》。  ▾ │ │ │ 句号：L003                 │ │
+│ │ #02 [B] 我觉得这个问题问得挺好。        ▾ │ │ │ 说话人 [A ▾]               │ │
+│ │ #03 [A] 那你先说，你觉得会吗？          ▾ │ │ │ 文本 [多行文本域]           │ │
+│ │ #04 [B] 会，也不会。                    ▾ │ │ │ 语气 [平静 ▾]              │ │
+│ │ ...                                       │ │ │ 局部语速 [1.00]            │ │
+│ └──────────────────────────────────────────┘ │ │ 前置停顿 [0.30 s]          │ │
+│                                               │ │ 后置停顿 [0.35 s]          │ │
+│ 统计：A 24 句 / B 21 句 · 总字数 1,842 · 预估 3:12│ 预估时长 [2.4 s]           │ │
+│                                               │ │ [重录本句] [删除本句]       │ │
+│                                               │ └───────────────────────────┘ │
+└──────────────────────────────────────────────┴───────────────────────────────┘</div>
+
+<div class="card">
+  <h5>脚本列表</h5>
+  <table>
+    <thead><tr><th>元素</th><th>类型</th><th>交互与校验</th></tr></thead>
+    <tbody>
+      <tr><td>句行</td><td>行组件</td><td>句号 + 说话人标签 + 文本 + 展开箭头；点击选中，双击直接编辑</td></tr>
+      <tr><td>说话人标签</td><td>可点击徽章</td><td><b>点击在 A↔B 之间切换</b>；切换后该句及之后的时间轨标过期</td></tr>
+      <tr><td>文本</td><td>内联文本域</td><td>自动增高；为空时行变橙</td></tr>
+      <tr><td>展开箭头</td><td>图标</td><td>内联显示语气 / 语速 / 停顿</td></tr>
+      <tr><td>拖动把手</td><td>图标</td><td>拖拽排序，带插入位置指示线</td></tr>
+      <tr><td>删除</td><td>图标按钮</td><td>至少保留 1 句；删除后自动重新编号</td></tr>
+    </tbody>
+  </table>
+
+  <h5>顶部工具条</h5>
+  <div class="chips"><span>自动分角</span><span>合并选中（≥2 句）</span><span>拆分（光标在中间）</span><span>插入 A 句</span><span>插入 B 句</span><span>批量操作</span></div>
+
+  <h5>句属性检查器</h5>
+  <table>
+    <thead><tr><th>参数</th><th>类型</th><th>默认</th><th>说明</th></tr></thead>
+    <tbody>
+      <tr><td>说话人</td><td>下拉</td><td>该句当前值</td><td>A / B</td></tr>
+      <tr><td>文本</td><td>多行文本</td><td>—</td><td>—</td></tr>
+      <tr><td>语气</td><td>下拉</td><td>平静</td><td>会映射到 8 维情绪向量</td></tr>
+      <tr><td>局部语速</td><td>数值</td><td>1.00，0.5–2.0</td><td>覆盖角色级 <code>duration_factor</code>；提供「继承角色设定」快捷复位</td></tr>
+      <tr><td>前置停顿</td><td>数值</td><td>0.30s，0–2.0</td><td>该句前插入的静音，<b>这是切点的天然位置</b></td></tr>
+      <tr><td>后置停顿</td><td>数值</td><td>0.35s，0–2.0</td><td>该句后插入的静音</td></tr>
+      <tr><td>预估时长</td><td>只读</td><td>—</td><td>合成后由真实时长覆盖</td></tr>
+      <tr><td>重录本句 / 删除本句</td><td>次级 / 危险按钮</td><td>—</td><td>重录需 P4 已执行过；删除需二次确认</td></tr>
+    </tbody>
+  </table>
+
+  <h5>自动分角规则</h5>
+  <ol class="b">
+    <li>一句一个说话人，不出现「A 和 B 同时说」（若需要，单独标记 <code>both</code>，走 <code>para</code> 模式）</li>
+    <li>每句 ≤60 字，超过则拆分</li>
+    <li>A 负责提问、串联、总结；B 负责主体内容</li>
+    <li>保留口语词与语气词（视口语化程度）</li>
+    <li>每句输出结构化 JSON：<code>{who, text, tone}</code></li>
+  </ol>
+  <div class="note"><b>完成条件：</b>≥1 句且无空句、无未分配说话人的句　｜　<b>检查点：</b>CP-2　｜　<b>失效规则：</b>改动任一句 → P4 及之后过期</div>
+</div>
+
+<!-- ================= P4 ================= -->
+<h3 class="sec" id="p4"><span class="no">P4</span>配音锁轨</h3>
+<div class="goal"><b>页面目标：</b><b>按说话人整段合成音频</b>，然后用 ASR 把句级时间码回填到时间轨。本步产出的时间轨是后续所有画面工作的<b>唯一坐标系</b>。</div>
+
+<div class="wire">┌──────────────────────────────────────────────────────────────────────────────┐
+│ 配音锁轨                                        [开始合成] [重新锁轨] [导出音轨]│
+├──────────────────────────────────────────────┬───────────────────────────────┤
+│ 合成区                                        │ 合成参数（右检查器）           │
+│ ┌──────────────────────────────────────────┐ │ ┌───────────────────────────┐ │
+│ │ [A] 主持人  24 句 · 1,024 字              │ │ │ 合成粒度                   │ │
+│ │ 参考音 voice_A_01.wav · 情绪 [平静]        │ │ │ ● 按说话人整段（推荐）      │ │
+│ │ [▶ 试听整段] [波形缩略] 时长 1:48.320      │ │ │ ○ 逐句合成                 │ │
+│ ├──────────────────────────────────────────┤ │ ├───────────────────────────┤ │
+│ │ [B] 嘉宾  21 句 · 818 字                  │ │ │ 温度 [0.8]  停顿 [自动]    │ │
+│ │ 参考音 voice_B_ep3.wav · 情绪 [好奇]       │ │ │ ASR [faster-whisper ▾]     │ │
+│ │ [▶ 试听整段] [波形缩略] 时长 1:24.600      │ │ │ 对齐 [强制对齐 ▾]          │ │
+│ ├──────────────────────────────────────────┤ │ │ 最小可信度 [0.6]           │ │
+│ │ 对齐结果                                   │ │ └───────────────────────────┘ │
+│ │ ┌────────────────────────────────────────┐│ │                               │
+│ │ │ 句号 说话人 开始     结束     时长      ││ │ 对齐质量                       │ │
+│ │ │ L001  A     00:00.000 00:02.480 2.480  ││ │ 38/45 句高可信 · 7 句需确认    │ │
+│ │ │ L002  B     00:02.980 00:05.120 2.140  ││ │ ┌───────────────────────────┐ │
+│ │ │ L003  A     00:05.620 00:08.040 2.420  ││ │ │ L017 0.42 [跳转] [重录]    │ │
+│ │ └────────────────────────────────────────┘│ │ │ L029 0.51 [跳转] [重录]    │ │
+│ └──────────────────────────────────────────┘ │ └───────────────────────────┘ │
+└──────────────────────────────────────────────┴───────────────────────────────┘</div>
+
+<div class="card">
+  <table>
+    <thead><tr><th>元素</th><th>类型</th><th>功能</th><th>交互与校验</th></tr></thead>
+    <tbody>
+      <tr><td>角色合成卡</td><td>卡片</td><td>显示待合成文本量、参考音、情绪、试听、时长</td><td>点击试听内嵌播放；合成中显示进度条</td></tr>
+      <tr><td>开始合成</td><td>主按钮</td><td>触发 A、B 两条整段合成</td><td>无脚本时禁用；失败显示错误条 + 重试</td></tr>
+      <tr><td>重新锁轨</td><td>次级按钮</td><td>重跑 ASR 对齐</td><td>音频不变只重对齐时用，成本低</td></tr>
+      <tr><td>对齐结果表</td><td>表格</td><td>句号 / 说话人 / 开始 / 结束 / 时长 / 置信度</td><td>置信度 &lt;0.6 转橙；行内可跳转、播放、重录、手动改时间码</td></tr>
+      <tr><td>合成粒度</td><td>单选</td><td><b>按说话人整段（推荐）</b> / 逐句合成</td><td>整段合成音色更稳</td></tr>
+      <tr><td>温度</td><td>数值</td><td>0.8</td><td>越高越有变化，但音色稳定性下降</td></tr>
+      <tr><td>停顿插入</td><td>下拉</td><td>自动 / 固定 / 按标点</td><td>控制句间静音</td></tr>
+      <tr><td>ASR 模型 / 对齐方式 / 最小可信度</td><td>下拉 / 数值</td><td>faster-whisper large-v3 / 强制对齐 / 0.6</td><td>低于可信度阈值列入人工确认列表</td></tr>
+    </tbody>
+  </table>
+
+  <h5>关键算法：整段合成 + 句级回填</h5>
+<pre><code>输入：lines[] = [{who, text, tone, pre_pause, post_pause, rate}]
+
+1. 分组
+   「同一说话人的连续段落」各成一段（不是把 A 的所有台词无视顺序拼一起）
+   若 A 的台词被 B 打断成 5 段，则 A 有 5 个合成段
+
+2. 逐段合成
+   audio = IndexTTS.infer(
+       spk_audio_prompt = 角色参考音,
+       text             = seg.text,
+       emo_vector       = 角色情绪向量 ⊕ 该段语气映射,   # 8 维
+       emo_alpha        = 1.0,
+       duration_factor  = 角色语速 × 该段局部语速,
+       use_random       = False,                        # 必须 false
+       lang             = "ZH"
+   )
+   拼接所有段（段间插入 pre/post 停顿的静音）→ A_full.wav
+
+3. 句级时间码回填（ASR 强制对齐）
+   align(A_full.wav, A的逐句文本) → 每句 [start, end]
+   置信度 &lt; 阈值 → 标记人工确认
+
+4. 构造两条等长轨
+   T = 全局总时长
+   A_track = 在 T 坐标系里，A 的每句放在其 [start,end]，其余补零
+   B_track = 同理
+   assert len(A_track) == len(B_track) == T   # add 模式前置条件
+
+5. 混音
+   mix = A_track + B_track（脚本保证不抢话，故不会削顶）
+
+6. 写入工程
+   audio/lines/Lxxx.wav ← 逐句切片，供单句重录</code></pre>
+  <div class="note"><b>为什么整段合成：</b>单次零样本克隆推理，音色漂移机会只有一次。<b>为什么还要回填：</b>视频侧需要句级切点与重录能力，回填让两者兼得。</div>
+  <div class="note"><b>完成条件：</b>A、B 两条音频已合成且时间码已回填　｜　<b>检查点：</b>CP-4　｜　<b>失效规则：</b>改动任一句 → 该说话人整段需重合成 → 时间轨 → 镜头表 → 试镜 → 成片全部过期</div>
+</div>
+
+<!-- ================= P5 ================= -->
+<h3 class="sec" id="p5"><span class="no">P5</span>视觉设定</h3>
+<div class="goal"><b>页面目标：</b>用<b>图生图融合</b>生成一张「两人已在场景中」的同框底图。这是全片唯一的首帧，决定所有后续渲染的一致性。</div>
+
+<div class="wire">┌──────────────────────────────────────────────────────────────────────────────┐
+│ 视觉设定                              [生成同框底图] [重新生成] [版本 ▾]       │
+├──────────────────────────────┬───────────────────────────────────────────────┤
+│ 素材区                        │ 同框底图                                        │
+│ ┌──────────────────────────┐ │ ┌───────────────────────────────────────────┐ │
+│ │ 角色 A 形象  设定图 [查看] │ │ │            [同框底图 16:9]                 │ │
+│ │ 角色 B 形象  设定图 [查看] │ │ │   A ◀──── 居中留空 ────▶ B               │ │
+│ ├──────────────────────────┤ │ └───────────────────────────────────────────┘ │
+│ │ 场景图                    │ │ 站位标注                                        │
+│ │ ┌──────────────────────┐ │ │ ┌───────────────────────────────────────────┐ │
+│ │ │  [场景预览]           │ │ │ 左侧 A 区 [x,y,w,h]  右侧 B 区 [x,y,w,h]  │ │
+│ │ └──────────────────────┘ │ │ [自动检测] [手动框选] [重置]                │ │
+│ │ [上传] [生成场景]         │ │ └───────────────────────────────────────────┘ │
+│ └──────────────────────────┘ │ Mask 预览：A / B / 背景   [导出 mask] [手动精修] │
+└──────────────────────────────┴───────────────────────────────────────────────┘</div>
+
+<div class="card">
+  <h5>素材区</h5>
+  <table>
+    <thead><tr><th>元素</th><th>类型</th><th>交互与校验</th></tr></thead>
+    <tbody>
+      <tr><td>角色 A/B 形象</td><td>缩略图 + 查看</td><td>显示来自 P1 的形象图与设定图；显示「来自 P1 · 已锁定」</td></tr>
+      <tr><td>场景图</td><td>上传槽 / 生成</td><td>播客场景底图（不含人）</td></tr>
+      <tr><td>生成场景</td><td>主按钮</td><td>模板：暖光播客客厅 / 双人沙发对谈 / 极简演播室 / 户外咖啡馆；提示词预置「固定机位、16:9、为两位角色预留左右站位、不含人物、暖光」</td></tr>
+    </tbody>
+  </table>
+
+  <h5>同框底图生成（核心）</h5>
+  <table>
+    <thead><tr><th>参数</th><th>类型</th><th>默认</th><th>说明</th></tr></thead>
+    <tbody>
+      <tr><td>参考图</td><td>只读列表</td><td>A 形象图 + B 形象图 + 设定图</td><td><b>融合输入，不是贴图</b></td></tr>
+      <tr><td>提示词</td><td>多行文本</td><td>模板</td><td>描述「A 在左、B 在右、两人对谈、固定机位、16:9、居中留空」</td></tr>
+      <tr><td>融合强度</td><td>数值</td><td>0.75，0–1</td><td>越高越贴近参考图身份，越低越自由</td></tr>
+      <tr><td>保留结构</td><td>开关</td><td>开</td><td>是否保留场景图的空间结构</td></tr>
+      <tr><td>采样步数 / CFG / 种子</td><td>数值</td><td>30 / 4.5 / 固定</td><td><b>种子必须固定并记录</b>，用于后续所有分段</td></tr>
+    </tbody>
+  </table>
+
+  <h5>站位标注与 Mask</h5>
+  <table>
+    <thead><tr><th>元素</th><th>类型</th><th>交互与校验</th></tr></thead>
+    <tbody>
+      <tr><td>站位标注</td><td>可拖拽矩形 ×2</td><td>「自动检测」调本地主体检测给出建议框；「手动框选」在图上拖拽；坐标以原图分辨率为基准</td></tr>
+      <tr><td>A/B 区域坐标</td><td>等宽文本</td><td>可手动输入微调</td></tr>
+      <tr><td>Mask 预览</td><td>三张缩略图</td><td>A mask / B mask / 背景 mask，点击放大</td></tr>
+      <tr><td>导出 mask</td><td>次级按钮</td><td>写入 <code>masks/*.png</code>，尺寸与底图严格一致</td></tr>
+      <tr><td>手动精修</td><td>次级按钮</td><td>降级手段：仅当自动 mask 不理想时使用</td></tr>
+    </tbody>
+  </table>
+  <div class="note bad"><b>重要约束（来自 InfiniteTalk 实现）：</b>多人物模式下默认 mask 是<b>硬切的左半/右半</b>。因此底图必须让两人<b>左右分居、居中留空</b>。若两人前后错开或偏中，必须用 bbox 校正。UI 需在生成前就把这个约束显示出来。</div>
+  <div class="note"><b>完成条件：</b>底图已生成/上传且 A/B 站位已确认　｜　<b>检查点：</b>CP-3　｜　<b>失效规则：</b>换底图 → 镜头表、试镜、成片全部过期</div>
+</div>
+
+<!-- ================= P6 ================= -->
+<h3 class="sec" id="p6"><span class="no">P6</span>镜头表</h3>
+<div class="goal"><b>页面目标：</b>基于时间轨的静音间隙生成可切点，为每个镜头段配置镜头类型与数字运镜。<b>不做摇镜</b>，只做切镜 + 轻微推拉。</div>
+
+<div class="wire">┌──────────────────────────────────────────────────────────────────────────────┐
+│ 镜头表                  [自动生成镜头表] [添加段] [合并段] [导出滤镜链]       │
+├──────────────────────────────────────────────────┬───────────────────────────┤
+│ 镜头段列表                                        │ 段属性（选中段）           │
+│ ┌──────────────────────────────────────────────┐ │ ┌───────────────────────┐ │
+│ │ 段  时间范围        时长   类型      运镜      │ │ │ 段号：S03             │ │
+│ │ S01 00:00.000–00:12.4 12.4 同框      推近     │ │ │ 起止 00:24.6–00:41.2  │ │
+│ │ S02 00:12.4–00:24.6  12.2 单拍 A    静止     │ │ │ 时长 16.6s            │ │
+│ │ S03 00:24.6–00:41.2  16.6 同框      静止     │ │ │ 类型 [同框 ▾]         │ │
+│ │ S04 00:41.2–00:55.0  13.8 单拍 B    轻微推近 │ │ │ 运镜 [轻微推近 ▾]     │ │
+│ └──────────────────────────────────────────────┘ │ │ 强度 [0.15] 缓动[线性]│ │
+│                                                   │ │ 裁切框 [x,y,w,h]      │ │
+│ 切点提示                                          │ │ [预览运镜]            │ │
+│ 12 个切点 · 10 个落在静音间隙 ✓  2 个落在说话中间 ⚠ │ └───────────────────────┘ │
+│                                                   │ 全局参数                   │
+│                                                   │ 最短段长[3.0s] 最短静音   │
+│                                                   │ [0.25s] 裁切缩放[1.6×]    │
+│                                                   │ 推拉强度上限[0.25]        │
+└──────────────────────────────────────────────────┴───────────────────────────┘</div>
+
+<div class="cols2">
+  <div class="card">
+    <h5>镜头类型</h5>
+    <table>
+      <thead><tr><th>类型</th><th>说明</th><th>实现</th></tr></thead>
+      <tbody>
+        <tr><td>同框</td><td>完整底图，两人都在画面里</td><td>无裁切，可叠加轻微推拉</td></tr>
+        <tr><td>单拍 A</td><td>裁切到 A 的区域并放大</td><td>裁切框 = A 站位框向外扩一定比例</td></tr>
+        <tr><td>单拍 B</td><td>裁切到 B 的区域并放大</td><td>同上</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="card">
+    <h5>运镜类型（全部为数字运镜）</h5>
+    <table>
+      <thead><tr><th>运镜</th><th>说明</th><th>参数</th></tr></thead>
+      <tbody>
+        <tr><td>静止</td><td>不动</td><td>—</td></tr>
+        <tr><td>轻微推近</td><td>缓慢放大</td><td>强度 0.05–0.25</td></tr>
+        <tr><td>轻微拉远</td><td>缓慢缩小</td><td>同上</td></tr>
+        <tr><td>轻微平移</td><td>画面内横向微移</td><td>同上</td></tr>
+        <tr><td>推近 + 平移</td><td>组合</td><td>两项参数</td></tr>
+      </tbody>
+    </table>
+    <div class="note"><b>为什么不摇镜：</b>播客语境下摇镜不真实；且生成式运镜会导致背景几何漂移。数字运镜是后期在已渲染视频上做，零漂移、零额外算力。</div>
+  </div>
+</div>
+
+<div class="card">
+  <h5>关键算法：自动生成镜头表</h5>
+<pre><code>输入：时间轨（句级 [start,end]）、镜头全局参数
+
+1. 找出所有静音间隙
+   gaps = []; cursor = 0
+   for line in lines（按时间排序）:
+       if line.start - cursor &gt;= min_silence:
+           gaps.append((cursor, line.start))
+       cursor = line.end
+
+2. 候选切点 = 每个 gap 的中点
+
+3. 按最短段长切分
+   从起点开始，累积时长 &gt;= min_shot_len 时，在最近的下一个 gap 中点切一刀
+   末尾不足 min_shot_len 的段并入前一段
+
+4. 判定镜头类型（启发式）
+   A 发言占比 &gt;= 70% → soloA
+   B 发言占比 &gt;= 70% → soloB
+   否则 → wide（用户可逐段覆盖）
+
+5. 分配运镜（保守）
+   连续同类型段 &gt; 2 → 第 3 段起加轻微推近/拉远
+   段长 &gt; 20s → 允许一次推近
+   默认 static
+
+6. 输出 shots[]
+   [{id, start, end, type, camera:{move, strength, easing, crop}}]</code></pre>
+  <div class="note"><b>完成条件：</b>所有镜头段已配置类型与运镜，切点警告已处理或已知接受　｜　<b>检查点：</b>CP-5</div>
+</div>
+
+<!-- ================= P7 ================= -->
+<h3 class="sec" id="p7"><span class="no">P7</span>试镜</h3>
+<div class="goal"><b>页面目标：</b>用 5 秒样片低成本验证口型、非说话人静止、画面稳定、风格统一。<b>通过后才投入长片渲染。</b></div>
+
+<div class="wire">┌──────────────────────────────────────────────────────────────────────────────┐
+│ 试镜                                                      [生成试镜样片]        │
+├──────────────────────────────────────┬───────────────────────────────────────┤
+│ 样片预览                              │ 验收清单                               │
+│ ┌──────────────────────────────────┐ │ ┌───────────────────────────────────┐ │
+│ │       [16:9 视频播放器]           │ │ │ ☐ ① 嘴型跟得上音频                │ │
+│ └──────────────────────────────────┘ │ │ ☐ ② 不说话的人不抢戏（保持安静）   │ │
+│ 规格：5 秒 / 125 帧 · 832×480 · 种子  │ │ ☐ ③ 脸/物体不变形、背景不扭曲      │ │
+│ 20260908                              │ │ ☐ ④ 风格与设定图统一              │ │
+├──────────────────────────────────────┤ └───────────────────────────────────┘ │
+│ 试镜设置                              │ 回退路径                               │
+│ 样片区间 [自动选一段 ▾] 起始 00:24.600 │ 嘴不动/乱动 → 回 P5 收紧 mask         │
+│ 时长 [5 s ▾] 分辨率 [832×480 ▾]       │ 画面崩    → 回 P5 换更标准底图         │
+│ 步数 [8] 种子 [20260908] [🔒固定]     │ 音色不对  → 回 P1 换参考音             │
+│ 模式 ●add（交替）○para（并行）        │ 不抢戏    → 回 P6 调整段类型           │
+│ 音频 CFG [4.0]  motion_frame [9]      │                                        │
+└──────────────────────────────────────┴───────────────────────────────────────┘</div>
+
+<div class="card">
+  <table>
+    <thead><tr><th>元素</th><th>类型</th><th>默认 / 取值</th><th>交互与校验</th></tr></thead>
+    <tbody>
+      <tr><td>样片区间</td><td>下拉</td><td>自动选一段（优先「A 说完 B 接话」的段）</td><td>可选自动 / 手动指定 / 选最长段</td></tr>
+      <tr><td>时长 / 分辨率</td><td>下拉</td><td>5s（默认）/ 832×480（默认）</td><td>帧数 = 时长 × 25fps</td></tr>
+      <tr><td>步数</td><td>数值</td><td>8</td><td>蒸馏后的采样步数</td></tr>
+      <tr><td>种子</td><td>数值 + 锁</td><td>20260908，默认锁定</td><td><b>锁定后与长片分段一致</b>，保证连贯</td></tr>
+      <tr><td>模式</td><td>单选</td><td><code>add</code>（交替，默认）/ <code>para</code>（并行）</td><td>交替对话用 add；抢话用 para</td></tr>
+      <tr><td>音频 CFG</td><td>数值</td><td>4.0</td><td>官方推荐 3–5，越高越准但可能不自然</td></tr>
+      <tr><td>motion_frame</td><td>数值</td><td>9</td><td>运动幅度</td></tr>
+      <tr><td>生成试镜样片</td><td>主按钮</td><td>—</td><td>进度来自 WebSocket；失败显示错误 + 重试</td></tr>
+      <tr><td>验收清单</td><td>勾选 ×4</td><td>全未勾</td><td><b>四项全勾才解锁 P8 的「开始队列渲染」</b></td></tr>
+    </tbody>
+  </table>
+  <div class="note"><b>完成条件：</b>样片已生成且四项验收全勾　｜　<b>检查点：</b>CP-6　｜　未通过不硬锁，但 P8 显示橙色提示「建议先通过试镜」</div>
+</div>
+
+<!-- ================= P8 ================= -->
+<h3 class="sec" id="p8"><span class="no">P8</span>渲染与导出</h3>
+<div class="goal"><b>页面目标：</b>把整片按镜头段切成 15–30 秒分段逐段渲染（串行、可续跑），拼接后用 ffmpeg 应用数字运镜，RIFE 补帧，导出成片。</div>
+
+<div class="wire">┌──────────────────────────────────────────────────────────────────────────────┐
+│ 渲染与导出                          [开始队列渲染] [暂停] [从失败段继续] [导出]│
+├──────────────────────────────┬───────────────────────────────────────────────┤
+│ 渲染设置                      │ 渲染队列                          总进度 34%   │
+│ ┌──────────────────────────┐ │ ┌───────────────────────────────────────────┐ │
+│ │ 单段时长 [20 s ▾]         │ │ │ #01 00:00–00:20 1250帧 ███████ 100% ✓      │ │
+│ │ 分辨率   [480p ▾]         │ │ │ #02 00:20–00:41 1313帧 ███████ 100% ✓      │ │
+│ │ 步数 [8] 音频CFG [4.0]    │ │ │ #03 00:41–01:02 1313帧 ████░░░  62%       │ │
+│ │ motion_frame [9]          │ │ │ #04 01:02–01:23 1313帧 ░░░░░░░   0%       │ │
+│ │ 种子 [20260908] 🔒        │ │ └───────────────────────────────────────────┘ │
+│ │ 段间重叠 [25 帧]          │ │ 后处理                                        │
+│ │ ☑ RIFE 补帧 → 50fps       │ │ 拼接 ✓ / 运镜 ⏳ / 补帧 ⏳ / 导出 ⏳           │
+│ │ ☑ 应用数字运镜            │ │                                               │
+│ │ ☑ 交叉融合拼接            │ │ 成片预览                                       │
+│ │ ☑ 音画合并                │ │ [播放器]  输出：output/final.mp4               │
+│ │ 预算：总帧数 3,853 · 分段 12│ │                                              │
+│ │ · 预计 2h 14m             │ │                                               │
+│ └──────────────────────────┘ │                                               │
+└──────────────────────────────┴───────────────────────────────────────────────┘</div>
+
+<div class="card">
+  <h5>渲染设置</h5>
+  <table>
+    <thead><tr><th>参数</th><th>类型</th><th>默认</th><th>说明</th></tr></thead>
+    <tbody>
+      <tr><td>单段时长</td><td>下拉</td><td>15 / 20（默认）/ 30 秒</td><td>切换后重算分段与预算</td></tr>
+      <tr><td>分辨率</td><td>下拉</td><td>480p（默认）/ 720p</td><td>720p 提示显存需求显著增加</td></tr>
+      <tr><td>步数 / 音频 CFG / motion_frame</td><td>数值</td><td>8 / 4.0 / 9</td><td>与试镜保持一致</td></tr>
+      <tr><td>种子</td><td>数值 + 锁</td><td>固定</td><td>与试镜一致</td></tr>
+      <tr><td>段间重叠</td><td>数值</td><td>25 帧</td><td>保证拼接连贯</td></tr>
+      <tr><td>RIFE 补帧 / 数字运镜 / 交叉融合 / 音画合并</td><td>开关 ×4</td><td>均开</td><td>—</td></tr>
+      <tr><td>渲染队列</td><td>队列行</td><td>段号 / 时间范围 / 时长 / 帧数 / 进度 / 状态</td><td>状态：待渲染 → 渲染中 → 已完成 → 失败（可重试）</td></tr>
+      <tr><td>后处理状态</td><td>四步流水线</td><td>拼接 → 运镜 → 补帧 → 导出</td><td>每步显示等待 / 进行中 / 完成 / 失败</td></tr>
+    </tbody>
+  </table>
+  <div class="note"><b>一致性关键：</b>所有分段必须共用同一张底图、同一对 mask、同一套采样参数；种子用「基础种子 + 段号」的确定性组合，不要每段随机。</div>
+</div>
+
+<!-- ================= P9 ================= -->
+<h3 class="sec" id="p9"><span class="no">P9</span>一键生成</h3>
+<div class="goal"><b>页面目标：</b>把已打磨通畅的流程串成自动流水线。只在用户勾选的确认关卡处暂停。</div>
+
+<div class="wire">┌──────────────────────────────────────────────────────────────────────────────┐
+│ 一键生成                                                     [开始] [取消]    │
+├──────────────────────────────────────┬───────────────────────────────────────┤
+│ 前置资产                              │ 确认关卡配置                           │
+│ ┌──────────────────────────────────┐ │ ┌───────────────────────────────────┐ │
+│ │ 角色 A  🔒 已锁定                 │ │ │ ● 必须确认  ○ 自动通过  ○ 跳过     │ │
+│ │   形象 ✓ 音色 ✓                  │ │ │ ☑ CP-1 角色确认                    │ │
+│ │ 角色 B [从角色库选择 ▾] 或 [新建]  │ │ │ ☑ CP-2 稿件确认                    │ │
+│ │   形象 ✓ 音色 ✓                  │ │ │ ☑ CP-3 底图确认                    │ │
+│ │ 固定参数：目标时长/风格/分辨率     │ │ │ ☑ CP-4 配音确认                    │ │
+│ ├──────────────────────────────────┤ │ │ ☑ CP-5 镜头确认                    │ │
+│ │ 输入：话题或文章                  │ │ │ ☑ CP-6 试镜确认                    │ │
+│ └──────────────────────────────────┘ │ └───────────────────────────────────┘ │
+│                                       │ 执行进度                               │
+│                                       │ ① 角色库 ✓ ② 内容 ✓ ③ 分角 ✓ ④ 配音 ✓ │
+│                                       │ ⑤ 视觉 ✓ ⑥ 镜头 ⏸ 等待 CP-5           │
+│                                       │ ⑦ 试镜 ○ ⑧ 渲染 ○                     │
+└──────────────────────────────────────┴───────────────────────────────────────┘</div>
+
+<div class="card">
+  <h5>三种工作模式</h5>
+  <table>
+    <thead><tr><th>模式</th><th>说明</th><th>适用</th></tr></thead>
+    <tbody>
+      <tr><td>全手动</td><td>逐步执行，每步参数全暴露</td><td>首次打磨、调试</td></tr>
+      <tr><td>关卡确认</td><td>自动执行到关卡停下等确认</td><td>日常生产</td></tr>
+      <tr><td>全自动</td><td>全部关卡自动通过</td><td>批量生产（前提是已充分验证）</td></tr>
+    </tbody>
+  </table>
+
+  <h5>执行规则</h5>
+  <ol class="b">
+    <li><b>前置校验：</b>开始前检查角色资产、服务连通性、模型就绪，任一缺失则禁用「开始」并说明</li>
+    <li><b>逐步执行：</b>按 ①→⑧ 顺序执行，每步完成后写入 <code>state.done</code></li>
+    <li><b>关卡暂停：</b>到达配置为「必须确认」的关卡时暂停，弹出 CheckpointPanel</li>
+    <li><b>失败处理：</b>任一步失败 → 停止，保留已完成产物，显示失败原因 + 「从失败步继续」</li>
+    <li><b>产物保留：</b>每一步产物与手动模式完全一致，可事后回到任意步微调并局部重跑</li>
+    <li><b>日志：</b>每步的参数、耗时、产物路径写入 <code>logs/run-*.jsonl</code></li>
+  </ol>
+</div>
+
+<!-- ================= 实施 ================= -->
+<h3 class="sec" id="i1"><span class="no">1</span>技术选型</h3>
+
+<div class="card">
+  <table>
+    <thead><tr><th>层</th><th>选型</th><th>版本建议</th><th>理由</th></tr></thead>
+    <tbody>
+      <tr><td>前端框架</td><td>React 18 + TypeScript</td><td>18.3+ / 5.4+</td><td>生态最全，AI 生成页面命中率最高</td></tr>
+      <tr><td>构建 / 样式</td><td>Vite + Tailwind CSS</td><td>5+ / 3.4+</td><td>启动快，设计 token 一致性好</td></tr>
+      <tr><td>组件库</td><td>Radix UI / shadcn-ui</td><td>最新</td><td>无样式、可访问性好、可完全自定义</td></tr>
+      <tr><td>状态管理</td><td>Zustand</td><td>4+</td><td>轻量，适合单一 state + 派生</td></tr>
+      <tr><td>数据请求</td><td>TanStack Query</td><td>5+</td><td>缓存、重试、乐观更新</td></tr>
+      <tr><td>音频波形</td><td>WaveSurfer.js</td><td>7+</td><td>时间轨、播放头、缩放</td></tr>
+      <tr><td>画布编辑</td><td>Konva + react-konva</td><td>9+</td><td>站位框、mask 精修、拖拽</td></tr>
+      <tr><td>拖拽排序</td><td>dnd-kit</td><td>6+</td><td>句序、段落排序</td></tr>
+      <tr><td>后端</td><td>Python 3.11 + FastAPI</td><td>3.11 / 0.110+</td><td>AI 生态原生；WebSocket 成熟</td></tr>
+      <tr><td>异步任务</td><td>arq（轻）或 Celery + Redis</td><td>—</td><td>渲染队列、长任务</td></tr>
+      <tr><td>推理编排</td><td>ComfyUI</td><td>最新</td><td>图生图 / TTS / 口型视频的工作流宿主</td></tr>
+      <tr><td>视频后处理</td><td>ffmpeg</td><td>6.0+</td><td>拼接、运镜滤镜、音画合并</td></tr>
+      <tr><td>补帧 / ASR</td><td>RIFE / faster-whisper</td><td>— / large-v3</td><td>25→50fps；句级时间码回填</td></tr>
+      <tr><td>数据库</td><td>无（JSON 文件）</td><td>—</td><td>单机单用户，工程可复制可打包</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<h4>模型选型</h4>
+<div class="card">
+  <table>
+    <thead><tr><th>用途</th><th>首选</th><th>备选</th><th>说明</th></tr></thead>
+    <tbody>
+      <tr><td>TTS / 音色克隆</td><td><b>IndexTTS-2.5</b></td><td>Fun-CosyVoice3-0.5B</td><td>2.5 支持中英日西阿、8 维情绪向量、<code>duration_factor</code>、<code>use_random</code> 可关（保音色）</td></tr>
+      <tr><td>形象 / 场景 / 底图融合</td><td><b>Qwen-Image-Edit 系列</b></td><td>FLUX Kontext 系列</td><td>关键是<b>多参考图 + 身份保持</b>；Qwen 系在中文提示词与多图参考上表现好</td></tr>
+      <tr><td>口型视频</td><td><b>InfiniteTalk-MultiTalk</b></td><td>LongCat-Video-Avatar 1.5</td><td>InfiniteTalk 有官方 ComfyUI 支持、无限长、多音频 + mask；LongCat 更强但目前无 ComfyUI 节点</td></tr>
+      <tr><td>补帧</td><td><b>RIFE</b></td><td>—</td><td>ComfyUI 节点或独立 CLI</td></tr>
+    </tbody>
+  </table>
+  <div class="note bad"><b>已核对源码 / 官方文档的关键事实：</b>
+    <ul class="b" style="margin-top:6px">
+      <li>InfiniteTalk 多人物分支：<code>audio_type</code> 支持 <code>para</code>（并行相加）与 <code>add</code>（串行拼接 + 零填充）；<code>ref_target_masks</code> 是「每说话人一张语义 mask + 可选背景 mask」，用于<b>跨注意力分配</b>（哪条音轨驱动哪块像素）</li>
+      <li>未提供 bbox 时，默认 mask 是<b>画面左右各半</b>，因此底图必须让两人左右分居、居中留空</li>
+      <li>官方明确：I2V 模式超过 1 分钟会出现明显颜色漂移，需分段 + 固定首帧</li>
+      <li>IndexTTS-2.5 的 8 维情绪顺序固定为 <code>[happy, angry, sad, afraid, disgusted, melancholic, surprised, calm]</code>；<code>use_random=True</code> 会降低克隆保真度</li>
+    </ul>
+  </div>
+</div>
+
+<h3 class="sec" id="i2"><span class="no">2</span>系统架构</h3>
+<div class="card">
+<div class="wire">┌───────────────────────────────────────────────────────────────────┐
+│  UI 层（React SPA，浏览器）                                        │
+│  · 9 个步骤视图 · 右检查器 · 底部时间轨 · 关卡面板 · 一键生成        │
+│  · 状态：Zustand 单一 state · 请求：TanStack Query                 │
+└──────────────────────────┬────────────────────────────────────────┘
+                           │ HTTP / WebSocket
+                           ▼
+┌───────────────────────────────────────────────────────────────────┐
+│  编排层（FastAPI @ 127.0.0.1:8000）                                │
+│  ┌─────────────┬─────────────┬─────────────┬───────────────────┐ │
+│  │ 工程服务     │ 任务服务     │ 时间轨服务   │ 编排服务          │ │
+│  │ project.json │ job queue   │ 对齐/补静音  │ 分段/队列/关卡    │ │
+│  └─────────────┴─────────────┴─────────────┴───────────────────┘ │
+│  · WebSocket 推送 · 日志 · 文件管理 · ffmpeg 调用                  │
+└──────────────────────────┬────────────────────────────────────────┘
+                           │ HTTP + WebSocket
+                           ▼
+┌───────────────────────────────────────────────────────────────────┐
+│  推理层（ComfyUI @ 127.0.0.1:8188）                                │
+│  · 图生图工作流（形象/场景/底图融合）                               │
+│  · IndexTTS 工作流（整段合成 / 试听句）                             │
+│  · InfiniteTalk 工作流（图 + 双音轨 + mask → 口型视频）             │
+│  · RIFE 工作流（补帧）                                              │
+└───────────────────────────────────────────────────────────────────┘
+                           │
+                           ▼
+┌───────────────────────────────────────────────────────────────────┐
+│  后处理层（ffmpeg / 本地 CLI）                                     │
+│  · 分段拼接 + 交叉融合 · 数字运镜滤镜链 · 音画合并 · 导出           │
+└───────────────────────────────────────────────────────────────────┘</div>
+
+  <h5>为什么 FastAPI + ComfyUI 双层</h5>
+  <p class="lead">ComfyUI 擅长「一次推理」，不擅长「编排」。本项目复杂度几乎全在编排：分段调度、串行队列、断点续跑、音轨对齐补静音、镜头表 → ffmpeg 滤镜链、关卡暂停恢复、依赖失效传播。这些塞进工作流会变成一团乱麻。<b>ComfyUI 只负责三种原子推理，其余全部在 FastAPI 层。</b></p>
+
+  <h5>任务模型</h5>
+  <table>
+    <thead><tr><th>策略</th><th>说明</th></tr></thead>
+    <tbody>
+      <tr><td>串行执行</td><td>单 GPU，推理任务严格串行，避免显存冲突</td></tr>
+      <tr><td>优先级</td><td>交互式任务（试听句、单张图）&gt; 批量任务（分段渲染）</td></tr>
+      <tr><td>可取消</td><td>取消时终止 ComfyUI 当前 prompt 并清理临时文件</td></tr>
+      <tr><td>可续跑</td><td>队列状态持久化在 <code>render/queue.json</code>，重启后可恢复</td></tr>
+      <tr><td>进度来源</td><td>订阅 ComfyUI 的 <code>/ws</code>，按节点执行进度映射为 0–100</td></tr>
+    </tbody>
+  </table>
+
+  <h5>ComfyUI 工作流模板</h5>
+  <table>
+    <thead><tr><th>模板</th><th>关键可替换参数</th></tr></thead>
+    <tbody>
+      <tr><td>图生图 <code>image_edit.json</code></td><td>参考图路径、提示词、负面提示词、分辨率、步数、CFG、种子、批量</td></tr>
+      <tr><td>TTS <code>indextts.json</code></td><td>参考音路径、文本、情绪向量、<code>emo_alpha</code>、<code>duration_factor</code>、<code>use_random</code>、<code>lang</code></td></tr>
+      <tr><td>口型视频 <code>infinitetalk.json</code></td><td>底图、音轨1/2、mask、帧数、<code>audio_type</code>、<code>audio_cfg_scale</code>、<code>motion_frame</code>、步数、种子、分辨率</td></tr>
+      <tr><td>补帧 <code>rife.json</code></td><td>输入视频、倍率</td></tr>
+    </tbody>
+  </table>
+  <div class="note">模板以 JSON 存放于 <code>backend/workflows/</code>，提交前做参数注入。参数用占位符（如 <code>{{prompt}}</code>），<b>不硬编码进节点</b>。</div>
+</div>
+
+<h3 class="sec" id="i3"><span class="no">3</span>环境与显存</h3>
+
+<div class="card">
+  <h5>目标机器（当前实测）</h5>
+  <table class="fixed">
+    <tbody>
+      <tr><td>GPU</td><td>NVIDIA RTX 5080，16 GB 显存，驱动 591.86</td></tr>
+      <tr><td>CPU / 内存</td><td>Intel i7-14700KF / 32 GB</td></tr>
+      <tr><td>系统</td><td>Windows</td></tr>
+    </tbody>
+  </table>
+  <div class="note warn"><b>第一个环境风险：</b>RTX 5080 是 Blackwell 架构（sm_120）。部分 CUDA 扩展（尤其 flash-attn 的预编译轮子）可能不兼容，需要从源码编译或改用 xformers / SDPA。<b>这是项目第一个要验证的点。</b></div>
+
+  <h5>显存预算（单卡 16 GB）</h5>
+  <table>
+    <thead><tr><th>阶段</th><th>估算占用</th><th>配置建议</th></tr></thead>
+    <tbody>
+      <tr><td>图生图（1024×1024）</td><td>8–12 GB</td><td>可跑</td></tr>
+      <tr><td>图生图（1280×720）</td><td>10–14 GB</td><td>可跑，注意批量数</td></tr>
+      <tr><td>IndexTTS-2.5</td><td>4–6 GB</td><td>可跑</td></tr>
+      <tr><td>InfiniteTalk 480p + int8/fp8</td><td>12–16 GB</td><td><b>临界</b>，需 <code>num_persistent_param_in_dit=0</code></td></tr>
+      <tr><td>InfiniteTalk 720p</td><td>&gt;16 GB</td><td><b>单卡跑不了</b>，需量化或分块</td></tr>
+      <tr><td>RIFE 补帧</td><td>2–4 GB</td><td>可跑</td></tr>
+    </tbody>
+  </table>
+  <div class="note bad"><b>关键约束：</b>InfiniteTalk 480p 在 16 GB 上属于临界状态，<b>必须实测</b>，并准备好「降分辨率 / 降帧数 / fp8 量化」等降配手段。</div>
+
+  <h5>磁盘</h5>
+  <table class="fixed">
+    <tbody>
+      <tr><td>模型权重</td><td>约 60 GB</td></tr>
+      <tr><td>单个 3 分钟工程</td><td>约 2 GB</td></tr>
+      <tr><td>建议预留</td><td>≥150 GB</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<h3 class="sec" id="i4"><span class="no">4</span>关键算法</h3>
+
+<div class="card">
+  <h5>4.1 音频：整段合成 + 句级回填</h5>
+  <p class="lead">见 P4 页面中的算法块。要点：按「同一说话人的连续段落」分组；每段一次推理；ASR 强制对齐回填句级时间码；构造两条严格等长的轨（<code>add</code> 模式前置条件）。</p>
+
+  <h5>4.2 数字运镜：ffmpeg 滤镜链</h5>
+<pre><code>def build_filter(shot, out_w, out_h, fps):
+    x, y, w, h = shot.crop
+    parts = []
+    if shot.type != 'wide':
+        parts.append(f"crop=w={w}:h={h}:x={x}:y={y}")
+        parts.append(f"scale={out_w}:{out_h}")
+    if shot.camera.move != 'static':
+        strength = shot.camera.strength
+        frames = int((shot.end - shot.start) * fps)
+        easing = EASING[shot.camera.easing]
+        if shot.camera.move in ('pushIn', 'pushPan'):
+            z = f"1+{strength}*{easing}(on/{frames})"
+        elif shot.camera.move == 'pullOut':
+            z = f"{1+strength}-{strength}*{easing}(on/{frames})"
+        else:
+            z = "1"
+        parts.append(
+            f"zoompan=z='{z}':d=1:"
+            f"x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':"
+            f"s={out_w}x{out_h}:fps={fps}"
+        )
+    return ",".join(parts) if parts else "null"</code></pre>
+  <div class="note warn"><b>注意：</b><code>zoompan</code> 会引入抖动。建议先放大到 2× 再 zoompan，最后缩小，或用 <code>scale</code> + <code>crop</code> 组合替代。<b>这是需要实测调优的点。</b></div>
+
+  <h5>4.3 分段渲染与拼接</h5>
+<pre><code>1. 分段：优先在镜头段边界切分；超长则按 segLength 均分
+2. 逐段渲染（串行）：
+   裁出 [seg.start, seg.end] 的 A/B 音轨片段
+   提交 InfiniteTalk：image=master.png, audio_1/2=片段,
+     mask=masks/*.png, audio_type='add', frames=seg.frames,
+     seed=基础种子+段号, audio_cfg=4.0, motion_frame=9
+   订阅进度 → 保存 seg_XXX.mp4
+3. 拼接：相邻段重叠 overlapFrames，用 xfade 或逐帧加权融合
+4. 运镜：按 shots.json 逐段套滤镜后重新拼接
+5. 补帧：RIFE 25fps → 50fps
+6. 音画合并：ffmpeg -i video.mp4 -i mix.wav -c:v copy -c:a aac -shortest final.mp4</code></pre>
+
+  <h5>4.4 依赖失效传播</h5>
+<pre><code>DEPENDENCIES = {
+  'P1': ['P4','P5','P6','P7','P8'],
+  'P2': ['P3','P4','P5','P6','P7','P8'],
+  'P3': ['P4','P5','P6','P7','P8'],
+  'P4': ['P6','P7','P8'],
+  'P5': ['P6','P7','P8'],
+  'P6': ['P7','P8'],
+  'P7': ['P8'],
+}
+# 更细粒度：记录每个产物依赖的参数哈希，只有哈希变化才标过期</code></pre>
+</div>
+
+<h3 class="sec" id="i5"><span class="no">5</span>性能预算</h3>
+<div class="card">
+<pre><code>总耗时 ≈ TTS耗时 + 图片耗时 + 视频渲染耗时 + 后处理耗时
+
+TTS：  音频时长 × RTF(≈0.2–0.35)      → 3 分钟音频 ≈ 40–60 秒
+图片：  每张 10–60 秒 × 张数
+视频：  成片时长 × 渲染倍率 R
+       R 取决于分辨率/步数/量化，必须实测
+       参考：480p + 8 步 + 量化，预期 R ≈ 3–10
+后处理：拼接 + 运镜 + 补帧，约成片时长 × 1–2</code></pre>
+  <table>
+    <thead><tr><th>成片时长</th><th>帧数(25fps)</th><th>分段数(20s)</th><th>视频渲染</th><th>后处理</th><th>合计</th></tr></thead>
+    <tbody>
+      <tr><td>30 秒</td><td>750</td><td>2</td><td>2–5 分钟</td><td>1 分钟</td><td><b>3–6 分钟</b></td></tr>
+      <tr><td>1 分钟</td><td>1,500</td><td>3</td><td>5–10 分钟</td><td>2 分钟</td><td><b>7–12 分钟</b></td></tr>
+      <tr><td>3 分钟</td><td>4,500</td><td>9</td><td>15–30 分钟</td><td>5 分钟</td><td><b>20–35 分钟</b></td></tr>
+      <tr><td>10 分钟</td><td>15,000</td><td>30</td><td>50–100 分钟</td><td>15 分钟</td><td><b>65–115 分钟</b></td></tr>
+    </tbody>
+  </table>
+  <div class="note warn"><b>这些数字必须用 pilot 实测校准。</b>上表是量级参考，不是承诺。</div>
+</div>
+
+<h3 class="sec" id="i6"><span class="no">6</span>风险清单</h3>
+
+<div class="card">
+  <h5>高优先级风险（会导致方案不成立）</h5>
+  <table>
+    <thead><tr><th>#</th><th>风险</th><th>影响</th><th>应对</th><th>验证时机</th></tr></thead>
+    <tbody>
+      <tr><td>R1</td><td>InfiniteTalk 480p 在 16 GB 上跑不起来或极慢</td><td>整个视频侧不成立</td><td>pilot 实测；fp8/int8 量化、降帧数、降分辨率；必要时换 LongCat（需自建 API）</td><td><b>第 1 周</b></td></tr>
+      <tr><td>R2</td><td>RTX 5080（sm_120）与 flash-attn / CUDA 扩展不兼容</td><td>环境搭不起来</td><td>优先 xformers 或 SDPA；从源码编译；必要时用 WSL2</td><td><b>第 1 周</b></td></tr>
+      <tr><td>R3</td><td>镜头切换导致身份/背景漂移</td><td>成片不可用</td><td>主用同框 + 数字运镜；真切镜限量；固定底图与种子；段间重叠</td><td>第 2 周</td></tr>
+      <tr><td>R4</td><td>长片颜色漂移（官方已知）</td><td>后半段偏色</td><td>分段渲染，每段重置首帧；限制单段 ≤30 秒；必要时加色彩校正</td><td>第 3 周</td></tr>
+      <tr><td>R5</td><td>图生图融合出的底图两人站位不对</td><td>mask 错位、口型串位</td><td>prompt 强制「左右分居、居中留空」；提供 bbox 校正；加自动检测</td><td>第 2 周</td></tr>
+    </tbody>
+  </table>
+
+  <h5>中优先级风险</h5>
+  <table>
+    <thead><tr><th>#</th><th>风险</th><th>应对</th></tr></thead>
+    <tbody>
+      <tr><td>R6</td><td>整段合成音色稳但句级时间码不准</td><td>ASR 强制对齐 + 低置信人工确认 + 手动微调</td></tr>
+      <tr><td>R7</td><td>数字运镜 <code>zoompan</code> 抖动</td><td>用 scale+crop 替代；或先 2× 放大再缩小</td></tr>
+      <tr><td>R8</td><td>拼接处跳变</td><td>段间 25 帧重叠 + 交叉融合；重叠区做直方图匹配</td></tr>
+      <tr><td>R9</td><td>两人音色区分度不足</td><td>P1 加自动检测；提示换参考音</td></tr>
+      <tr><td>R10</td><td>一键生成中途失败难定位</td><td>每步日志 + 保留中间产物 + 从失败步继续</td></tr>
+      <tr><td>R11</td><td>显存被其他程序占用</td><td>渲染前检查显存，低于阈值提示关闭其他程序</td></tr>
+      <tr><td>R12</td><td>工程文件损坏</td><td>保存前写临时文件再原子替换；保留最近 5 个备份</td></tr>
+    </tbody>
+  </table>
+
+  <h5>产品风险</h5>
+  <table>
+    <thead><tr><th>#</th><th>风险</th><th>应对</th></tr></thead>
+    <tbody>
+      <tr><td>R13</td><td>用户期望「点一下就出片」，实际需要调参</td><td>明确区分「手动打磨」与「一键生成」；一键生成前强制检查参数完整性</td></tr>
+      <tr><td>R14</td><td>步骤太多导致上手难</td><td>提供「快速开始」引导：默认参数 + 只填必要项</td></tr>
+      <tr><td>R15</td><td>单步重跑成本高</td><td>局部重跑（单句、单段）；缓存已完成的产物</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<h3 class="sec" id="i7"><span class="no">7</span>开发路线图</h3>
+<div class="card">
+  <h5>阶段 0 · 技术验证（1 周）— 最关键，先做这个</h5>
+  <table>
+    <thead><tr><th>任务</th><th>产出</th><th>通过标准</th></tr></thead>
+    <tbody>
+      <tr><td>0.1 环境搭建</td><td>ComfyUI + IndexTTS-2.5 + InfiniteTalk 可运行</td><td>三个工作流各跑通一次</td></tr>
+      <tr><td>0.2 <b>Pilot 渲染</b></td><td>一张同框底图 + 两条交替音轨 + <code>add</code> 模式，30–60 秒</td><td>四项验收：口型跟得上、非说话人不抢戏、画面稳定、音色区分</td></tr>
+      <tr><td>0.3 <b>吞吐实测</b></td><td>480p/8步/量化的渲染倍率 R</td><td>得出真实 R 值，校准预算表</td></tr>
+      <tr><td>0.4 图生图融合验证</td><td>角色设定图 + 场景图 → 底图</td><td>两人站位正确、光照一致、无接缝</td></tr>
+    </tbody>
+  </table>
+  <div class="note bad"><b>决策点：</b>0.2 或 0.3 不通过 → 重新评估视频侧模型（LongCat / 其他）或降低目标（更短、更低分辨率）。</div>
+
+  <table style="margin-top:18px">
+    <thead><tr><th>阶段</th><th>周期</th><th>内容</th></tr></thead>
+    <tbody>
+      <tr><td>阶段 1 · 骨架与角色库</td><td>1.5 周</td><td>前端骨架、后端骨架、P1 角色库、工程持久化</td></tr>
+      <tr><td>阶段 2 · 内容与音频</td><td>1.5 周</td><td>P2 内容输入、P3 分角脚本、P4 配音锁轨、时间轨组件</td></tr>
+      <tr><td>阶段 3 · 视觉与镜头</td><td>1.5 周</td><td>P5 视觉设定、P6 镜头表、时间轨集成</td></tr>
+      <tr><td>阶段 4 · 渲染与成片</td><td>2 周</td><td>P7 试镜、P8 渲染队列、后处理、导出</td></tr>
+      <tr><td>阶段 5 · 一键生成与打磨</td><td>1.5 周</td><td>确认关卡、P9 一键生成、依赖失效、打磨</td></tr>
+    </tbody>
+  </table>
+  <div class="note"><b>总工期估算：约 9 周</b>（单人全职，不含等待模型下载）。</div>
+</div>
+
+<h3 class="sec" id="i8"><span class="no">8</span>验收标准</h3>
+<div class="card">
+  <h5>功能验收</h5>
+  <table>
+    <thead><tr><th>编号</th><th>验收项</th><th>标准</th></tr></thead>
+    <tbody>
+      <tr><td>F1</td><td>角色库</td><td>A 锁定后跨期复用；B 可切换</td></tr>
+      <tr><td>F2</td><td>内容生成</td><td>输入话题 → 生成结构完整、时长符合目标的播客稿</td></tr>
+      <tr><td>F3</td><td>分角</td><td>自动分角结果可用，逐句可改说话人/语气/语速</td></tr>
+      <tr><td>F4</td><td>配音</td><td>整段合成音色稳定；句级时间码误差 ≤0.3s</td></tr>
+      <tr><td>F5</td><td>底图</td><td>图生图融合出两人站位正确、光照一致的底图</td></tr>
+      <tr><td>F6</td><td>镜头表</td><td>切点落在静音间隙；可逐段配置类型与运镜</td></tr>
+      <tr><td>F7</td><td>试镜</td><td>5 秒样片四项验收可完成</td></tr>
+      <tr><td>F8</td><td>渲染</td><td>分段串行渲染，可暂停/续跑；拼接无跳变</td></tr>
+      <tr><td>F9</td><td>导出</td><td>成片音画同步，分辨率与帧率符合设置</td></tr>
+      <tr><td>F10</td><td>一键生成</td><td>从话题到成片，仅在最必要的关卡停顿</td></tr>
+    </tbody>
+  </table>
+
+  <h5>质量验收</h5>
+  <table>
+    <thead><tr><th>编号</th><th>验收项</th><th>标准</th></tr></thead>
+    <tbody>
+      <tr><td>Q1</td><td>口型同步</td><td>主观评分 ≥4/5（样片）</td></tr>
+      <tr><td>Q2</td><td>非说话人静止</td><td>不说话方无明显动作抢戏</td></tr>
+      <tr><td>Q3</td><td>画面稳定性</td><td>无面部崩坏、背景无扭曲</td></tr>
+      <tr><td>Q4</td><td>身份一致性</td><td>跨镜头同一人可辨认</td></tr>
+      <tr><td>Q5</td><td>音色区分度</td><td>盲听可区分 A/B</td></tr>
+      <tr><td>Q6</td><td>音频质量</td><td>无爆音、无断裂、无异常停顿</td></tr>
+    </tbody>
+  </table>
+
+  <h5>工程验收</h5>
+  <table>
+    <thead><tr><th>编号</th><th>验收项</th><th>标准</th></tr></thead>
+    <tbody>
+      <tr><td>E1</td><td>可调性</td><td>任意步骤可单独重跑；单句/单段可局部重跑</td></tr>
+      <tr><td>E2</td><td>可恢复</td><td>崩溃后可从断点续跑</td></tr>
+      <tr><td>E3</td><td>可复现</td><td>相同参数 + 相同种子 → 相同产物</td></tr>
+      <tr><td>E4</td><td>可观测</td><td>每个任务有日志、进度、错误详情</td></tr>
+      <tr><td>E5</td><td>隐私</td><td>全程仅访问 127.0.0.1，无外部请求</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="card" style="margin-top:36px">
+  <h5>配套文档</h5>
+  <ul class="b">
+    <li><code>01-页面详细设计文档.md</code> — 页面布局、元素、交互、校验、数据模型、接口契约（完整版）</li>
+    <li><code>02-项目实施方案文档.md</code> — 技术选型、架构、环境、算法、性能、风险、路线图、验收、运维（完整版）</li>
+    <li><code>03-方案总览.html</code> — 本文件，可视化速览</li>
+  </ul>
+</div>
+
+</main>
+</div>
+</body>
+</html>

@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>双声播客工坊 · 页面需求说明书</title>
+<style>
+:root{
+  --paper:#f4f6f9;--card:#fff;--ink:#1f2430;--ink2:#4d5666;--ink3:#858f9f;
+  --line:#e3e7ee;--line2:#d3d9e3;
+  --brand:#a96a2c;--brand-d:#8a5420;--brand-soft:#f7ede2;
+  --a:#0e7490;--a-soft:#e2f2f6;--b:#be4d6e;--b-soft:#fbe9ef;
+  --ok:#2f9e6e;--ok-soft:#e4f5ed;--warn:#b97e16;--warn-soft:#fbf1dc;--bad:#c75052;
+  --mono:"Cascadia Code",Consolas,"Courier New",monospace;
+  --sans:"Segoe UI","Microsoft YaHei UI","Microsoft YaHei",system-ui,sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{font-family:var(--sans);background:var(--paper);color:var(--ink);font-size:14.5px;line-height:1.7}
+.wrap{display:flex;align-items:flex-start;max-width:1240px;margin:0 auto}
+/* 目录 */
+.toc{width:236px;flex:none;position:sticky;top:0;height:100vh;overflow:auto;padding:26px 14px;border-right:1px solid var(--line);background:#fbfcfd}
+.toc h1{font-size:15px;line-height:1.4;margin-bottom:4px}
+.toc .sub{font-size:11.5px;color:var(--ink3);margin-bottom:16px}
+.toc a{display:block;padding:5px 10px;font-size:12.5px;color:var(--ink2);text-decoration:none;border-radius:7px;line-height:1.4}
+.toc a:hover{background:var(--brand-soft);color:var(--brand-d)}
+.toc a.lv2{padding-left:22px;font-size:12px;color:var(--ink3)}
+.content{flex:1;min-width:0;padding:30px 40px 90px;max-width:920px}
+/* 封面 */
+.cover{background:linear-gradient(135deg,#232833,#2e3340);color:#fff;border-radius:18px;padding:30px 32px;margin-bottom:26px}
+.cover .kicker{font-size:12px;letter-spacing:2px;color:#cdb795;font-weight:700}
+.cover h2{font-size:27px;margin:8px 0 6px}
+.cover p{color:#c6ccd8;font-size:13px;max-width:680px}
+.cover .meta{display:flex;flex-wrap:wrap;gap:10px;margin-top:18px}
+.cover .meta span{font-size:11.5px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);padding:4px 11px;border-radius:20px}
+h3.sec{font-size:20px;margin:38px 0 6px;padding-top:10px;border-top:2px solid var(--line2)}
+h3.sec .no{color:var(--brand);font-family:var(--mono);margin-right:9px;font-size:17px}
+h4{font-size:16px;margin:24px 0 8px;display:flex;align-items:center;gap:9px}
+h4 .pid{font-family:var(--mono);font-size:12px;background:var(--brand-soft);color:var(--brand-d);padding:2px 9px;border-radius:6px;font-weight:700}
+p.lead{color:var(--ink2);margin-bottom:10px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:13px;padding:18px 20px;margin:14px 0}
+.goal{background:var(--brand-soft);border:1px solid #ecd9c2;border-radius:11px;padding:12px 16px;font-size:13.5px;margin:12px 0}
+ul.b{padding-left:20px;margin:8px 0}ul.b li{margin:5px 0;color:var(--ink2)}
+table{width:100%;border-collapse:collapse;font-size:12.8px;margin:10px 0;background:#fff;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+th{background:#f3f5f9;text-align:left;padding:9px 11px;font-weight:700;color:var(--ink);border-bottom:1px solid var(--line2);white-space:nowrap}
+td{padding:9px 11px;border-bottom:1px solid var(--line);vertical-align:top;color:var(--ink2);line-height:1.55}
+tr:last-child td{border-bottom:none}
+td:first-child{color:var(--ink);font-weight:600;white-space:nowrap}
+code,.mono{font-family:var(--mono);font-size:11.8px;background:#eef1f5;padding:1.5px 6px;border-radius:5px;color:#3a4150}
+.tag{display:inline-block;font-size:10.5px;font-weight:700;padding:1px 7px;border-radius:5px;margin-right:4px}
+.tag.a{background:var(--a-soft);color:var(--a)}.tag.b{background:var(--b-soft);color:var(--b)}
+.tag.ok{background:var(--ok-soft);color:var(--ok)}.tag.warn{background:var(--warn-soft);color:var(--warn)}
+.flow{display:flex;flex-wrap:wrap;gap:7px;align-items:center;margin:10px 0}
+.flow .node{background:#fff;border:1px solid var(--line2);border-radius:9px;padding:7px 12px;font-size:12.3px;font-weight:600}
+.flow .arr{color:var(--ink3)}
+.note{border-left:3px solid var(--brand);background:#faf6f1;border-radius:0 9px 9px 0;padding:10px 15px;font-size:12.8px;color:var(--ink2);margin:12px 0}
+.kvlist{display:grid;grid-template-columns:170px 1fr;gap:0;border:1px solid var(--line);border-radius:10px;overflow:hidden;margin:10px 0}
+.kvlist div{padding:8px 13px;font-size:12.8px;border-bottom:1px solid var(--line)}
+.kvlist .k{background:#f6f8fb;font-weight:700;color:var(--ink)}
+.kvlist .v{color:var(--ink2)}
+.kvlist div:nth-last-child(-n+2){border-bottom:none}
+@media(max-width:880px){.toc{display:none}.content{padding:20px 16px 70px}.cover h2{font-size:22px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<!-- 目录 -->
+<nav class="toc">
+  <h1>页面需求说明书</h1>
+  <div class="sub">双声播客工坊 DuoCast · 本地工作台 v1.0</div>
+  <a href="#s0">0 · 产品与范围</a>
+  <a href="#s1">1 · 全局结构与公共组件</a>
+  <a href="#s1-1" class="lv2">1.1 顶部资源条</a>
+  <a href="#s1-2" class="lv2">1.2 步骤轨道</a>
+  <a href="#s1-3" class="lv2">1.3 底部操作条 / Toast</a>
+  <a href="#s2">2 · 页面① 场景</a>
+  <a href="#s3">3 · 页面② 角色</a>
+  <a href="#s4">4 · 页面③ 遮罩</a>
+  <a href="#s5">5 · 页面④ 音色</a>
+  <a href="#s6">6 · 页面⑤ 文案与双轨</a>
+  <a href="#s7">7 · 页面⑥ 试镜</a>
+  <a href="#s8">8 · 页面⑦ 成片</a>
+  <a href="#s9">9 · 全局交互与状态机</a>
+  <a href="#s10">10 · 数据模型</a>
+  <a href="#s11">11 · 本地接口预留</a>
+  <a href="#s12">12 · 非功能需求与边界</a>
+</nav>
+
+<main class="content">
+  <div class="cover">
+    <div class="kicker">UI REQUIREMENT SPECIFICATION</div>
+    <h2>双声播客工坊 · 本地工作台</h2>
+    <p>面向 Windows 本地部署的双人 / 拟人物件播客视频生产控制台，编排"场景 → 角色 → 遮罩 → 音色 → 文案 → 试镜 → 成片"七步流程，底层调用本机 ComfyUI（127.0.0.1:8188）工作流，全部数据不出本机。</p>
+    <div class="meta"><span>版本 v1.0</span><span>载体：单页应用（SPA）</span><span>运行：Windows 本地</span><span>对应原型：index.html</span><span>文档粒度：元素 / 功能 / 交互</span></div>
+  </div>
+
+  <!-- ============ 0 ============ -->
+  <h3 class="sec" id="s0"><span class="no">0</span>产品与范围</h3>
+  <div class="card">
+    <p class="lead"><b>产品目标：</b>让一位创作者无需手写 ComfyUI 节点连线，按七步向导即可产出 ≤10 分钟的双人（含拟人化动物 / 物件）对口型播客视频。</p>
+    <div class="kvlist">
+      <div class="k">用户角色</div><div class="v">单人创作者（同时是操作者），无多用户、无登录</div>
+      <div class="k">运行形态</div><div class="v">本地 Web 工作台，前端页面 + 本机 ComfyUI 推理服务；离线可用，文件不上云</div>
+      <div class="k">页面总数</div><div class="v">1 个主框架（顶栏 / 步骤轨 / 主区 / 底栏）+ 7 个步骤视图（页内切换，非跳转）</div>
+      <div class="k">核心角色</div><div class="v"><span class="tag a">A 主持人</span>负责提问串联；<span class="tag b">B 被采访方</span>人 / 动物 / 拟人物件（如会说话的砖头、墙）</div>
+      <div class="k">本期范围</div><div class="v">完整前端交互、流程编排、参数与状态管理；真实推理通过"本地接口预留"对接（见第 11 章）</div>
+    </div>
+    <div class="note">全局配色语义：青蓝=角色 A，珊瑚粉=角色 B，焦糖=品牌与主操作，绿=成功 / 已连接，橙=警告 / 待处理，红=错误 / 删除。颜色不作为唯一信息载体，始终配合文字标签。</div>
+  </div>
+
+  <!-- ============ 1 ============ -->
+  <h3 class="sec" id="s1"><span class="no">1</span>全局结构与公共组件</h3>
+  <p class="lead">主框架四区域常驻：顶部资源条、左侧步骤轨道、中央步骤视图、底部操作条。</p>
+  <div class="flow">
+    <span class="node">顶部资源条</span><span class="arr">↑ 常驻</span>
+    <span class="node">左：步骤轨道（7 步）</span><span class="node">中：当前步骤视图</span>
+    <span class="arr">↓ 常驻</span><span class="node">底部操作条</span>
+  </div>
+
+  <h4 id="s1-1">1.1 顶部资源条 TopBar</h4>
+  <p class="lead">高度 56px，吸顶；展示本地服务与算力状态，全部为只读状态（本期不提供设置入口，地址在第 11 章配置化）。</p>
+  <table>
+    <thead><tr><th>元素</th><th>类型</th><th>默认 / 取值</th><th>功能</th><th>交互与校验</th></tr></thead>
+    <tbody>
+      <tr><td>品牌标识</td><td>图标 + 主副标题</td><td>主：双声播客工坊；副：DuoCast Studio · 本地工作站</td><td>产品识别，点击回到第 1 步</td><td>点击等价 <code>goStep(0)</code></td></tr>
+      <tr><td>本地运行徽章</td><td>状态标签</td><td>绿点 + "全本地运行 · 数据不出本机"</td><td>隐私承诺标识</td><td>只读；绿点常亮表示本地模式</td></tr>
+      <tr><td>引擎地址</td><td>等宽文本 + 连接状态</td><td><code>127.0.0.1:8188</code> + 标签</td><td>显示 ComfyUI 后端地址与连通性</td><td>每 5s 轮询心跳；成功显示<span class="tag ok">已连接</span>，失败显示<span class="tag warn">未连接</span>并在相关生成按钮上禁用、给出"请先启动本地引擎"提示</td></tr>
+      <tr><td>显存占用条</td><td>进度条 + 数值</td><td>示例 3.4 / 12 GB</td><td>展示 GPU 显存占用，辅助选分辨率</td><td>只读，数值来自后端系统统计；占用 ≥90% 进度条转橙并在渲染页提示降配</td></tr>
+      <tr><td>模型芯片 ×3</td><td>状态标签组</td><td>IndexTTS-2.5 / InfiniteTalk-Multi / RIFE</td><td>显示三个本地模型是否就绪</td><td>已就绪=绿描边；缺失=灰，悬停提示缺失模型与本地路径；缺模型时禁用依赖它的步骤按钮</td></tr>
+    </tbody>
+  </table>
+
+  <h4 id="s1-2">1.2 左侧步骤轨道 Sidebar</h4>
+  <table>
+    <thead><tr><th>元素</th><th>类型</th><th>默认 / 取值</th><th>功能</th><th>交互与校验</th></tr></thead>
+    <tbody>
+      <tr><td>步骤按钮 ×7</td><td>纵向导航项</td><td>1 场景 / 2 角色 / 3 遮罩 / 4 音色 / 5 文案 / 6 试镜 / 7 成片，各带一句副标题</td><td>切换中央视图；编号圆点表示状态</td><td>点击切换视图；当前步=焦糖高亮；已完成=圆点变绿勾；未完成可自由回看，<b>允许前跳</b>（非强制锁步），但未满足前置时在目标页顶部显示橙色缺失提示</td></tr>
+      <tr><td>侧栏底注</td><td>说明文本</td><td>"本地引擎：ComfyUI / 127.0.0.1:8188 / 上层编排控制台"</td><td>说明架构边界</td><td>只读</td></tr>
+    </tbody>
+  </table>
+  <div class="note">窄屏（≤920px）侧栏变为顶部横向滚动步骤条，隐藏副标题与底注；步骤项最小高度 44px 便于触控。</div>
+
+  <h4 id="s1-3">1.3 底部操作条 Footbar 与全局 Toast</h4>
+  <table>
+    <thead><tr><th>元素</th><th>类型</th><th>默认 / 取值</th><th>功能</th><th>交互与校验</th></tr></thead>
+    <tbody>
+      <tr><td>进度提示</td><td>文本</td><td>"第 n 步 / 共 7 步 · 步骤名 — 副标题"</td><td>位置感与当前任务提示</td><td>随切步更新</td></tr>
+      <tr><td>上一步</td><td>次级按钮</td><td>第 1 步时禁用</td><td>回到上一视图</td><td>点击 <code>goStep(i-1)</code></td></tr>
+      <tr><td>下一步</td><td>主按钮（焦糖）</td><td>末步显示"已到最后一步"并禁用</td><td>标记当前步完成并前进</td><td>点击写入 <code>state.done[当前页]=true</code>（侧栏打勾）再 <code>goStep(i+1)</code>；不做硬性拦截</td></tr>
+      <tr><td>Toast</td><td>全局轻提示</td><td>默认隐藏</td><td>反馈操作结果 / 错误原因</td><td>屏幕底部居中浮起，2.2s 自动消失；新提示覆盖旧提示；不阻断操作</td></tr>
+    </tbody>
+  </table>
+  <!-- ============ 2 场景 ============ -->
+  <h3 class="sec" id="s2"><span class="no">2</span>页面① · 场景</h3>
+  <div class="goal"><b>页面目标：</b>确定一张固定机位、为两位角色预留左右站位的场景底图（播客客厅 / 沙发 / 事发现场等），作为后续所有分段渲染的一致性参考。</div>
+  <div class="card">
+    <h4><span class="pid">P1-左</span>场景生成面板</h4>
+    <table>
+      <thead><tr><th>元素</th><th>类型</th><th>默认 / 取值</th><th>功能</th><th>交互与校验</th></tr></thead>
+      <tbody>
+        <tr><td>场景模板</td><td>单选按钮组</td><td>暖光播客客厅（默认选中）/ 双人沙发对谈 / 事发现场街头 / 极简演播室</td><td>选择场景风格</td><td>单选互斥，选中=焦糖描边；切换时按模板<b>替换</b>下方提示词文本（用户手改过则弹确认"是否覆盖当前提示词"）</td></tr>
+        <tr><td>图生图提示词</td><td>多行文本域</td><td>4 行预设中文提示词，含"固定机位、预留左右站位、16:9、不含人物"</td><td>编辑出图描述</td><td>可自由编辑；为空时禁用生成；建议字数 ≤200，超出显示计数橙字</td></tr>
+        <tr><td>本地生成场景</td><td>主按钮</td><td>—</td><td>调用本地图生图工作流产出底图</td><td>点击→按钮转"生成中"并禁用→成功后把图填入右侧预览并 Toast"已生成"；失败在原位显示可重试的错误条；引擎未连接时禁用并提示启动 ComfyUI</td></tr>
+        <tr><td>规格标签</td><td>只读标签</td><td>16:9 · 1280×720、固定机位</td><td>声明出图规格</td><td>只读；分辨率在第 7 步成片页可改输出精度，底图统一 16:9</td></tr>
+      </tbody>
+    </table>
+    <h4><span class="pid">P1-右</span>场景底图预览</h4>
+    <table>
+      <thead><tr><th>元素</th><th>类型</th><th>默认 / 取值</th><th>功能</th><th>交互与校验</th></tr></thead>
+      <tbody>
+        <tr><td>上传 / 预览槽</td><td>上传槽（虚线框）+ 隐藏文件选择</td><td>空态：图标 + "点击上传，或用左侧生成" + "仅本机读取不上传"</td><td>上传已有场景图或展示生成结果</td><td>点击打开系统文件选择，仅接受 <code>image/*</code>；经 FileReader 在本地转 DataURL 预览，<b>不发起任何网络请求</b>；有图后变为图片铺满 + 左下角文件名浮标；再次点击可替换；校验非图片直接拒绝并 Toast</td></tr>
+      </tbody>
+    </table>
+    <div class="note"><b>进入 / 完成：</b>进入无条件；当预览槽存在图片即视为本步完成（点"下一步"自动打勾）。<b>下游依赖：</b>本图用于第 2 步合成与第 3 步遮罩底图，更换场景会使已涂遮罩失效，需重涂并提示。</div>
+  </div>
+
+  <!-- ============ 3 角色 ============ -->
+  <h3 class="sec" id="s3"><span class="no">3</span>页面② · 角色</h3>
+  <div class="goal"><b>页面目标：</b>确定 A 主持人与 B 被采访方（人 / 动物 / 拟人物件），通过 G1 合格门后把两位合成进场景。<b>关键规则：拟人物件必须在出图阶段就带有清晰的嘴和眼，否则无法驱动口型。</b></div>
+  <div class="card">
+    <div class="flow"><span class="tag a">角色 A</span><span class="node">形象类型选择</span><span class="arr">→</span><span class="node">上传正面半身</span><span class="arr">→</span><span class="tag b">角色 B</span><span class="node">必须带嘴/眼</span><span class="arr">→</span><span class="node">G1 合格门</span><span class="arr">→</span><span class="node">合成进场景</span></div>
+    <h4><span class="pid">P2-A</span>角色 A 卡片</h4>
+    <table>
+      <tbody>
+        <tr><td>形象类型</td><td>单选组</td><td>真人风格（默认）/ 拟人动物 / 卡通形象</td><td>界定 A 的视觉风格</td><td>单选；与 B、场景风格统一由 G1 第 3 项把关</td></tr>
+        <tr><td>A 上传槽</td><td>上传槽 + 文件选择</td><td>空态"上传角色 A 正面半身像 / 正脸、肩部以上、五官清晰"</td><td>载入 A 形象</td><td>同 P1 上传逻辑（仅本机预览）；建议正面、五官无遮挡；载入后显示缩略图与文件名</td></tr>
+      </tbody>
+    </table>
+    <h4><span class="pid">P2-B</span>角色 B 卡片</h4>
+    <table>
+      <tbody>
+        <tr><td>物件 / 形象类型</td><td>单选组</td><td>一块砖头（默认）/ 一面墙 / 长椅 / 自定义物件</td><td>选定被采访对象</td><td>单选；选自定义时追加一个文本框填写物件名（用于后续文案与标签）</td></tr>
+        <tr><td>B 上传槽</td><td>上传槽 + 文件选择</td><td>空态"上传'带脸的'角色 B / 裂缝嘴、涂鸦脸、卡通五官均可，但必须有嘴"</td><td>载入 B 形象</td><td>同上传逻辑；界面以文案强调"必须有可开合的嘴"</td></tr>
+      </tbody>
+    </table>
+    <h4><span class="pid">P2-G1</span>G1 · 拟人化合格门</h4>
+    <table>
+      <thead><tr><th>元素</th><th>类型</th><th>校验内容</th><th>交互</th></tr></thead>
+      <tbody>
+        <tr><td>检查项 1</td><td>勾选框</td><td>B 有明确、可开合的嘴（对比强、边界清）</td><td rowspan="3" style="vertical-align:middle">点击勾选，勾中项底色变绿；三项<b>全部</b>勾选才允许合成；任一项取消勾选立即重新禁用合成按钮</td></tr>
+        <tr><td>检查项 2</td><td>勾选框</td><td>接近正脸或 3/4 侧，眉眼可见</td></tr>
+        <tr><td>检查项 3</td><td>勾选框</td><td>A、B 与场景风格统一</td></tr>
+        <tr><td>把 A/B 合成进场景</td><td>主按钮</td><td>触发合成</td><td>G1 未全勾时禁用，点击 Toast 提示缺哪项；满足后点击→按左右站位把 A、B 合入场景底图→状态标签由"等待合成"变<span class="tag ok">合成完成，可进入遮罩</span>，并标记本步完成</td></tr>
+        <tr><td>合成状态</td><td>状态标签</td><td>等待合成 / 合成完成</td><td>只读；更换任一角色图或场景后回退为"等待合成"</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ============ 4 遮罩 ============ -->
+  <h3 class="sec" id="s4"><span class="no">4</span>页面③ · 遮罩</h3>
+  <div class="goal"><b>页面目标：</b>在合成图上分别涂抹 A、B 的"音频驱动动态区"。遮罩把口型 / 头肩动作局部化到对应角色，是"谁说话谁动"的几何依据。原则：只框脸 + 嘴，宁小勿大；物件 B 尤其不能涂满整个表面。</div>
+  <div class="grid2" style="display:grid;grid-template-columns:320px 1fr;gap:16px">
+   <div class="card">
+    <h4><span class="pid">P3-L</span>笔刷工具</h4>
+    <table>
+      <thead><tr><th>元素</th><th>类型</th><th>默认 / 取值</th><th>功能与交互</th></tr></thead>
+      <tbody>
+        <tr><td>A 笔刷</td><td>图标按钮</td><td>青蓝，默认选中</td><td>切换为涂 A 动态区（半透明青蓝笔迹）；三工具互斥选中态</td></tr>
+        <tr><td>B 笔刷</td><td>图标按钮</td><td>珊瑚粉</td><td>切换为涂 B 动态区</td></tr>
+        <tr><td>橡皮擦</td><td>图标按钮</td><td>—</td><td>擦除已涂笔迹（仅擦遮罩层，不伤底图）</td></tr>
+        <tr><td>清空重涂</td><td>次级按钮</td><td>—</td><td>清空整个遮罩层并重置 A/B 涂抹状态，需二次确认</td></tr>
+        <tr><td>笔刷大小</td><td>滑块 + 数值</td><td>34px，范围 10–80</td><td>拖动实时改笔刷直径，数值等宽显示</td></tr>
+        <tr><td>A/B 涂抹状态</td><td>状态标签 ×2</td><td>"A 未涂 / B 未涂"</td><td>每次抬笔后采样遮罩像素：对应颜色像素超阈值则变"已涂"；两者都已涂即标记本步完成</td></tr>
+      </tbody>
+    </table>
+   </div>
+   <div class="card">
+    <h4><span class="pid">P3-R</span>合成图 + 遮罩画布</h4>
+    <table>
+      <tbody>
+        <tr><td>遮罩画布</td><td>Canvas（内部分辨率 960×540）</td><td>有合成图显示合成图，否则显示带 A/B 站位的占位底图</td><td>双图层结构：底图层只读 + 遮罩离屏层可绘；指针按下 / 拖动 / 抬起用 <code>pointer</code>（同时兼容鼠标与触摸，<code>touch-action:none</code> 防滚动）；坐标按画布显示尺寸与 960×540 等比换算，保证不同屏宽笔迹位置准确；笔迹为圆角线段，A=rgba(95,193,222,.42)、B=rgba(229,138,160,.42)、橡皮用 destination-out 只作用遮罩层；每次重绘=底图 + 遮罩层叠加</td></tr>
+      </tbody>
+    </table>
+    <div class="note"><b>单人独立镜头</b>可整步跳过（只一位角色无需分区）。<b>下游：</b>A/B 遮罩在第 5 步分别绑定 A/B 音轨；遮罩导出为与底图同尺寸的两张黑白 mask（或多通道 mask）随工作流提交。</div>
+   </div>
+  </div>
+  <!-- ============ 5 音色 ============ -->
+  <h3 class="sec" id="s5"><span class="no">5</span>页面④ · 音色</h3>
+  <div class="goal"><b>页面目标：</b>为 A、B 各指定一条本地参考音频，由本地 IndexTTS-2.5 做零样本音色克隆，并分别设定情绪与语速。模型不支持凭空"设计"嗓音，换音色=换参考音频。</div>
+  <div class="card">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+      <div>
+        <h4><span class="pid">P4-A</span><span class="tag a">音色 A</span>主持人</h4>
+        <table>
+          <thead><tr><th>元素</th><th>类型</th><th>默认 / 取值</th><th>功能与交互</th></tr></thead>
+          <tbody>
+            <tr><td>参考音频槽</td><td>上传槽 + 文件选择</td><td>空态"WAV/MP3 · 建议 10–20 秒、无背景噪"</td><td>接受 <code>audio/*</code>，仅本地读取；载入后显示文件名与"用于本地零样本克隆"；可替换；建议时长 3–30 秒，超出提示裁剪</td></tr>
+            <tr><td>情绪</td><td>下拉选择</td><td>平静（默认）/ 开心 / 好奇 / 严肃 / 惊讶</td><td>选择写入该角色情绪参数；与音色解耦，可独立于参考音</td></tr>
+            <tr><td>语速</td><td>下拉选择</td><td>0.9× / 1.0×（默认）/ 1.1×</td><td>控制该角色整体语速</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div>
+        <h4><span class="pid">P4-B</span><span class="tag b">音色 B</span>拟人物件</h4>
+        <table>
+          <thead><tr><th>元素</th><th>类型</th><th>默认 / 取值</th><th>功能与交互</th></tr></thead>
+          <tbody>
+            <tr><td>参考音频槽</td><td>上传槽 + 文件选择</td><td>空态，建议"有性格的嗓音：老成 / 俏皮 / 冷淡"</td><td>同 A；建议 A、B 音色一高一低、一快一慢以保证区分度</td></tr>
+            <tr><td>情绪</td><td>下拉选择</td><td>俏皮（默认）/ 平静 / 委屈 / 沧桑 / 激动</td><td>同 A 逻辑</td></tr>
+            <tr><td>生成试听句</td><td>次级按钮</td><td>—</td><td>用一句固定示例文本 + 当前参考音 / 情绪在本地合成并播放；真实环境返回音频并内置播放器，原型为提示</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="note"><b>完成条件：</b>A、B 各载入一条参考音即标记完成。<b>接口：</b>试听与正式合成调用本地 IndexTTS 节点，入参=文本 + 参考音 + 情绪（类别 / 权重）+ 语速；详见第 11 章。</div>
+  </div>
+
+  <!-- ============ 6 文案与双轨 ============ -->
+  <h3 class="sec" id="s6"><span class="no">6</span>页面⑤ · 分角文案与双轨对齐</h3>
+  <div class="goal"><b>页面目标：</b>逐句编写标注说话人的脚本，实时估算时长，并把 A、B 拼成两条<b>等长</b>音轨——一方说话时另一方同时段补静音，这是"谁说话谁动嘴、对方不抢话"的关键。</div>
+  <div class="card">
+    <h4><span class="pid">P5-1</span>分角色脚本编辑器</h4>
+    <table>
+      <thead><tr><th>元素</th><th>类型</th><th>默认 / 取值</th><th>功能与交互</th></tr></thead>
+      <tbody>
+        <tr><td>脚本行</td><td>行组件：角色键 + 文本域 + 删除</td><td>预置 3 行 A/B/A 示例对话</td><td>角色键底色区分 A/B，<b>点击在 A↔B 间切换</b>；文本域随输入自动增高、实时刷新统计；删除键移除该行（至少保留 1 行，删空时自动补一空行）</td></tr>
+        <tr><td>+ A 句 / + B 句</td><td>次级按钮</td><td>—</td><td>在末尾插入对应角色空行并聚焦</td></tr>
+        <tr><td>按热点起草</td><td>次级按钮</td><td>—</td><td>用"热点 + 拟人物件第三方视角"模板填充一组示例台词（覆盖前二次确认），用户可再改；真实环境接 LLM 按热点生成</td></tr>
+      </tbody>
+    </table>
+    <h4><span class="pid">P5-2</span>统计与双轨时间轴</h4>
+    <table>
+      <thead><tr><th>元素</th><th>类型</th><th>计算 / 默认</th><th>功能与交互</th></tr></thead>
+      <tbody>
+        <tr><td>总字数</td><td>数值</td><td>所有行去空白后字符数，实时</td><td>只读</td></tr>
+        <tr><td>A 句 / B 句</td><td>数值 ×2</td><td>按角色计数</td><td>只读</td></tr>
+        <tr><td>预计成片时长</td><td>数值（分:秒）</td><td>按中文 4.2 字/秒逐句累加，每句额外 +0.25s 停顿</td><td>只读，随编辑实时更新；超过 10:00 转橙提示"成片将超过 10 分钟"</td></tr>
+        <tr><td>生成对齐双轨</td><td>主按钮</td><td>—</td><td>空脚本时禁用并提示；点击后按下方算法渲染双轨时间轴，状态变<span class="tag ok">双轨已对齐 · 总时长 mm:ss</span>，标记本步完成</td></tr>
+        <tr><td>A 轨 / B 轨</td><td>双时间轴 lane</td><td>两条等高轨道 + 底部 5 等分时间刻度</td><td>说话片段为彩色块，<b>左右位置=开始时间占比、宽度=时长占比</b>，块内标字数、悬停显示时长；同一时刻另一条轨道对应位置留空（即静音）；两轨总时长强制相等</td></tr>
+      </tbody>
+    </table>
+    <div class="note"><b>时长与对齐算法（前端预算，最终以 TTS 实际时长为准回填）：</b>单句时长 <code>dur=max(1.2, 字数/4.2)+0.25s</code>；按行顺序首尾相接得全局时间轴；A 句只画在 A 轨、B 句只画在 B 轨，从而天然互补；提交时把每句文本送对应音色 TTS，再按全局时间轴用静音把两条音轨补齐到同一总时长。</div>
+  </div>
+  <!-- ============ 7 试镜 ============ -->
+  <h3 class="sec" id="s7"><span class="no">7</span>页面⑥ · 快速试镜</h3>
+  <div class="goal"><b>页面目标：</b>用极短样片低成本验证口型与角色，通过后才投入长片渲染；不通过就回到第 2/3 步换角色或重涂遮罩，工作流模板保持不动。</div>
+  <div class="card" style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+    <div>
+      <h4><span class="pid">P6-L</span>小样规格与生成</h4>
+      <table>
+        <thead><tr><th>元素</th><th>类型</th><th>默认 / 取值</th><th>功能与交互</th></tr></thead>
+        <tbody>
+          <tr><td>小样规格</td><td>单选组</td><td>T1 · 2 秒 / 50 帧（单角色）；T2 · 5 秒 / 125 帧（双人，默认）</td><td>二选一；帧数=时长×25fps</td></tr>
+          <tr><td>固定参数（只读）</td><td>键值</td><td>832×480；4–6 步（LightX2V）；固定种子 20260908</td><td>只读展示；固定种子保证与长片分段一致</td></tr>
+          <tr><td>预计渲染耗时</td><td>数值</td><td>时长 × 本机渲染速度，默认 5 秒样片≈25 秒</td><td>随规格与第 7 步"渲染速度"联动</td></tr>
+          <tr><td>生成试镜样片</td><td>主按钮 + 进度条</td><td>—</td><td>点击后置灰、进度 0→100、状态文案"本地渲染中…"→"样片完成"；完成后在右侧可播放；真实环境提交工作流并按 WebSocket 进度回填</td></tr>
+          <tr><td>回第二步换角色</td><td>文字按钮</td><td>—</td><td>直接跳转页面②，保留已填内容</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div>
+      <h4><span class="pid">P6-R</span>样片预览与验收</h4>
+      <table>
+        <tbody>
+          <tr><td>预览区</td><td>16:9 播放器</td><td>空态提示</td><td>生成后播放本地视频文件；显示规格与种子</td></tr>
+          <tr><td>验收项 ×4</td><td>勾选清单</td><td>①嘴型跟音 ②静音方不抢话 ③脸/物体不变形背景不扭曲 ④风格统一</td><td>逐项勾选，勾中变绿；<b>四项全勾</b>才标记本步通过并解锁长片；任一不勾保留"待整改"，按页面提示回第 3 步收遮罩或第 2 步换图</td></tr>
+        </tbody>
+      </table>
+      <div class="note">迭代成本控制：换角色只替换第 2 步图片与第 3 步遮罩，脚本、音色、参数模板不变，单次小样仅几十秒。</div>
+    </div>
+  </div>
+
+  <!-- ============ 8 成片 ============ -->
+  <h3 class="sec" id="s8"><span class="no">8</span>页面⑦ · 分段渲染与导出</h3>
+  <div class="goal"><b>页面目标：</b>把整片按对话切成 15–30 秒分段逐段渲染（段间 25 帧重叠保证连贯、固定底图与种子防漂移），完成后拼接、RIFE 补帧并导出 ≤10 分钟成片。</div>
+  <div class="card" style="display:grid;grid-template-columns:300px 1fr;gap:16px">
+    <div>
+      <h4><span class="pid">P7-L</span>渲染设置</h4>
+      <table>
+        <thead><tr><th>元素</th><th>类型</th><th>默认 / 取值</th><th>功能与交互</th></tr></thead>
+        <tbody>
+          <tr><td>单段时长</td><td>下拉</td><td>15 / 20（默认）/ 30 秒</td><td>切换即重新分段并刷新队列与预算</td></tr>
+          <tr><td>分辨率</td><td>下拉</td><td>480p（6GB 显存起，默认）/ 720p</td><td>选 720p 时提示显存需求显著增加</td></tr>
+          <tr><td>渲染速度</td><td>数值输入 + 预设</td><td>5（秒/每秒成片）；预设 3060≈5、3090≈33</td><td>用于本地估算总耗时，点预设自动填</td></tr>
+          <tr><td>加速 / 补帧</td><td>勾选 ×2</td><td>LightX2V 加速=开；RIFE 补帧=开</td><td>开关随提交参数下发</td></tr>
+          <tr><td>预算（只读）</td><td>键值 ×3</td><td>总帧数=时长×25；分段数；预计总渲染（≥60 分显示小时）</td><td>进入页面与任何改动后实时重算</td></tr>
+          <tr><td>开始队列渲染</td><td>主按钮</td><td>—</td><td>无脚本时禁用提示；点击后逐段串行渲染，期间禁用，全部完成后启用导出</td></tr>
+          <tr><td>拼接并导出</td><td>按钮</td><td>默认禁用</td><td>全部段完成后可点；执行拼接 + 补帧，导出到本地 output 目录并 Toast 路径</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div>
+      <h4><span class="pid">P7-R</span>渲染队列<span style="margin-left:auto;font-size:12px;color:var(--ink3);font-weight:400">总进度实时</span></h4>
+      <table>
+        <thead><tr><th>元素</th><th>类型</th><th>内容 / 状态</th><th>功能与交互</th></tr></thead>
+        <tbody>
+          <tr><td>分段行</td><td>队列行组件</td><td>段号 #01…；台词范围"第 x–y 句"；时长 / 帧数 / 重叠 25 帧标签；进度条；状态</td><td>按脚本时长与单段时长自动切分；状态机 <code>待渲染→渲染中(进度0-100)→已完成</code>；串行执行，当前段进度条平滑增长，完成变绿并自动进入下一段</td></tr>
+          <tr><td>总进度</td><td>百分比文本</td><td>已完成段 / 总段数</td><td>每段完成刷新；100% 时启用导出、标记全流程完成</td></tr>
+          <tr><td>空态</td><td>占位</td><td>"完成第五步文案后，这里会按对话自动分段"</td><td>无脚本时显示</td></tr>
+        </tbody>
+      </table>
+      <div class="note">分段一致性要求：所有分段共用同一张合成底图、同一对遮罩、同一固定种子与采样参数；段间保留 25 帧重叠，拼接处做交叉融合以避免跳变。</div>
+    </div>
+  </div>
+  <!-- ============ 9 全局交互 ============ -->
+  <h3 class="sec" id="s9"><span class="no">9</span>全局交互规则与状态机</h3>
+  <div class="card">
+    <h4>9.1 步骤完成条件</h4>
+    <table>
+      <thead><tr><th>步骤</th><th>完成判定</th><th>未完成时的表现</th></tr></thead>
+      <tbody>
+        <tr><td>① 场景</td><td>存在场景底图（生成或上传）</td><td>下游合成无背景，用站位占位图</td></tr>
+        <tr><td>② 角色</td><td>G1 三项全勾且点击"合成"成功</td><td>合成按钮禁用；遮罩页无合成底图</td></tr>
+        <tr><td>③ 遮罩</td><td>A、B 遮罩像素均超阈值（单人模式可跳过）</td><td>驱动时无法区分两位角色动态区</td></tr>
+        <tr><td>④ 音色</td><td>A、B 均已载入参考音频</td><td>无法生成对应角色语音</td></tr>
+        <tr><td>⑤ 文案</td><td>≥1 句台词且已"生成对齐双轨"</td><td>渲染队列为空</td></tr>
+        <tr><td>⑥ 试镜</td><td>四项验收全部勾选</td><td>不建议进入长片（仅提示，不硬锁）</td></tr>
+        <tr><td>⑦ 成片</td><td>全部分段状态=已完成</td><td>"拼接并导出"禁用</td></tr>
+      </tbody>
+    </table>
+    <h4>9.2 全局交互约定</h4>
+    <ul class="b">
+      <li><b>导航：</b>步骤可自由前后跳转、允许前跳；点"下一步"才把当前步写入已完成；侧栏用编号 / 绿勾 / 高亮区分未开始、完成、当前。</li>
+      <li><b>文件读取：</b>所有图片、音频经浏览器 FileReader 在本机转 DataURL / ObjectURL 预览与暂存，不发起上传；刷新页面后本地暂存清空（真实版改为从本地工作目录读取）。</li>
+      <li><b>遮罩绘制：</b>底图层只读 + 离屏遮罩层可绘；A/B/橡皮三态互斥；抬笔时按颜色像素阈值更新"A/B 已涂"；坐标随画布显示尺寸等比换算，兼容触摸。</li>
+      <li><b>双轨对齐：</b>按 4.2 字/秒前端预估并互补静音；真实 TTS 产出后以实际音频时长回填、重新拉平两条轨道。</li>
+      <li><b>试镜回退路径：</b>嘴不动 / 乱动→回第 3 步收紧或重涂遮罩、核对音轨绑定；画面崩→回第 2 步换更标准的"正脸带嘴"角色图。</li>
+      <li><b>渲染队列：</b>串行状态机 待渲染→渲染中→已完成；单段失败显示"失败 / 重试"，不影响已完成段，可从失败段续跑。</li>
+      <li><b>反馈与异常：</b>操作结果统一走 Toast；空态给出下一步行动文案而非空白；引擎断开时所有"生成 / 渲染"按钮禁用并说明如何启动本地服务。</li>
+    </ul>
+  </div>
+
+  <!-- ============ 10 数据模型 ============ -->
+  <h3 class="sec" id="s10"><span class="no">10</span>前端数据模型（state）</h3>
+  <div class="card">
+    <p class="lead">单一状态对象 + 重渲染函数管理；以下为关键字段，命名与原型一致。</p>
+    <table>
+      <thead><tr><th>字段</th><th>类型</th><th>含义</th></tr></thead>
+      <tbody>
+        <tr><td><code>step</code></td><td>number 0–6</td><td>当前步骤索引</td></tr>
+        <tr><td><code>done</code></td><td>object</td><td>各步骤完成布尔表，驱动侧栏绿勾</td></tr>
+        <tr><td><code>scene / sceneTpl</code></td><td>dataURL / string</td><td>场景底图与所选模板</td></tr>
+        <tr><td><code>imgA / imgB / comp</code></td><td>dataURL</td><td>A、B 角色图与合成结果</td></tr>
+        <tr><td><code>brush / brushSize / maskHas</code></td><td>string / number / bool</td><td>当前笔刷(A/B/E)、直径、遮罩是否齐全</td></tr>
+        <tr><td><code>voiceA / voiceB</code></td><td>object</td><td>参考音频文件名等信息</td></tr>
+        <tr><td><code>emoA / emoB / rate</code></td><td>string / number</td><td>两角色情绪与全局语速</td></tr>
+        <tr><td><code>lines[]</code></td><td>{who:'A'|'B', text}</td><td>分角色脚本行，核心编辑数据</td></tr>
+        <tr><td><code>totalDur</code></td><td>number（秒）</td><td>脚本预估总时长，驱动分段与预算</td></tr>
+        <tr><td><code>testLen / testDone / judge{}</code></td><td>number / bool / object</td><td>试镜时长、完成态、四项验收结果</td></tr>
+        <tr><td><code>speed / segs[]</code></td><td>number / array</td><td>本机渲染速度、分段队列（含段号 / 台词范围 / 时长 / 帧数 / 状态 / 进度）</td></tr>
+        <tr><td><code>checklist{}</code></td><td>object</td><td>G1 拟人化合格门三项结果</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ============ 11 接口预留 ============ -->
+  <h3 class="sec" id="s11"><span class="no">11</span>本地 ComfyUI 接口预留</h3>
+  <div class="card">
+    <p class="lead">前端只与本机 ComfyUI（默认 <code>http://127.0.0.1:8188</code>）通信，工作流为 IndexTTS-2.5 节点 + InfiniteTalk-Multi 节点串联。下列为需对接的接口与映射。</p>
+    <table>
+      <thead><tr><th>用途</th><th>接口 / 方向</th><th>关键入参</th><th>返回 / 回填到</th></tr></thead>
+      <tbody>
+        <tr><td>心跳 / 模型就绪</td><td><code>GET /system_stats</code> 轮询</td><td>—</td><td>顶栏连接状态、显存占用、模型芯片状态</td></tr>
+        <tr><td>上传本地图 / 音 / 遮罩</td><td><code>POST /upload/image</code>（multipart）</td><td>场景图、A/B 图、两张 mask、参考音频</td><td>返回文件名供工作流节点引用</td></tr>
+        <tr><td>提交工作流</td><td><code>POST /prompt</code></td><td>工作流 JSON（已替换图片 / 音频 / 文本 / 种子 / 分辨率 / 步数）</td><td>prompt_id，用于查进度与结果</td></tr>
+        <tr><td>进度回传</td><td><code>WebSocket /ws</code></td><td>订阅 prompt_id</td><td>试镜进度条、渲染队列单段进度</td></tr>
+        <tr><td>结果查询 / 取片</td><td><code>GET /history/{id}</code> + <code>/view</code></td><td>prompt_id</td><td>试镜预览、分段视频文件</td></tr>
+        <tr><td>TTS 合成（节点内）</td><td>IndexTTS-2.5 节点</td><td>单句文本 + 角色参考音 + 情绪类别/权重 + 语速</td><td>该句音频；前端按时间轴补静音拉平双轨</td></tr>
+        <tr><td>驱动生成（节点内）</td><td>InfiniteTalk-Multi 节点</td><td>合成底图 + A/B mask + A/B 等长音轨 + 帧数 + 种子 + 步数 + 分辨率</td><td>对口型视频分段</td></tr>
+        <tr><td>补帧 / 拼接 / 导出</td><td>本地后处理（RIFE + ffmpeg）</td><td>分段序列、目标帧率、输出目录</td><td>最终 ≤10 分钟成片本地文件</td></tr>
+      </tbody>
+    </table>
+    <div class="note">工作流 JSON 建议模板化三套：T1 单人 2 秒、T2 双人 5 秒、长片分段；前端仅替换参数，不改节点结构。</div>
+  </div>
+
+  <!-- ============ 12 非功能 ============ -->
+  <h3 class="sec" id="s12"><span class="no">12</span>非功能需求与本期边界</h3>
+  <div class="card">
+    <h4>12.1 非功能需求</h4>
+    <table>
+      <tbody>
+        <tr><td>本地 / 隐私</td><td>默认仅访问 127.0.0.1；图片音频不出本机；无账号、无埋点上云；界面常驻"全本地运行"标识</td></tr>
+        <tr><td>响应式</td><td>桌面优先（≥921px：左侧固定步骤轨 + 双栏）；≤920px：步骤轨转顶部横滑、所有双栏堆叠单栏、表单字号 ≥16px 防 iOS 聚焦缩放、触控目标 ≥44px</td></tr>
+        <tr><td>无障碍</td><td>颜色 + 文字双通道编码（不仅靠颜色区分 A/B 与状态）；键盘可操作；焦点可见；对比度满足正文 ≥4.5:1</td></tr>
+        <tr><td>性能</td><td>纯前端操作（编辑 / 涂抹 / 统计）即时响应；耗时任务（TTS / 渲染）全部异步、可看到进度、不阻塞界面</td></tr>
+        <tr><td>兼容</td><td>Windows 下 Chromium 内核浏览器 / Electron 套壳；分辨率 1280×720 起；等宽数字用于时间码与帧数</td></tr>
+      </tbody>
+    </table>
+    <h4>12.2 本期原型边界（需在联调阶段补齐）</h4>
+    <ul class="b">
+      <li>"本地生成 / 合成 / 试听 / 试镜 / 队列渲染"当前为前端流程与进度演示，真实出片依赖第 11 章接口对接。</li>
+      <li>场景 / 角色占位图为本地绘制示意，非模型输出；真实版接入图生图节点。</li>
+      <li>时长为前端按字数估算，最终以 TTS 实际时长回填；显存 / 速度为可配置参数，需用本机实测校准。</li>
+      <li>刷新后状态不保留；真实版将工程（脚本、遮罩、参数、分段）持久化为本地项目文件，支持断点续渲。</li>
+    </ul>
+  </div>
+</main>
+</div>
+</body>
+</html>

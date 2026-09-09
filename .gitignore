@@ -1,0 +1,53 @@
+# ===== 操作系统 =====
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# ===== 编辑器 =====
+.vscode/*
+!.vscode/settings.json.example
+.idea/
+*.swp
+
+# ===== Node / 前端 =====
+node_modules/
+dist/
+.vite/
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-error.log*
+
+# ===== Python / 后端 =====
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# ===== 模型权重与推理产物（体积大，不入库）=====
+models/
+weights/
+checkpoints/
+checkpoints_2/
+*.safetensors
+*.ckpt
+*.pth
+*.bin
+
+# ===== 工程产物（本地生产数据，不入库）=====
+projects/
+output/
+render/
+*.wav
+*.mp4
+*.mov
+
+# ===== 临时文件 =====
+*.tmp
+*.bak
+~$*
+.cache/
