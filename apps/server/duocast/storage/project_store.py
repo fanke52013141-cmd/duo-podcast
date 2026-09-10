@@ -9,6 +9,7 @@ import asyncio
 import json
 import logging
 import os
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
 
@@ -17,6 +18,11 @@ from ..domain.project import Project
 logger = logging.getLogger("duocast.storage.project_store")
 
 CONFLICT = "PROJECT_REVISION_CONFLICT"
+
+
+def _now_iso() -> str:
+    """UTC ISO8601（秒精度）。仅 ProjectStore 打戳，保证时间权威单点。"""
+    return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
 class ProjectRevisionConflict(Exception):
@@ -68,6 +74,7 @@ class ProjectStore:
         data.update(patch)
         updated = Project.model_validate(data)
         updated.revision = expected_revision + 1
+        updated.updated_at = _now_iso()
         self._projects[project_id] = updated
         self._dirty.add(project_id)
         self._schedule_flush()
@@ -76,7 +83,7 @@ class ProjectStore:
     def create(self, project_id: str, title: str = "未命名节目") -> Project:
         if self.load(project_id) is not None:
             return self._projects[project_id]
-        proj = Project(id=project_id, title=title, revision=0)
+        proj = Project(id=project_id, title=title, revision=0, updated_at=_now_iso())
         self._projects[project_id] = proj
         self._dirty.add(project_id)
         self._schedule_flush()

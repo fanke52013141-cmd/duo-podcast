@@ -105,10 +105,10 @@ export function CreateEpisodePage({ projectId }: { projectId: string }) {
         {proj && <span className="hf-mono wu-caption">revision {proj.revision}</span>}
       </StageHead>
 
-      <div className="hf-body" style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 380px', gap: 18, alignItems: 'start' }}>
+      <div className="hf-cols">
         {/* ---- 左：内容输入（55%） ---- */}
-        <section className="wu-card" style={{ padding: 18 }}>
-          <h3 className="hf-zone-t">内容输入</h3>
+        <section className="wu-card hf-panel in">
+          <h3 className="hf-panel-t">内容输入</h3>
           <Tabs
             items={SOURCE_TABS.map((t) => ({ id: t.id, label: t.label }))}
             active={sourceKind}
@@ -178,12 +178,13 @@ export function CreateEpisodePage({ projectId }: { projectId: string }) {
         </section>
 
         {/* ---- 右：内容要求（45%） ---- */}
-        <section className="wu-card" style={{ padding: 18, display: 'grid', gap: 6 }}>
-          <h3 className="hf-zone-t">
+        <section className="wu-card hf-panel req">
+          <h3 className="hf-panel-t">
             内容要求
             <span className="wu-caption">模板「科技周报」提供默认值</span>
           </h3>
 
+          <div style={{ display: 'grid', gap: 6 }}>
           <Field label="节目名">
             <Input
               placeholder="未命名节目"
@@ -230,6 +231,7 @@ export function CreateEpisodePage({ projectId }: { projectId: string }) {
             </div>
             <span className="wu-caption">形象与声音未就绪不阻塞生成对话。</span>
           </Field>
+          </div>
         </section>
       </div>
     </AppShell>

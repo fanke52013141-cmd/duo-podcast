@@ -94,3 +94,6 @@ class Project(BaseModel):
     stage_progress: dict[StageId, StageState] = Field(default_factory=dict)
     approvals: list[Approval] = Field(default_factory=list)
     revision: int = 0  # expectedRevision 冲突保护（01 §12.1）
+    # 最后写入时间（ISO8601，UTC）。由 ProjectStore 在 apply()/create() 唯一入口打戳，
+    # 供首页卡片「最后编辑 09-10」展示；旧工程文件缺该字段时保持空串，前端按缺省处理。
+    updated_at: str = ""

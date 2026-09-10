@@ -11,10 +11,47 @@
 .wu .wu-icon-btn[data-size="sm"] { width:var(--wu-size-sm); padding:6px; }
 .wu .wu-badge[data-tone="speaker-b"] { background:var(--hf-speaker-b-bg); color:var(--hf-speaker-b); }
 .wu .wu-badge[data-tone="brand"] { background:var(--wu-semantic-brand); color:var(--wu-semantic-on-brand); }
+/* 基线只给 success/warning/danger/info 配了告警底色，.wu-alert 自身无 background，
+   故产品里用到的中性提示（data-tone="muted"）此前渲染成裸文字块。按语义中性面补齐。 */
+.wu .wu-alert[data-tone="muted"] { background:var(--wu-semantic-muted); color:var(--wu-semantic-secondary); }
 .wu .wu-badge .wu-icon { vertical-align:-2px; }
 
 html, body, #root { height:100%; }
 body { margin:0; background:var(--wu-semantic-canvas); color:var(--wu-semantic-text); }
+
+/* ==================== HF-00 · 工程首页（无壳独立页，01 §2） ====================
+   取值逐条对齐 hf/HF-00-工程首页.html 内联样式；此前实现改用内联 style 重写，
+   容器宽度/栅格列数/标题字号均与设计稿不一致（实测 1040px→全宽、3 列→自适应、24px→18px）。 */
+.hf-home { height:100%; overflow:auto; display:flex; flex-direction:column; background:var(--wu-semantic-canvas); }
+.hf-home-top { flex:none; display:flex; align-items:center; gap:16px; padding:14px 32px; background:var(--wu-semantic-surface); border-bottom:1px solid var(--wu-semantic-border); }
+/* 首页顶栏品牌比壳内大一档（HF-00：15px / 26px，壳内为 14px / 24px） */
+.hf-home-top .hf-brand { font-size:15px; }
+.hf-home-top .hf-mark { width:26px; height:26px; }
+.hf-home-main { flex:none; width:1040px; max-width:100%; margin:0 auto; padding:32px 32px 48px; display:grid; gap:var(--wu-global-space12); align-content:start; }
+.hf-sec-head { display:flex; align-items:center; gap:12px; margin-bottom:16px; }
+.hf-sec-head h2 { font-size:24px; font-weight:600; line-height:1.4; }
+.hf-grid3 { display:grid; grid-template-columns:repeat(3,1fr); gap:var(--wu-global-space4); align-items:stretch; }
+.hf-pcard { display:grid; gap:10px; align-content:start; }
+.hf-pcard-h { display:flex; align-items:center; gap:8px; }
+.hf-pcard-h h3 { font-size:14px; font-weight:600; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.hf-pcard-h .wu-icon-btn { margin-left:auto; }
+.hf-pcard .wu-btn { justify-content:center; }
+.hf-tcard { display:grid; gap:8px; align-content:start; }
+.hf-tcard h3 { font-size:14px; font-weight:600; }
+.hf-tcard p { margin:0; font-size:13px; color:var(--wu-semantic-secondary); line-height:1.6; }
+.hf-tcard .wu-btn { justify-content:center; }
+.hf-new-tpl { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:10px; min-height:150px; color:var(--wu-semantic-caption); cursor:pointer; }
+.hf-new-tpl:hover { color:var(--wu-semantic-text); }
+.hf-new-tpl .t { font-size:13px; font-weight:600; }
+.hf-roles { display:flex; align-items:center; flex-wrap:wrap; gap:6px 10px; margin:0; font-size:13px; color:var(--wu-semantic-secondary); }
+.hf-roles .wu-badge { font-weight:700; }
+.hf-badges { gap:8px; }
+.hf-fieldset { border:0; margin:0; padding:0; min-width:0; display:grid; gap:4px; }
+.hf-fieldset legend { padding:0 0 8px; font-weight:600; font-size:14px; color:var(--wu-semantic-text); }
+.hf-hint { margin:0 0 14px; }
+.hf-fieldset + .wu-alert { margin-top:12px; }
+@media (max-width:1140px) { .hf-grid3 { grid-template-columns:repeat(2,1fr); } }
+@media (max-width:760px) { .hf-home-main { padding:20px 16px 32px; } .hf-grid3 { grid-template-columns:1fr; } .hf-home-top { padding:12px 16px; } }
 
 /* ---- 应用壳（05 §4.2 权威尺寸） ---- */
 .hf-app { height:100%; display:flex; flex-direction:column; background:var(--wu-semantic-canvas); container-type:inline-size; }
@@ -41,8 +78,12 @@ body { margin:0; background:var(--wu-semantic-canvas); color:var(--wu-semantic-t
 .hf-stg-tt small { font-size:11px; font-weight:400; color:var(--wu-semantic-caption); }
 .hf-stg-st { margin-left:auto; flex:none; }
 .hf-sep { height:1px; background:var(--wu-semantic-border); margin:10px 6px; }
-.hf-entry { display:flex; align-items:center; gap:9px; padding:7px 10px; border-radius:var(--wu-global-radius-sm); font-size:13px; color:var(--wu-semantic-secondary); cursor:pointer; background:none; border:none; width:100%; text-align:left; font:inherit; }
-.hf-entry:hover { background:var(--wu-semantic-muted); color:var(--wu-semantic-text); }
+/* 注意：设计稿中 .hf-entry / .hf-stg 是 <div>；实现为键盘可达性改为 <button>（正确的无障碍改进），
+   但基线 components.css 的 `.wu :is(button,input,textarea,select){font:inherit}` 特异性为 (0,1,1)，
+   高于单类 .hf-entry (0,1,0)，会把 font-size 重置为继承值 14px，导致同一导航栏内阶段名 13px、
+   入口项 14px 基线不齐。故对本文件所有落在 button/select 上的字号规则统一加 .wu 前缀提升到 (0,2,0)。 */
+.wu .hf-entry { display:flex; align-items:center; gap:9px; padding:7px 10px; border-radius:var(--wu-global-radius-sm); font:inherit; font-size:13px; color:var(--wu-semantic-secondary); cursor:pointer; background:none; border:none; width:100%; text-align:left; }
+.wu .hf-entry:hover { background:var(--wu-semantic-muted); color:var(--wu-semantic-text); }
 .hf-entry.active { background:var(--wu-semantic-raised); color:var(--wu-semantic-text); font-weight:600; }
 .hf-entry-sq { width:18px; height:18px; border-radius:5px; background:var(--wu-semantic-muted); flex:none; }
 .hf-note { margin-top:auto; font-size:10.5px; color:var(--wu-semantic-caption); line-height:1.5; padding:8px 10px 0; border-top:1px solid var(--wu-semantic-border); }
@@ -60,6 +101,15 @@ body { margin:0; background:var(--wu-semantic-canvas); color:var(--wu-semantic-t
 
 /* ---- 通用组合（跨屏复用） ---- */
 .hf-panel { display:flex; flex-direction:column; min-height:0; }
+/* HF-01 · 创建本期：左 内容输入 55% / 右 内容要求 45%（01 §3.1）。
+   此前实现写成 grid「1fr / 380px」，在 1440 下约 73/27，与设计稿列宽契约不符。 */
+.hf-cols { flex:1; display:flex; gap:14px; padding:8px 20px 16px; min-height:0; }
+.hf-panel.in { flex:0 0 calc(55% - 7px); }
+.hf-panel.req { flex:1; min-width:0; }
+.hf-panel-t { display:flex; align-items:baseline; gap:8px; font-size:14px; font-weight:600; margin:0 0 12px; color:var(--wu-semantic-text); }
+.hf-panel-t .wu-caption { font-weight:400; }
+.hf-ta { flex:1; min-height:220px; resize:none; line-height:1.85; }
+.hf-panel-foot { display:flex; align-items:center; gap:10px; margin-top:10px; }
 .hf-seg { display:inline-flex; border:1px solid var(--wu-semantic-control-border); border-radius:var(--wu-global-radius-sm); overflow:hidden; vertical-align:middle; }
 .hf-seg button { width:32px; height:26px; background:var(--wu-semantic-raised); border:none; border-left:1px solid var(--wu-semantic-border); font-family:var(--wu-global-mono); font-size:11.5px; color:var(--wu-semantic-caption); cursor:pointer; }
 .hf-seg button:first-child { border-left:none; }
@@ -73,8 +123,9 @@ body { margin:0; background:var(--wu-semantic-canvas); color:var(--wu-semantic-t
 
 /* ---- 通用字段行 / 服务徽章组 / 分区标题（跨屏共用） ---- */
 .hf-svc { gap:8px; }
-.hf-fld { display:grid; grid-template-columns:64px 1fr; align-items:center; gap:8px; padding:4px 0; }
-.hf-fld > label { font-size:12.5px; color:var(--wu-semantic-secondary); font-weight:600; }
+/* 设计稿 HF-07：三列 72px / 1fr / auto（末列为操作按钮或单位说明） */
+.hf-fld { display:grid; grid-template-columns:72px 1fr auto; align-items:center; gap:10px; padding:5px 0; }
+.hf-fld > label { font-size:12.8px; color:var(--wu-semantic-secondary); font-weight:600; }
 .hf-zone-t { display:flex; align-items:center; gap:8px; font-size:13.5px; font-weight:700; margin-bottom:10px; }
 .hf-zone-t .wu-caption { font-weight:400; }
 .hf-grip { color:var(--wu-semantic-caption); cursor:grab; }
@@ -87,19 +138,28 @@ body { margin:0; background:var(--wu-semantic-canvas); color:var(--wu-semantic-t
 .hf-toolbar { display:flex; align-items:center; gap:8px; flex-wrap:wrap; background:var(--wu-semantic-surface); border:1px solid var(--wu-semantic-border); border-radius:var(--wu-global-radius-md); padding:8px 12px; margin-bottom:12px; }
 .hf-toolbar .cap { font-size:11.5px; color:var(--wu-semantic-caption); }
 .hf-ai { display:inline-flex; align-items:center; gap:4px; font-size:10.5px; font-weight:600; color:var(--wu-semantic-brand-hover); border:1px solid currentColor; border-radius:var(--wu-global-pill); padding:0 7px; line-height:18px; flex:none; }
-.hf-turn { border:1px solid var(--wu-semantic-border); border-radius:var(--wu-global-radius-md); background:var(--wu-semantic-surface); padding:10px 14px; margin-bottom:8px; }
-.hf-turn.selected { border-color:var(--wu-semantic-brand); box-shadow:0 0 0 1px var(--wu-semantic-brand) inset; }
-.hf-turn-head { display:flex; align-items:center; gap:8px; margin-bottom:6px; }
-.hf-turn-id { font-family:var(--wu-global-mono); font-size:11.5px; color:var(--wu-semantic-caption); }
-.hf-turn-text { font-size:13.5px; line-height:1.75; color:var(--wu-semantic-text); margin:0 0 6px; white-space:pre-wrap; }
-.hf-turn-meta { display:flex; align-items:center; gap:12px; font-size:11.5px; color:var(--wu-semantic-caption); flex-wrap:wrap; }
-.hf-mini-select { font:inherit; font-size:12px; height:24px; padding:0 4px; border:1px solid var(--wu-semantic-control-border); border-radius:var(--wu-global-radius-sm); background:var(--wu-semantic-raised); color:var(--wu-semantic-text); }
-.hf-icon-btn { width:26px; height:26px; display:inline-flex; align-items:center; justify-content:center; background:none; border:none; border-radius:var(--wu-global-radius-sm); color:var(--wu-semantic-secondary); cursor:pointer; }
-.hf-icon-btn:hover { background:var(--wu-semantic-muted); color:var(--wu-semantic-text); }
+/* 取值与 hf/vendor/duo-shell.css 131–139 行逐条对齐（此前实现自行改小了一档） */
+.hf-turn { border:1px solid var(--wu-semantic-border); border-radius:var(--wu-global-radius-lg); background:var(--wu-semantic-surface); padding:12px 14px; margin-bottom:10px; }
+.hf-turn.selected { border-color:var(--wu-semantic-primary); box-shadow:0 0 0 1px var(--wu-semantic-primary); }
+.hf-turn-head { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.hf-turn-id { font-family:var(--wu-global-mono); font-size:11.5px; color:var(--wu-semantic-caption); font-weight:600; }
+.hf-turn-text { font-size:13.5px; line-height:1.75; color:var(--wu-semantic-text); margin:8px 0 0; overflow-wrap:anywhere; }
+.hf-turn-meta { display:flex; align-items:center; gap:12px; margin-top:8px; font-size:11.5px; color:var(--wu-semantic-caption); flex-wrap:wrap; }
+.hf-turn.sm { padding:9px 12px; margin-bottom:8px; }
+.hf-turn.sm .hf-turn-text { font-size:12.5px; line-height:1.6; margin:0; flex:1; min-width:0; }
+.hf-turn.sm .hf-turn-meta { margin-top:5px; }
+.wu .hf-mini-select { font:inherit; font-size:11.5px; height:auto; padding:2px 4px; border:1px solid var(--wu-semantic-control-border); border-radius:6px; background:var(--wu-semantic-raised); color:var(--wu-semantic-text); }
+/* 图标按钮：权威基线（workspace-ui/components.css）的 .wu-icon-btn 只声明了尺寸
+   （width:var(--wu-size-md) + [data-size="sm"]→var(--wu-size-sm)），没有外观重置。
+   HF-00 靠 .wu-btn 兜底，HF-02 的裸 button 则直接渲染成浏览器默认灰底凸边按钮。
+   这里在产品扩展层补齐幽灵态与方形比例，兼顾两处用法。 */
+.wu .wu-icon-btn { display:inline-flex; align-items:center; justify-content:center; aspect-ratio:1; background:none; border:none; border-radius:var(--wu-global-radius-sm); color:var(--wu-semantic-secondary); cursor:pointer; transition:background var(--wu-global-duration) var(--wu-global-ease); }
+.wu .wu-icon-btn:hover:not(:disabled) { background:var(--wu-semantic-muted); color:var(--wu-semantic-text); }
+.wu .wu-icon-btn:disabled { opacity:.4; cursor:not-allowed; }
 .hf-ins-list { display:grid; gap:6px; font-size:12.6px; color:var(--wu-semantic-secondary); }
 .hf-ins-list li { display:flex; gap:8px; align-items:baseline; }
 .hf-ins-list li::before { content:"·"; color:var(--wu-semantic-brand); font-weight:700; }
-.hf-qa { display:flex; gap:10px; align-items:flex-start; }
+.hf-qa { display:flex; gap:10px; align-items:flex-start; margin-top:8px; }
 .hf-qa .q { font-size:12px; color:var(--wu-semantic-secondary); line-height:1.6; }
 .hf-qa .q b { color:var(--wu-semantic-text); font-weight:600; }
 .hf-cand { border:1px dashed var(--wu-semantic-brand); border-radius:var(--wu-global-radius-sm); background:var(--wu-semantic-muted); padding:10px 12px; margin-top:8px; }
@@ -109,49 +169,203 @@ body { margin:0; background:var(--wu-semantic-canvas); color:var(--wu-semantic-t
 .hf-dict-row:last-child { border-bottom:none; }
 .hf-dict-row .term { font-weight:600; color:var(--wu-semantic-text); min-width:90px; }
 
-/* ==================== HF-03 · 试听配音 ==================== */
-.hf-voice-grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
-.hf-voice-card { border:1px solid var(--wu-semantic-border); border-radius:var(--wu-global-radius-md); background:var(--wu-semantic-surface); padding:14px; display:grid; gap:8px; }
-.hf-voice-card .spk { display:flex; align-items:center; gap:8px; font-size:13px; font-weight:600; color:var(--wu-semantic-text); }
-.hf-timeline { display:flex; flex-direction:column; gap:1px; background:var(--wu-semantic-control-border); border:1px solid var(--wu-semantic-border); border-radius:var(--wu-global-radius-md); overflow:hidden; }
-.hf-unit { display:flex; align-items:center; gap:10px; padding:8px 12px; background:var(--wu-semantic-surface); font-size:12px; color:var(--wu-semantic-secondary); }
-.hf-unit .bar { flex:1; height:8px; border-radius:4px; background:var(--wu-semantic-muted); overflow:hidden; }
-.hf-unit .bar i { display:block; height:100%; background:var(--wu-semantic-info); border-radius:4px; }
-.hf-unit[data-spk="B"] .bar i { background:var(--hf-speaker-b); }
+/* ==================== HF-03 · 试听配音 ====================
+   设计稿（01 §5）：主视图双栏 = 左 语音引擎面板（固定 300px）/ 右 配音清单（弹性）+ 底部时长条；
+   TimelineBar 常驻；检查器承载「所选发言 / 间隔调整 / 高级」三段。
+   此前实现把「绑定」做成大卡片、把清单写成单元列表，类名词汇与语义均错位（命中率 63%），
+   现按 hf/HF-03-试听配音.html 内联样式逐条归位。 */
+.hf-s3 { flex:1; display:flex; gap:14px; min-height:0; }
+.hf-eng { flex:0 0 300px; display:flex; flex-direction:column; }
+.hf-eng h3 { font-size:14px; font-weight:700; margin:0 0 12px; }
+.hf-list2 { flex:1; min-width:0; display:flex; flex-direction:column; }
+.hf-dur { flex:none; display:flex; align-items:center; gap:12px; padding:8px 20px; background:var(--wu-semantic-surface); border-top:1px solid var(--wu-semantic-border); font-size:12.5px; color:var(--wu-semantic-secondary); flex-wrap:wrap; }
+.hf-dur b { color:var(--wu-semantic-text); }
+.hf-engine { display:grid; gap:8px; margin-bottom:12px; }
+.hf-voice { display:grid; grid-template-columns:22px 1fr auto; align-items:center; gap:8px; padding:6px 0; }
+.hf-voice > div { min-width:0; }
+.hf-voice .nm { font-size:12.5px; font-weight:600; color:var(--wu-semantic-text); }
+/* select 与试听按钮：300px 栏内必须让中间列可收缩，否则 auto 列被挤到 min-content，
+   按钮文字会竖排换行（实测「试听」两字上下堆叠）。 */
+.hf-voice .wu-input { width:100%; font-size:11.5px; }
+.hf-voice .wu-btn { flex:none; white-space:nowrap; }
+.hf-playrow { display:flex; gap:8px; flex-wrap:wrap; padding-top:10px; border-top:1px solid var(--wu-semantic-border); }
+.hf-gap { display:flex; align-items:center; gap:10px; padding:8px 0; }
+.hf-gap .track { flex:1; height:6px; border-radius:3px; background:var(--wu-semantic-muted); position:relative; }
+.hf-gap .track > i { position:absolute; left:0; top:0; bottom:0; background:var(--wu-semantic-primary); border-radius:3px; }
+.hf-gap .knob { position:absolute; top:50%; transform:translate(-50%,-50%); width:16px; height:16px; border-radius:50%; background:var(--wu-semantic-raised); border:2px solid var(--wu-semantic-primary); box-shadow:0 1px 4px color-mix(in srgb,var(--wu-global-ink) 20%,transparent); }
+.hf-adv summary { display:flex; align-items:center; gap:8px; font-size:12.5px; font-weight:600; color:var(--wu-semantic-text); cursor:pointer; list-style:none; }
+.hf-adv summary::-webkit-details-marker { display:none; }
+.hf-adv summary .chev { transition:transform var(--wu-global-duration) var(--wu-global-ease); color:var(--wu-semantic-caption); }
+.hf-adv[open] summary .chev { transform:rotate(90deg); }
+.hf-adv-body { margin-top:10px; display:grid; gap:8px; }
+/* .hf-unit = 检查器里的「对象属性行」（设计稿 HF-03），不是清单项：
+   padding 6px 0 + 虚线分隔 + mono 粗体键名。此前实现当成带进度条的列表行，
+   并把 .hf-unit 的进度条语义塞进来，与设计稿不符。 */
+.hf-unit { display:flex; align-items:center; gap:10px; padding:6px 0; border-bottom:1px dashed var(--wu-semantic-border); font-size:12.4px; color:var(--wu-semantic-secondary); }
+.hf-unit:last-child { border-bottom:none; }
+.hf-unit b { color:var(--wu-semantic-text); font-weight:600; font-family:var(--wu-global-mono); font-size:11.5px; }
 
-/* ==================== HF-04 · 预览画面 ==================== */
-.hf-variant-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(240px,1fr)); gap:14px; }
-.hf-variant { border:1px solid var(--wu-semantic-border); border-radius:var(--wu-global-radius-md); background:var(--wu-semantic-surface); overflow:hidden; }
-.hf-variant .frame { aspect-ratio:16/9; background:linear-gradient(135deg,var(--wu-semantic-muted),var(--wu-semantic-raised)); display:flex; align-items:center; justify-content:center; color:var(--wu-semantic-caption); font-size:12px; gap:6px; }
-.hf-variant[data-aspect="portrait"] .frame { aspect-ratio:9/16; }
-.hf-variant .meta { display:flex; align-items:center; gap:8px; padding:8px 12px; font-size:12px; color:var(--wu-semantic-secondary); }
+/* TimelineBar · 全应用唯一深色面（05 §1.5 令牌例外），取值同 hf/vendor/duo-shell.css */
+.hf-timeline { flex:none; height:56px; background:#20242d; display:flex; align-items:center; gap:14px; padding:0 20px; color:#9AA3B2; font-size:12px; position:relative; }
+.hf-tl-time { display:inline-flex; align-items:center; gap:6px; font-family:var(--wu-global-mono); font-size:11.5px; white-space:nowrap; }
+.hf-tl-tracks { flex:1; display:grid; gap:5px; min-width:0; }
+.hf-tl-track { height:12px; border-radius:6px; background:#2B303B; position:relative; overflow:hidden; }
+.hf-tl-seg { position:absolute; top:0; bottom:0; border-radius:6px; }
+.hf-tl-seg.a { background:#7FA3D8; }
+.hf-tl-seg.b { background:#C97B96; }
+.hf-tl-mark { position:absolute; top:-4px; bottom:-4px; width:2px; background:#6B7482; }
+.hf-tl-play { position:absolute; top:0; bottom:0; width:2px; background:var(--wu-semantic-brand); z-index:2; }
+.hf-tl-label { font-size:11px; white-space:nowrap; }
 
-/* ==================== HF-05 · 生成导出 ==================== */
-.hf-out-card { border:1px solid var(--wu-semantic-border); border-radius:var(--wu-global-radius-md); background:var(--wu-semantic-surface); padding:14px 16px; display:grid; gap:8px; }
-.hf-segment { display:flex; align-items:center; gap:12px; padding:8px 0; border-bottom:1px solid var(--wu-semantic-border); font-size:12.5px; color:var(--wu-semantic-secondary); }
-.hf-segment:last-child { border-bottom:none; }
-.hf-segment .id { font-family:var(--wu-global-mono); color:var(--wu-semantic-text); font-weight:600; min-width:34px; }
+/* ==================== HF-04 · 预览画面 ====================
+   设计稿（01 §6）：三个分区锚点同屏展示 —— 构图（.hf-canvas + .hf-region + .hf-assetrow）、
+   镜头（.hf-sample-head 预设）、样片（.hf-sample-head 区间 + .hf-check 检查项）。
+   此前实现做成了「变体网格」（.hf-variant-*，设计稿无此类），属于类名词汇错位，现按设计稿归位。 */
+.hf-s4 { display:flex; flex-direction:column; gap:14px; padding-bottom:4px; }
+.hf-zone { background:var(--wu-semantic-surface); border:1px solid var(--wu-semantic-border); border-radius:var(--wu-global-radius-lg); padding:14px 16px; }
+.hf-canvas { position:relative; height:252px; border-radius:var(--wu-global-radius-md); overflow:hidden; background:linear-gradient(150deg,var(--wu-semantic-muted) 0%,var(--wu-semantic-surface) 55%,var(--wu-semantic-canvas) 100%); border:1px solid var(--wu-semantic-border); }
+.hf-canvas .scene-hint { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; color:var(--wu-semantic-caption); font-size:12px; letter-spacing:1px; text-align:center; padding:0 24px; }
+.hf-region { position:absolute; border:2px dashed var(--wu-semantic-info); border-radius:8px; background:var(--wu-semantic-info-bg); }
+.hf-region.b { border-color:var(--hf-speaker-b); background:var(--hf-speaker-b-bg); }
+.hf-region .tag { position:absolute; left:6px; top:6px; font-size:10.5px; font-weight:700; background:var(--wu-semantic-info); color:var(--wu-semantic-on-primary); border-radius:4px; padding:1px 7px; }
+.hf-region.b .tag { background:var(--hf-speaker-b); color:#fff; }
+.hf-canvas .cta { position:absolute; left:0; right:0; bottom:12px; display:flex; justify-content:center; }
+.hf-assetrow { display:flex; gap:14px; align-items:center; flex-wrap:wrap; margin-top:12px; }
+.hf-assetrow .item { display:flex; align-items:center; gap:8px; font-size:12.5px; color:var(--wu-semantic-secondary); }
+.hf-check { display:grid; gap:8px; margin-top:10px; }
+.hf-check .wu-choice { font-size:12.8px; }
+.hf-sample-head { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+.hf-sample-head .lb { font-size:12.5px; color:var(--wu-semantic-secondary); }
+.hf-coords { display:grid; grid-template-columns:84px 1fr; gap:6px; font-size:11.8px; color:var(--wu-semantic-secondary); align-items:baseline; }
+.hf-coords b { color:var(--wu-semantic-text); font-weight:600; font-family:var(--wu-global-mono); font-size:11px; }
 
-/* ==================== HF-06 · 资产库 ==================== */
-.hf-asset-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:14px; }
-.hf-asset { border:1px solid var(--wu-semantic-border); border-radius:var(--wu-global-radius-md); background:var(--wu-semantic-surface); overflow:hidden; }
-.hf-asset .thumb { height:96px; background:var(--wu-semantic-muted); display:flex; align-items:center; justify-content:center; color:var(--wu-semantic-caption); font-size:12px; gap:6px; }
-.hf-asset .meta { display:grid; gap:2px; padding:8px 12px; font-size:11.5px; color:var(--wu-semantic-caption); }
-.hf-asset .meta b { font-size:12px; color:var(--wu-semantic-text); font-weight:600; }
+/* ==================== HF-05 · 生成导出 ====================
+   设计稿（01 §7）：.hf-s5 = 开始前摘要面板（.hf-summary + 4 列 .hf-kv）→ 分段进度网格
+   （.hf-seg-grid + .hf-segcard）→ 导出区（.hf-export + .hf-export-item）。
+   此前实现自造 .hf-out-card/.hf-segment（设计稿无此类），现按设计稿归位。 */
+.hf-s5 { display:flex; flex-direction:column; gap:14px; padding-bottom:4px; }
+.hf-summary { background:var(--wu-semantic-surface); border:1px solid var(--wu-semantic-border); border-radius:var(--wu-global-radius-lg); padding:14px 16px; }
+.hf-summary-t { display:flex; align-items:center; gap:8px; font-size:13.5px; font-weight:700; margin-bottom:10px; }
+.hf-summary-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; }
+@container (max-width:1200px) { .hf-summary-grid { grid-template-columns:repeat(2,1fr); } }
+.hf-kv { background:var(--wu-semantic-muted); border-radius:var(--wu-global-radius-sm); padding:8px 12px; }
+.hf-kv .k { font-size:11px; color:var(--wu-semantic-caption); margin-bottom:2px; }
+.hf-kv .v { font-size:13px; font-weight:600; color:var(--wu-semantic-text); }
+.hf-seg-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; }
+@container (max-width:1200px) { .hf-seg-grid { grid-template-columns:repeat(3,1fr); } }
+.hf-segcard { border:1px solid var(--wu-semantic-border); border-radius:var(--wu-global-radius-md); background:var(--wu-semantic-surface); padding:10px 12px; }
+.hf-segcard .top { display:flex; align-items:center; gap:8px; font-size:12px; margin-bottom:6px; }
+.hf-segcard .tt { font-weight:600; color:var(--wu-semantic-text); font-size:12.5px; }
+.hf-segcard .sub { font-size:11px; color:var(--wu-semantic-caption); margin-top:3px; line-height:1.5; }
+.hf-export { background:var(--wu-semantic-surface); border:1px solid var(--wu-semantic-border); border-radius:var(--wu-global-radius-lg); padding:14px 16px; }
+.hf-export-item { display:flex; align-items:center; gap:10px; padding:7px 0; border-bottom:1px solid var(--wu-semantic-border); font-size:12.8px; color:var(--wu-semantic-secondary); }
+.hf-export-item:last-child { border-bottom:none; }
+.hf-export-item b { color:var(--wu-semantic-text); font-weight:600; }
 
-/* ==================== HF-07 · 服务设置 ==================== */
-.hf-svc-card { border:1px solid var(--wu-semantic-border); border-radius:var(--wu-global-radius-md); background:var(--wu-semantic-surface); padding:14px 16px; display:grid; gap:8px; }
-.hf-svc-card .head { display:flex; align-items:center; gap:10px; }
-.hf-svc-card .head h3 { font-size:13.5px; font-weight:700; margin:0; color:var(--wu-semantic-text); }
-.hf-cap { display:inline-flex; align-items:center; gap:6px; font-size:11.5px; color:var(--wu-semantic-secondary); }
+/* ==================== HF-06 · 资产库 ====================
+   设计稿语义：资产库 = 「角色 + 场景/同框底图/上传素材」的素材库（.hf-h/.hf-body2/.hf-sec-t/.hf-grid），
+   不是产物 manifest 浏览器。此前实现把 manifest（artifactId/kind/fileHash）当主视图，
+   自造 .hf-asset-grid/.thumb/.meta，与设计稿的 .hf-grid/.hf-thumb/.name/.desc/.bind 完全不同。
+   现按设计稿归位：主区 = 角色网格 + 场景网格；manifest 降级为检查器里的真实数据段。 */
+.hf-h { display:flex; align-items:center; gap:12px; flex-wrap:wrap; padding:12px 20px 4px; }
+.hf-h h2 { font-size:18px; font-weight:700; margin:0 4px 0 0; }
+.hf-body2 { flex:1; min-height:0; overflow:auto; padding:10px 20px 20px; }
+.hf-sec-t { display:flex; align-items:baseline; gap:8px; font-size:14px; font-weight:700; margin:8px 0 10px; color:var(--wu-semantic-text); }
+.hf-sec-t .wu-caption { font-weight:400; }
+.hf-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(168px,1fr)); gap:12px; }
+.hf-asset { border:1px solid var(--wu-semantic-border); border-radius:var(--wu-global-radius-lg); background:var(--wu-semantic-surface); overflow:hidden; cursor:pointer; }
+.hf-asset.selected { border-color:var(--wu-semantic-primary); box-shadow:0 0 0 1px var(--wu-semantic-primary); }
+.hf-asset:hover { border-color:var(--wu-semantic-control-border); }
+.hf-thumb { height:96px; display:flex; align-items:center; justify-content:center; position:relative; font-size:26px; font-weight:700; }
+/* 缩略图渐变色阶（几何占位；深端由令牌 color-mix 派生，不落硬编码色值） */
+.hf-thumb[data-tone="a"], .hf-bigthumb[data-tone="a"] { background:linear-gradient(150deg,var(--wu-semantic-info-bg),color-mix(in srgb,var(--wu-semantic-info) 10%,var(--wu-semantic-info-bg))); }
+.hf-thumb[data-tone="b"] { background:linear-gradient(150deg,var(--hf-speaker-b-bg),color-mix(in srgb,var(--hf-speaker-b) 10%,var(--hf-speaker-b-bg))); }
+.hf-thumb[data-tone="cat"] { background:linear-gradient(150deg,var(--wu-semantic-success-bg),color-mix(in srgb,var(--wu-semantic-success) 10%,var(--wu-semantic-success-bg))); }
+.hf-thumb[data-tone="studio"] { background:linear-gradient(150deg,var(--wu-semantic-muted),color-mix(in srgb,var(--wu-global-ink) 9%,var(--wu-semantic-muted))); }
+.hf-thumb[data-tone="cafe"] { background:linear-gradient(150deg,var(--wu-semantic-muted),color-mix(in srgb,var(--wu-global-ink) 11%,var(--wu-semantic-muted))); }
+.hf-thumb[data-tone="bg"] { background:linear-gradient(150deg,var(--wu-semantic-muted),color-mix(in srgb,var(--wu-global-ink) 13%,var(--wu-semantic-muted))); }
+.hf-thumb .lbl { position:absolute; right:8px; top:8px; }
+.hf-asset .name { font-size:13px; font-weight:600; color:var(--wu-semantic-text); padding:8px 10px 2px; }
+.hf-asset .desc { font-size:11px; color:var(--wu-semantic-caption); padding:0 10px 8px; line-height:1.5; }
+.hf-asset .bind { display:flex; gap:6px; padding:0 10px 10px; flex-wrap:wrap; }
+.hf-plus { border:1.5px dashed var(--wu-semantic-control-border); border-radius:var(--wu-global-radius-lg); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px; color:var(--wu-semantic-secondary); font-size:12.5px; cursor:pointer; min-height:150px; background:none; }
+.hf-plus:hover { border-color:var(--wu-semantic-brand); color:var(--wu-semantic-text); }
+.hf-bigthumb { height:160px; border-radius:var(--wu-global-radius-md); display:flex; align-items:center; justify-content:center; font-size:52px; font-weight:700; margin-bottom:12px; border:1px solid var(--wu-semantic-border); }
+.hf-bindrow { display:flex; align-items:center; gap:8px; padding:7px 0; border-bottom:1px solid var(--wu-semantic-border); font-size:12.5px; color:var(--wu-semantic-secondary); }
+.hf-bindrow:last-child { border-bottom:none; }
+.hf-bindrow b { color:var(--wu-semantic-text); font-weight:600; }
 
-/* ==================== HF-08 · 任务中心 ==================== */
-.hf-task-layout { display:grid; grid-template-columns:400px minmax(0,1fr); gap:16px; align-items:start; }
-.hf-task-col { display:flex; flex-direction:column; gap:8px; }
-.hf-task-row { display:flex; align-items:center; gap:10px; padding:9px 12px; border:1px solid var(--wu-semantic-border); border-radius:var(--wu-global-radius-md); background:var(--wu-semantic-surface); cursor:pointer; font-size:12.5px; color:var(--wu-semantic-secondary); }
-.hf-task-row.active { border-color:var(--wu-semantic-brand); box-shadow:0 0 0 1px var(--wu-semantic-brand) inset; }
-.hf-task-row .kind { font-weight:600; color:var(--wu-semantic-text); }
-.hf-detail-grid { display:grid; gap:6px; font-size:12.5px; color:var(--wu-semantic-secondary); }
-.hf-detail-grid .hf-fld { grid-template-columns:88px 1fr; }
-.hf-kv { display:flex; gap:8px; align-items:baseline; }
-.hf-kv b { min-width:88px; font-weight:600; color:var(--wu-semantic-text); font-size:12px; }
+/* ==================== HF-07 · 服务设置 ====================
+   设计稿（01 §9.1）：.hf-s7 左栏 .hf-formcol 四块表单（文本 API / 图片 API / 本地引擎 / MiniMax 语音）
+   + 右侧 360px .hf-cap 能力状态面板（分开登记、不做合并结论）。
+   此前实现把能力做成「提供方能力卡网格」，并占用了 .hf-cap 这个类名做小标签（语义冲突），现归位。 */
+.hf-s7 { display:flex; gap:14px; align-items:flex-start; }
+.hf-formcol { flex:1; min-width:0; display:flex; flex-direction:column; gap:12px; }
+.hf-block { background:var(--wu-semantic-surface); border:1px solid var(--wu-semantic-border); border-radius:var(--wu-global-radius-lg); padding:14px 16px; }
+.hf-block-t { display:flex; align-items:center; gap:8px; font-size:13.5px; font-weight:700; margin-bottom:10px; }
+.hf-block-t .wu-caption { font-weight:400; }
+.hf-cap { flex:0 0 360px; display:flex; flex-direction:column; background:var(--wu-semantic-surface); border:1px solid var(--wu-semantic-border); border-radius:var(--wu-global-radius-lg); padding:14px 16px; }
+.hf-cap-t { display:flex; align-items:center; gap:8px; font-size:13.5px; font-weight:700; margin-bottom:10px; }
+.hf-cap-row { display:flex; align-items:center; gap:10px; padding:8px 0; border-bottom:1px solid var(--wu-semantic-border); font-size:12.8px; color:var(--wu-semantic-secondary); }
+.hf-cap-row:last-child { border-bottom:none; }
+.hf-cap-row .nm { font-weight:600; color:var(--wu-semantic-text); min-width:140px; }
+.hf-dot { width:8px; height:8px; border-radius:50%; background:var(--wu-semantic-muted); flex:none; }
+.hf-dot.ok { background:var(--wu-semantic-success); }
+.hf-dot.no { background:var(--wu-semantic-caption); }
+/* 显存分配：设计稿未含此块，但它是本机真实设置（machine.json），作为第 5 块保留 */
+.hf-vram-row { display:flex; align-items:center; gap:10px; padding:5px 0; }
+.hf-vram-row > label { font-size:12.8px; color:var(--wu-semantic-secondary); font-weight:600; min-width:72px; }
+.hf-vram-row .wu-input { width:96px; }
+
+/* ==================== HF-08 · 任务中心 ====================
+   设计稿（01 §10.1）：三个分组（运行中 / 排队 / 已结束）同屏展示，不是 tab 切换；
+   任务卡 .hf-task 含状态圆点 .hf-task-ic、五阶段语义进度 .hf-phases（准备/推理/下载落盘/校验/后处理）。
+   此前实现自造 .hf-task-layout/.hf-task-row（类名命中率 45%），现按设计稿归位。 */
+.hf-grp { margin-top:18px; }
+.hf-grp:first-child { margin-top:6px; }
+.hf-grp-t { display:flex; align-items:center; gap:8px; font-size:13.5px; font-weight:700; color:var(--wu-semantic-text); margin-bottom:8px; }
+.hf-grp-t .wu-caption { font-weight:400; }
+.hf-task { display:flex; align-items:flex-start; gap:12px; border:1px solid var(--wu-semantic-border); border-radius:var(--wu-global-radius-lg); background:var(--wu-semantic-surface); padding:11px 14px; margin-bottom:8px; cursor:pointer; }
+.hf-task.selected { border-color:var(--wu-semantic-primary); box-shadow:0 0 0 1px var(--wu-semantic-primary); }
+.hf-task:hover { border-color:var(--wu-semantic-control-border); }
+.hf-task-ic { width:22px; height:22px; border-radius:50%; flex:none; margin-top:1px; display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:700; }
+.hf-task-ic.run { background:var(--wu-semantic-brand); color:var(--wu-semantic-on-brand); position:relative; }
+.hf-task-ic.run::after { content:""; position:absolute; inset:-4px; border-radius:50%; border:2px solid var(--wu-semantic-brand); opacity:.4; animation:hfPulse 1.4s ease-out infinite; }
+.hf-task-ic.que { background:var(--wu-semantic-muted); color:var(--wu-semantic-caption); }
+.hf-task-ic.ok { background:var(--wu-semantic-success-bg); color:var(--wu-semantic-success); }
+.hf-task-ic.fail { background:var(--wu-semantic-danger-bg); color:var(--wu-semantic-danger); }
+.hf-task-ic.unk { background:var(--wu-semantic-warning-bg); color:var(--wu-semantic-warning); }
+@keyframes hfPulse { 0% { transform:scale(.9); opacity:.5; } 100% { transform:scale(1.25); opacity:0; } }
+.hf-task-bd { flex:1; min-width:0; }
+.hf-task-t { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.hf-task-t b { font-size:13.5px; font-weight:600; color:var(--wu-semantic-text); }
+.hf-tag { font-family:var(--wu-global-mono); font-size:10.5px; color:var(--wu-semantic-caption); border:1px solid var(--wu-semantic-border); background:var(--wu-semantic-muted); padding:1px 6px; border-radius:5px; font-weight:600; }
+.hf-task-meta { display:flex; align-items:center; gap:12px; margin-top:5px; font-size:11.5px; color:var(--wu-semantic-caption); flex-wrap:wrap; }
+.hf-task-meta .err { color:var(--wu-semantic-danger); }
+.hf-task-meta .warn { color:var(--wu-semantic-warning); }
+.hf-task-meta .rec { color:var(--wu-semantic-info); }
+/* 五阶段语义进度（01 §10.1） */
+.hf-phases { display:grid; grid-template-columns:repeat(5,1fr); gap:4px; margin-top:8px; max-width:520px; }
+.hf-phases .ph { height:6px; border-radius:3px; background:var(--wu-semantic-muted); overflow:hidden; }
+.hf-phases .ph i { display:block; height:100%; background:var(--wu-semantic-info); border-radius:3px; }
+.hf-phases .ph.run i { background:var(--wu-semantic-brand); }
+.hf-phases .ph.slow i { background:var(--wu-semantic-warning); }
+.hf-phases .ph.bad i { background:var(--wu-semantic-danger); }
+.hf-phases-lb { display:flex; gap:4px; margin-top:3px; max-width:520px; font-size:9.5px; color:var(--wu-semantic-caption); }
+.hf-phases-lb span { flex:1; text-align:center; }
+.hf-task-ops { display:flex; gap:6px; align-items:center; margin-top:8px; flex-wrap:wrap; }
+.hf-que-note { display:inline-flex; align-items:center; gap:6px; font-size:11.5px; color:var(--wu-semantic-caption); margin-top:6px; }
+.hf-que-note .ph-wait { width:52px; height:6px; border-radius:3px; background:repeating-linear-gradient(90deg,var(--wu-semantic-muted) 0 5px,transparent 5px 8px); }
+.hf-foot-note { display:flex; gap:8px; flex-wrap:wrap; margin-top:16px; padding-top:12px; border-top:1px solid var(--wu-semantic-border); font-size:11.5px; color:var(--wu-semantic-caption); line-height:1.6; }
+.hf-ins-rows { font-size:12.4px; color:var(--wu-semantic-secondary); line-height:1.65; }
+.hf-ins-rows b { color:var(--wu-semantic-text); font-weight:600; }
+.hf-ph-row { display:flex; align-items:center; gap:8px; padding:6px 0; border-bottom:1px solid var(--wu-semantic-border); font-size:12.3px; color:var(--wu-semantic-secondary); }
+.hf-ph-row:last-child { border-bottom:none; }
+.hf-ph-row .st { flex:none; width:18px; height:18px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:10px; font-weight:700; }
+.hf-ph-row .st.d { background:var(--wu-semantic-success-bg); color:var(--wu-semantic-success); }
+.hf-ph-row .st.c { background:var(--wu-semantic-brand); color:var(--wu-semantic-on-brand); }
+.hf-ph-row .st.w { background:var(--wu-semantic-warning-bg); color:var(--wu-semantic-warning); }
+.hf-ph-row .st.p { background:var(--wu-semantic-muted); color:var(--wu-semantic-caption); }
+.hf-ph-row .nm { flex:1; min-width:0; }
+.hf-ph-row .nm small { display:block; font-size:10.5px; color:var(--wu-semantic-caption); }
+.hf-ph-row .val { font-family:var(--wu-global-mono); font-size:11px; color:var(--wu-semantic-caption); }

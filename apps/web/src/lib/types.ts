@@ -132,6 +132,8 @@ export interface Project {
   stageProgress: Partial<Record<StageId, StageState>>;
   approvals: Approval[];
   revision: number;
+  /** 最后写入时间（ISO8601 UTC）。由后端 ProjectStore 单点打戳；旧数据可能缺省。 */
+  updatedAt?: string;
 }
 
 export interface Job {
@@ -195,6 +197,50 @@ export const STAGE_META: Record<StageState, { label: string; tone: 'muted' | 'su
   stale: { label: '已过期', tone: 'warning' },
   failed: { label: '失败', tone: 'danger' },
 };
+
+/* ---- 跨页共享的展示契约（避免各页各自硬编码导致漂移） ---- */
+
+/** A/B 双人角色。当前规格为固定双人对谈（01 §11.2），角色名为设计稿默认值。 */
+export const SPEAKERS: Record<Speaker, { name: string; role: string }> = {
+  A: { name: '李雷', role: '主持' },
+  B: { name: '韩梅梅', role: '嘉宾' },
+};
+
+/** 顶栏与 HF-07 共用的显存指标：后端 machine.json 只持久化分配合计，
+ *  不提供实测占用与物理上限，故沿用设计稿常量（单点定义，避免两处各写一份）。 */
+export const VRAM_USED_GB = 2.8;
+export const VRAM_TOTAL_GB = 16;
+
+const STAGE_CN = ['①', '②', '③', '④', '⑤'];
+
+/** 工程已推进到的最靠后阶段（首页卡片「阶段④ · 预览画面」的口径）：
+ *  取 stage_progress 中状态非 not_ready 的最大序号；全未推进时回落到第一阶段。 */
+export function currentStageOf(p: Project): { index: number; id: StageId; title: string; cn: string } {
+  let idx = 0;
+  STAGE_ORDER.forEach((s, i) => {
+    const st = p.stageProgress[s.id];
+    if (st && st !== 'not_ready') idx = i;
+  });
+  const s = STAGE_ORDER[idx];
+  return { index: idx, id: s.id, title: s.title, cn: STAGE_CN[idx] };
+}
+
+/** outputVersion（OUT-Rn-vN）→ 卡片文案「成片 vN」。 */
+export function outputVersionLabel(v: string | null | undefined): string | null {
+  if (!v) return null;
+  const m = /-v(\d+)$/.exec(v);
+  return m ? `成片 v${m[1]}` : `成片 ${v}`;
+}
+
+/** ISO8601 → 首页卡片「最后编辑 09-10」（本地时区）。 */
+export function formatEditedAt(iso: string | null | undefined): string | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `最后编辑 ${mm}-${dd}`;
+}
 
 /** Job 状态 → 中文文案（02 §7.1） */
 export const JOB_LABEL: Record<JobStatus, string> = {

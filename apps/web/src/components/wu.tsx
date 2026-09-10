@@ -9,12 +9,14 @@ export type IconName =
   | 'plus' | 'folder' | 'more' | 'close' | 'check' | 'play' | 'stop' | 'arrowRight'
   | 'arrowLeft' | 'download' | 'trash' | 'edit' | 'search' | 'gear' | 'wand' | 'sparkle'
   | 'alert' | 'info' | 'clock' | 'save' | 'grip' | 'task' | 'image' | 'mic' | 'film'
-  | 'link' | 'refresh' | 'chevronUp' | 'chevronDown' | 'pause';
+  | 'link' | 'refresh' | 'chevronUp' | 'chevronDown' | 'chevronRight' | 'pause' | 'upload';
 
 const ICON_PATHS: Record<IconName, React.ReactNode> = {
   plus: <path d="M12 5v14M5 12h14" />,
   folder: <path d="M3 7a2 2 0 0 1 2-2h4l2 3h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z" />,
-  more: <path d="M12 6.5h.01M12 12h.01M12 17.5h.01" />,
+  // 设计稿 HF-00 卡片的「更多操作」为横向三点（stroke 样式下用极短横线表达圆点，
+  // 因为 .wu-icon 基线是 fill:none + stroke:currentColor，实心 circle 会被描边成空心圈）
+  more: <><path d="M5 12h.01M12 12h.01M19 12h.01" /></>,
   close: <path d="M6 6l12 12M18 6L6 18" />,
   check: <path d="M5 12.5l4.5 4.5L19 7" />,
   play: <path d="M7 5.5v13l11-6.5-11-6.5Z" />,
@@ -41,12 +43,21 @@ const ICON_PATHS: Record<IconName, React.ReactNode> = {
   refresh: <path d="M20 12a8 8 0 1 1-2.3-5.6M20 4v5h-5" />,
   chevronUp: <path d="M6 14.5 12 8.5l6 6" />,
   chevronDown: <path d="M6 9.5l6 6 6-6" />,
+  chevronRight: <path d="M9 6l6 6-6 6" />,
+  upload: <path d="M4 17v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3M12 3v13M7 8l5-5 5 5" />,
   pause: <path d="M8 5v14M16 5v14" />,
 };
 
+/* 图标尺寸收敛到设计系统的 3 档刻度（hf 全站只出现 xs / sm / 默认三种）：
+   ≤13 → xs(12px) · 14–17 → sm(16px) · ≥18 → 默认(20px)。
+   注意：不能靠 SVG 的 width/height 属性传尺寸——components.css 的 `.wu-icon{width:20px}`
+   优先级高于表现属性，会把 size 吃掉（这正是此前“所有图标一律渲染成 20px”的根因），
+   所以尺寸必须落到类上，由 CSS 决定。 */
+const iconSizeClass = (size: number) => (size <= 13 ? 'xs' : size <= 17 ? 'sm' : '');
+
 export function Icon({ name, size = 20, className = '' }: { name: IconName; size?: number; className?: string }) {
   return (
-    <svg className={`wu-icon ${className}`} width={size} height={size} viewBox="0 0 24 24" aria-hidden="true">
+    <svg className={`wu-icon ${iconSizeClass(size)} ${className}`.trim()} viewBox="0 0 24 24" aria-hidden="true">
       {ICON_PATHS[name]}
     </svg>
   );

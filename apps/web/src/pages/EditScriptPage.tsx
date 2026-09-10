@@ -234,199 +234,8 @@ export function EditScriptPage({ projectId }: { projectId: string }) {
     <AppShell
       project={proj ?? null}
       onNavigate={setView}
-      footer={
-        <FootBar hint={
-          <span className="wu-row" style={{ gap: 12 }}>
-            <Button variant="ghost" size="sm" icon="arrowLeft" onClick={() => setView('create')}>上一步</Button>
-            <Badge tone="warning" icon="alert">确认点 · 脚本确认</Badge>
-            <span className="wu-caption">确认后可选自动启动配音</span>
-            <span className="hf-spacer" />
-            <Button size="sm" onClick={() => setView('voice')}>下一步<Icon name="arrowRight" size={14} /></Button>
-          </span>
-        }
-      />
-      }
-    >
-      <StageHead title="② 编辑对话">
-        {revision && (
-          <Badge tone={scriptApproved ? 'success' : 'warning'}>
-            {scriptApproved ? `脚本 ${revision.id} · 已确认` : `草稿 ${revision.id} · 未确认`}
-          </Badge>
-        )}
-        <span className="hf-spacer" />
-        <Button variant="secondary" size="sm" icon="refresh" disabled={generating} onClick={handleRegenerate}>重新生成</Button>
-        <label className="wu-input" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '0 10px', height: 30, width: 'auto', cursor: 'pointer' }}>
-          <Icon name="edit" size={14} />版本
-          <select
-            className="hf-mini-select"
-            aria-label="选择版本"
-            style={{ border: 'none', background: 'none' }}
-            value={revision?.id ?? ''}
-            onChange={(e) => { setViewRevId(e.target.value); setCandidate(null); }}
-          >
-            {(proj?.scriptRevisions ?? []).map((r) => (
-              <option key={r.id} value={r.id}>{r.id}{r.id === proj?.currentDraftRevision ? ' · 草稿' : ''}</option>
-            ))}
-          </select>
-        </label>
-        <Button
-          variant="brand" size="sm" icon="check"
-          disabled={!revision || scriptApproved || generating}
-          onClick={handleConfirm}
-        >
-          {scriptApproved ? '已确认' : '确认脚本'}
-        </Button>
-      </StageHead>
-
-      <div className="hf-body" style={{ display: 'flex', gap: 20, minHeight: 0 }}>
-        {/* ---- 主视图：话轮列表 ---- */}
-        <div className="hf-panel" style={{ flex: 1, minWidth: 0 }}>
-          {scriptApproved && (
-            <Alert tone="info">
-              已绑定脚本 {revision?.id}。编辑将创建新草稿版本，不覆盖已用版本；确认后可选自动启动配音。
-              <a className="hf-link" onClick={() => setView('voice')}>前往阶段③ 试听配音</a>
-            </Alert>
-          )}
-          {error && <Alert tone="danger">{error}</Alert>}
-          {!viewIsDraft && revision && (
-            <Alert tone="warning">正在查看历史版本 {revision.id}（非当前草稿）；编辑将基于该版本创建新草稿。</Alert>
-          )}
-
-          {candidate && (
-            <div className="hf-cand" style={{ marginBottom: 12 }}>
-              <div className="t">
-                候选改写 · 差异：共改 {candidate.turnIds.length} 处
-                <span className="hf-ai" style={{ marginLeft: 8 }}>AI 建议</span>
-              </div>
-              {candidate.turns.filter((t) => candidate.turnIds.includes(t.id)).map((t) => (
-                <p key={t.id}><b style={{ fontFamily: 'var(--wu-global-mono)' }}>{t.id}</b> {turnText(t)}</p>
-              ))}
-              <div className="wu-row" style={{ gap: 8 }}>
-                <Button variant="brand" size="sm" icon="check" onClick={acceptCandidate}>接受</Button>
-                <Button variant="ghost" size="sm" onClick={() => setCandidate(null)}>拒绝</Button>
-                <span className="wu-caption">其他发言不自动重写</span>
-              </div>
-            </div>
-          )}
-
-          <div className="hf-list">
-            {selected.length > 0 && (
-              <div className="hf-toolbar">
-                <span className="cap">已选 {selected.length > 1 ? `T… 共 ${selected.length} 条` : selected[0]}</span>
-                {TOOLBAR_ACTIONS.map((a) => (
-                  <Button key={a.id} variant="secondary" size="sm" disabled={rewrite.isPending} onClick={() => handleRewrite(a.id)}>
-                    {a.label}
-                  </Button>
-                ))}
-                <span className="hf-spacer" />
-                <span className="hf-ai">AI 建议</span>
-              </div>
-            )}
-
-            {turns.length === 0 && (
-              <div className="wu-empty">
-                <div style={{ fontWeight: 700 }}>还没有话轮</div>
-                <p className="wu-caption" style={{ margin: '6px auto 14px', maxWidth: 420 }}>
-                  在阶段①生成对话，或点下方「发言」手动添加。
-                </p>
-              </div>
-            )}
-
-            {turns.map((t, idx) => {
-              const text = turnText(t);
-              const isSel = selected.includes(t.id);
-              return (
-                <div
-                  key={t.id}
-                  className={`hf-turn ${isSel ? 'selected' : ''}`}
-                  onClick={(e) => selectTurn(t.id, e.ctrlKey || e.metaKey)}
-                  draggable
-                  onDragStart={(e) => e.dataTransfer.setData('text/plain', t.id)}
-                  onDragOver={(e) => e.preventDefault()}
-                  onDrop={(e) => {
-                    const srcId = e.dataTransfer.getData('text/plain');
-                    const src = turns.findIndex((x) => x.id === srcId);
-                    const dst = turns.findIndex((x) => x.id === t.id);
-                    if (src >= 0 && dst >= 0 && src !== dst) {
-                      const next = [...turns];
-                      const [moved] = next.splice(src, 1);
-                      next.splice(dst, 0, moved);
-                      applyTurns(next);
-                    }
-                  }}
-                >
-                  <div className="hf-turn-head">
-                    <span className="hf-grip" title="拖动排序"><Icon name="grip" size={16} /></span>
-                    <span className="hf-turn-id">#{t.id}</span>
-                    <Badge tone={t.speaker === 'A' ? 'info' : 'speaker-b'}>{t.speaker} · {t.speaker === 'A' ? '主持' : '嘉宾'}</Badge>
-                    <select
-                      className="hf-mini-select" aria-label={`${t.id} 意图`}
-                      value={t.intent}
-                      onClick={(e) => e.stopPropagation()}
-                      onChange={(e) => updateTurn(t.id, { intent: e.target.value as Turn['intent'] })}
-                    >
-                      {INTENTS.map((it) => <option key={it.id} value={it.id}>{it.label}</option>)}
-                    </select>
-                    <span className="hf-spacer" />
-                    <button
-                      type="button" className="hf-icon-btn" aria-label={`上移 ${t.id}`}
-                      disabled={idx === 0} onClick={(e) => { e.stopPropagation(); moveTurn(t.id, -1); }}
-                    ><Icon name="chevronUp" size={16} /></button>
-                    <button
-                      type="button" className="hf-icon-btn" aria-label={`下移 ${t.id}`}
-                      disabled={idx === turns.length - 1} onClick={(e) => { e.stopPropagation(); moveTurn(t.id, 1); }}
-                    ><Icon name="chevronDown" size={16} /></button>
-                    <button
-                      type="button" className="hf-icon-btn" aria-label={`删除 ${t.id}`}
-                      onClick={(e) => { e.stopPropagation(); removeTurns([t.id]); }}
-                    ><Icon name="trash" size={16} /></button>
-                  </div>
-                  {editingId === t.id ? (
-                    <Textarea
-                      className="wu-input"
-                      rows={3}
-                      value={editText}
-                      autoFocus
-                      onClick={(e) => e.stopPropagation()}
-                      onChange={(e) => setEditText(e.target.value)}
-                      onBlur={() => {
-                        updateTurn(t.id, { lines: t.lines.map((l, i) => (i === 0 ? { ...l, displayText: editText, spokenText: editText } : l)) });
-                        setEditingId(null);
-                      }}
-                      onKeyDown={(e) => { if (e.key === 'Escape') { setEditingId(null); } }}
-                    />
-                  ) : (
-                    <p
-                      className="hf-turn-text"
-                      style={{ cursor: 'text' }}
-                      onClick={(e) => { e.stopPropagation(); setEditingId(t.id); setEditText(text); }}
-                      title="点击编辑台词"
-                    >{text || <span className="wu-caption">（空话轮 · 点击输入台词）</span>}</p>
-                  )}
-                  <div className="hf-turn-meta">
-                    <span>语气：{t.tone}</span>
-                    <span>语速：{t.speedRatio.toFixed(2)}</span>
-                    {t.sourceAnchors?.length ? <span>来源锚点：{t.sourceAnchors.length} 处</span> : null}
-                    {pronCount > 0 && t.id === turns.find((x) => x.id === selected[selected.length - 1])?.id
-                      ? <span className="hf-meta-warn"><Icon name="alert" size={12} />读音：{pronCount} 处</span> : null}
-                  </div>
-                </div>
-              );
-            })}
-
-            <div className="wu-row" style={{ gap: 12, margin: '2px 0 8px' }}>
-              <Button variant="secondary" size="sm" icon="plus" onClick={addTurn}>发言</Button>
-              <span className="wu-caption">拖动发言左侧手柄排序 · 稳定 ID（{turns[0]?.id}）不随显示序号改变</span>
-            </div>
-            <div className="wu-row" style={{ gap: 12, marginBottom: 6 }}>
-              <Button variant="secondary" size="sm" icon="edit" onClick={() => setDictOpen(true)}>读音词典</Button>
-              <span className="wu-caption">专名 · 数字 · 缩写；显示文本与朗读文本分别保存</span>
-            </div>
-          </div>
-        </div>
-
-        {/* ---- 检查器（01 §4.1：内容结构 / 所选发言 / 质量提示） ---- */}
-        <aside className="hf-inspector" aria-label="检查器" style={{ position: 'sticky', top: 0, height: 'fit-content' }}>
+      inspector={
+        <aside className="hf-inspector" aria-label="检查器">
           <div className="hf-ins-sec">
             <h4>内容结构 <span className="wu-caption" style={{ fontWeight: 400 }}>{revision?.id}</span></h4>
             <ul className="hf-ins-list">
@@ -510,6 +319,200 @@ export function EditScriptPage({ projectId }: { projectId: string }) {
             )}
           </div>
         </aside>
+      }
+      footer={
+        <FootBar hint={
+          <span className="wu-row" style={{ gap: 12 }}>
+            <Button variant="ghost" size="sm" icon="arrowLeft" onClick={() => setView('create')}>上一步</Button>
+            <Badge tone="warning" icon="alert">确认点 · 脚本确认</Badge>
+            <span className="wu-caption">确认后可选自动启动配音</span>
+            <span className="hf-spacer" />
+            <Button size="sm" onClick={() => setView('voice')}>下一步<Icon name="arrowRight" size={14} /></Button>
+          </span>
+        }
+      />
+      }
+    >
+      <StageHead title="② 编辑对话">
+        {revision && (
+          <Badge tone={scriptApproved ? 'success' : 'warning'}>
+            {scriptApproved ? `脚本 ${revision.id} · 已确认` : `草稿 ${revision.id} · 未确认`}
+          </Badge>
+        )}
+        <span className="hf-spacer" />
+        <Button variant="secondary" size="sm" icon="refresh" disabled={generating} onClick={handleRegenerate}>重新生成</Button>
+        <label className="wu-input" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '0 10px', height: 30, width: 'auto', cursor: 'pointer' }}>
+          <Icon name="edit" size={14} />版本
+          <select
+            className="hf-mini-select"
+            aria-label="选择版本"
+            style={{ border: 'none', background: 'none' }}
+            value={revision?.id ?? ''}
+            onChange={(e) => { setViewRevId(e.target.value); setCandidate(null); }}
+          >
+            {(proj?.scriptRevisions ?? []).map((r) => (
+              <option key={r.id} value={r.id}>{r.id}{r.id === proj?.currentDraftRevision ? ' · 草稿' : ''}</option>
+            ))}
+          </select>
+        </label>
+        <Button
+          variant="brand" size="sm" icon="check"
+          disabled={!revision || scriptApproved || generating}
+          onClick={handleConfirm}
+        >
+          {scriptApproved ? '已确认' : '确认脚本'}
+        </Button>
+      </StageHead>
+
+      <div className="hf-body">
+        {/* ---- 主视图：话轮列表 ---- */}
+        <div className="hf-panel" style={{ flex: 1, minWidth: 0 }}>
+          {scriptApproved && (
+            <Alert tone="info">
+              已绑定脚本 {revision?.id}。编辑将创建新草稿版本，不覆盖已用版本；确认后可选自动启动配音。
+              <a className="hf-link" onClick={() => setView('voice')}>前往阶段③ 试听配音</a>
+            </Alert>
+          )}
+          {error && <Alert tone="danger">{error}</Alert>}
+          {!viewIsDraft && revision && (
+            <Alert tone="warning">正在查看历史版本 {revision.id}（非当前草稿）；编辑将基于该版本创建新草稿。</Alert>
+          )}
+
+          {candidate && (
+            <div className="hf-cand" style={{ marginBottom: 12 }}>
+              <div className="t">
+                候选改写 · 差异：共改 {candidate.turnIds.length} 处
+                <span className="hf-ai" style={{ marginLeft: 8 }}>AI 建议</span>
+              </div>
+              {candidate.turns.filter((t) => candidate.turnIds.includes(t.id)).map((t) => (
+                <p key={t.id}><b style={{ fontFamily: 'var(--wu-global-mono)' }}>{t.id}</b> {turnText(t)}</p>
+              ))}
+              <div className="wu-row" style={{ gap: 8 }}>
+                <Button variant="brand" size="sm" icon="check" onClick={acceptCandidate}>接受</Button>
+                <Button variant="ghost" size="sm" onClick={() => setCandidate(null)}>拒绝</Button>
+                <span className="wu-caption">其他发言不自动重写</span>
+              </div>
+            </div>
+          )}
+
+          <div className="hf-list">
+            {selected.length > 0 && (
+              <div className="hf-toolbar">
+                <span className="cap">已选 {selected.length > 1 ? `T… 共 ${selected.length} 条` : selected[0]}</span>
+                {TOOLBAR_ACTIONS.map((a) => (
+                  <Button key={a.id} variant="secondary" size="sm" disabled={rewrite.isPending} onClick={() => handleRewrite(a.id)}>
+                    {a.label}
+                  </Button>
+                ))}
+                <span className="hf-spacer" />
+                <span className="hf-ai">AI 建议</span>
+              </div>
+            )}
+
+            {turns.length === 0 && (
+              <div className="wu-empty">
+                <div style={{ fontWeight: 700 }}>还没有话轮</div>
+                <p className="wu-caption" style={{ margin: '6px auto 14px', maxWidth: 420 }}>
+                  在阶段①生成对话，或点下方「发言」手动添加。
+                </p>
+              </div>
+            )}
+
+            {turns.map((t, idx) => {
+              const text = turnText(t);
+              const isSel = selected.includes(t.id);
+              return (
+                <div
+                  key={t.id}
+                  className={`hf-turn ${isSel ? 'selected' : ''}`}
+                  onClick={(e) => selectTurn(t.id, e.ctrlKey || e.metaKey)}
+                  draggable
+                  onDragStart={(e) => e.dataTransfer.setData('text/plain', t.id)}
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={(e) => {
+                    const srcId = e.dataTransfer.getData('text/plain');
+                    const src = turns.findIndex((x) => x.id === srcId);
+                    const dst = turns.findIndex((x) => x.id === t.id);
+                    if (src >= 0 && dst >= 0 && src !== dst) {
+                      const next = [...turns];
+                      const [moved] = next.splice(src, 1);
+                      next.splice(dst, 0, moved);
+                      applyTurns(next);
+                    }
+                  }}
+                >
+                  <div className="hf-turn-head">
+                    <span className="hf-grip" title="拖动排序"><Icon name="grip" size={12} /></span>
+                    <span className="hf-turn-id">#{t.id}</span>
+                    <Badge tone={t.speaker === 'A' ? 'info' : 'speaker-b'}>{t.speaker} · {t.speaker === 'A' ? '主持' : '嘉宾'}</Badge>
+                    <select
+                      className="hf-mini-select" aria-label={`${t.id} 意图`}
+                      value={t.intent}
+                      onClick={(e) => e.stopPropagation()}
+                      onChange={(e) => updateTurn(t.id, { intent: e.target.value as Turn['intent'] })}
+                    >
+                      {INTENTS.map((it) => <option key={it.id} value={it.id}>{it.label}</option>)}
+                    </select>
+                    <span className="hf-spacer" />
+                    {/* 用设计系统的 .wu-icon-btn[data-size="sm"]（32px 方形），替换此前自造的 .hf-icon-btn（26px）。
+                        权威基线里 .wu-icon-btn 只给了尺寸、没给外观重置，故在 duo-shell.css 补齐幽灵态。 */}
+                    <button
+                      type="button" className="wu-icon-btn" data-size="sm" aria-label={`上移 ${t.id}`}
+                      disabled={idx === 0} onClick={(e) => { e.stopPropagation(); moveTurn(t.id, -1); }}
+                    ><Icon name="chevronUp" size={16} /></button>
+                    <button
+                      type="button" className="wu-icon-btn" data-size="sm" aria-label={`下移 ${t.id}`}
+                      disabled={idx === turns.length - 1} onClick={(e) => { e.stopPropagation(); moveTurn(t.id, 1); }}
+                    ><Icon name="chevronDown" size={16} /></button>
+                    <button
+                      type="button" className="wu-icon-btn" data-size="sm" aria-label={`删除 ${t.id}`}
+                      onClick={(e) => { e.stopPropagation(); removeTurns([t.id]); }}
+                    ><Icon name="trash" size={16} /></button>
+                  </div>
+                  {editingId === t.id ? (
+                    <Textarea
+                      className="wu-input"
+                      rows={3}
+                      value={editText}
+                      autoFocus
+                      onClick={(e) => e.stopPropagation()}
+                      onChange={(e) => setEditText(e.target.value)}
+                      onBlur={() => {
+                        updateTurn(t.id, { lines: t.lines.map((l, i) => (i === 0 ? { ...l, displayText: editText, spokenText: editText } : l)) });
+                        setEditingId(null);
+                      }}
+                      onKeyDown={(e) => { if (e.key === 'Escape') { setEditingId(null); } }}
+                    />
+                  ) : (
+                    <p
+                      className="hf-turn-text"
+                      style={{ cursor: 'text' }}
+                      onClick={(e) => { e.stopPropagation(); setEditingId(t.id); setEditText(text); }}
+                      title="点击编辑台词"
+                    >{text || <span className="wu-caption">（空话轮 · 点击输入台词）</span>}</p>
+                  )}
+                  <div className="hf-turn-meta">
+                    <span>语气：{t.tone}</span>
+                    <span>语速：{t.speedRatio.toFixed(2)}</span>
+                    {t.sourceAnchors?.length ? <span>来源锚点：{t.sourceAnchors.length} 处</span> : null}
+                    {pronCount > 0 && t.id === turns.find((x) => x.id === selected[selected.length - 1])?.id
+                      ? <span className="hf-meta-warn"><Icon name="alert" size={12} />读音：{pronCount} 处</span> : null}
+                  </div>
+                </div>
+              );
+            })}
+
+            <div className="wu-row" style={{ gap: 12, margin: '2px 0 8px' }}>
+              <Button variant="secondary" size="sm" icon="plus" onClick={addTurn}>发言</Button>
+              <span className="wu-caption">拖动发言左侧手柄排序 · 稳定 ID（{turns[0]?.id}）不随显示序号改变</span>
+            </div>
+            <div className="wu-row" style={{ gap: 12, marginBottom: 6 }}>
+              <Button variant="secondary" size="sm" icon="edit" onClick={() => setDictOpen(true)}>读音词典</Button>
+              <span className="wu-caption">专名 · 数字 · 缩写；显示文本与朗读文本分别保存</span>
+            </div>
+          </div>
+        </div>
+
       </div>
 
       {/* ---- 底部统计条（01 §4.1） ---- */}
