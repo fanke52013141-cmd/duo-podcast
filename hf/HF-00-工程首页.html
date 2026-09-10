@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HF-00 · 工程首页 · 高保真稿 v1.0</title>
+<link rel="stylesheet" href="vendor/workspace-ui/tokens.css">
+<link rel="stylesheet" href="vendor/workspace-ui/components.css">
+<script defer src="vendor/workspace-ui/components.js"></script>
+<style>
+/* ============ 文档外壳（说明页本身，使用基线令牌着色） ============ */
+body{margin:0;background:var(--wu-semantic-canvas)}
+.doc{max-width:1200px;margin:0 auto;padding:24px 28px 90px}
+.dhead{background:linear-gradient(135deg,var(--wu-global-dark),var(--wu-global-ink));color:var(--wu-semantic-on-primary);border-radius:var(--wu-global-radius-lg);padding:22px 26px;margin-bottom:20px}
+.dhead .kick{font-size:11px;letter-spacing:2px;color:var(--wu-semantic-brand-hover);font-weight:700}
+.dhead h1{font-size:24px;font-weight:700;line-height:1.35;margin:8px 0 4px}
+.dhead p{color:#C9C6C0;font-size:13px;max-width:880px;line-height:1.6;margin:0}
+.dhead .meta{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+.dhead .meta span{font-size:11px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);padding:3px 10px;border-radius:var(--wu-global-pill)}
+h2.sec{font-size:20px;font-weight:700;margin:36px 0 6px;padding-top:14px;border-top:1px solid var(--wu-semantic-border)}
+h2.sec .no{color:var(--wu-semantic-brand);font-family:var(--wu-global-mono);margin-right:8px;font-size:16px}
+p.lead{color:var(--wu-semantic-secondary);margin:0 0 10px;font-size:13.5px}
+.dcard{background:var(--wu-semantic-surface);border:1px solid var(--wu-semantic-border);border-radius:var(--wu-global-radius-md);padding:16px 18px;margin:12px 0}
+.dnote{border-left:3px solid var(--wu-semantic-brand);background:var(--wu-semantic-muted);border-radius:0 var(--wu-global-radius-sm) var(--wu-global-radius-sm) 0;padding:10px 14px;font-size:12.8px;color:var(--wu-semantic-secondary);margin:10px 0}
+ul.b{padding-left:22px;margin:6px 0}
+ul.b li{margin:4px 0;color:var(--wu-semantic-secondary);font-size:13.2px}
+table.dt{width:100%;border-collapse:collapse;font-size:12.6px;margin:10px 0;background:var(--wu-semantic-raised)}
+table.dt th{background:var(--wu-semantic-muted);text-align:left;padding:8px 11px;font-weight:600;color:var(--wu-semantic-text);border-bottom:1px solid var(--wu-semantic-control-border)}
+table.dt td{padding:8px 11px;border-bottom:1px solid var(--wu-semantic-border);vertical-align:top;color:var(--wu-semantic-secondary);line-height:1.55}
+table.dt tr:last-child td{border-bottom:none}
+table.dt td b{color:var(--wu-semantic-text)}
+code{font-family:var(--wu-global-mono);font-size:11.6px;background:var(--wu-semantic-muted);padding:1px 6px;border-radius:4px;color:var(--wu-semantic-text)}
+.cols2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+@media(max-width:1000px){.cols2{grid-template-columns:1fr}}
+/* 视口工具 */
+.vp-bar{display:flex;align-items:center;gap:12px;padding:10px 2px 8px;font-size:12.5px;color:var(--wu-semantic-secondary)}
+.vp-bar .ttl{font-weight:600;color:var(--wu-semantic-text)}
+.vp-bar .sp{flex:1}
+.vp-bar .pct{font-family:var(--wu-global-mono);font-size:11.5px;color:var(--wu-semantic-caption)}
+.vp-bar button{font:inherit;font-size:12px;font-weight:600;height:26px;padding:0 12px;border-radius:7px;border:1px solid var(--wu-semantic-control-border);background:var(--wu-semantic-raised);color:var(--wu-semantic-text);cursor:pointer}
+.vp-bar button.on{background:var(--wu-semantic-primary);border-color:var(--wu-semantic-primary);color:var(--wu-semantic-on-primary)}
+.vp{background:var(--wu-global-dark);border-radius:var(--wu-global-radius-md);padding:10px;overflow:auto}
+.frame{width:1440px;transform-origin:0 0;border-radius:var(--wu-global-radius-sm);overflow:hidden;box-shadow:0 16px 48px color-mix(in srgb,var(--wu-global-ink) 14%,transparent)}
+.vp-note{font-size:11.5px;color:var(--wu-semantic-caption);margin:7px 2px 0;text-align:center}
+/* 变体区 */
+.var-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+@media(max-width:1000px){.var-grid{grid-template-columns:1fr}}
+.var{border:1px solid var(--wu-semantic-border);border-radius:var(--wu-global-radius-md);background:var(--wu-semantic-surface);padding:14px 16px}
+.var .cap{font-size:12.5px;font-weight:700;color:var(--wu-semantic-text);margin-bottom:4px}
+.var .desc{font-size:12px;color:var(--wu-semantic-caption);margin-bottom:12px;line-height:1.6}
+.var .demo{border:1px solid var(--wu-semantic-border);border-radius:var(--wu-global-radius-sm);background:var(--wu-semantic-canvas);padding:14px}
+
+/* ============ 屏内组合样式（全部取值 --wu-* 令牌；不引入新色值） ============ */
+/* 产品级组合扩展（在基线之上的最小增量，均已在边界说明登记）：紧凑图标按钮、16px 图标档、发言人 B 色调 */
+.wu .wu-icon-btn[data-size="sm"]{width:var(--wu-size-sm);padding:6px}
+.wu .wu-icon.sm{width:16px;height:16px}
+.wu .wu-badge[data-tone="speaker-b"]{background:#FAEEF2;color:#A8405E} /* 变体：B 发言人，对比度 5.1:1 */
+
+/* 工程首页（无壳独立页，01 §2） */
+.hf-home{min-height:860px;display:flex;flex-direction:column;background:var(--wu-semantic-canvas)}
+.hf-home-top{flex:none;display:flex;align-items:center;gap:16px;padding:14px 32px;background:var(--wu-semantic-surface);border-bottom:1px solid var(--wu-semantic-border)}
+.hf-spacer{flex:1}
+.hf-brand{display:inline-flex;align-items:center;gap:10px;font-weight:700;font-size:15px;color:var(--wu-semantic-text)}
+.hf-mark{width:26px;height:26px;border-radius:var(--wu-global-radius-sm);background:var(--wu-semantic-brand);display:inline-flex;align-items:center;justify-content:center;gap:3px}
+.hf-mark i{width:5px;height:5px;border-radius:50%;background:var(--wu-semantic-on-brand);display:block}
+.hf-home-main{flex:1;width:1040px;max-width:100%;margin:0 auto;padding:32px 32px 48px;display:grid;gap:var(--wu-global-space12)}
+.hf-sec-head{display:flex;align-items:center;gap:12px;margin-bottom:16px}
+.hf-sec-head h2{font-size:24px;font-weight:600;line-height:1.4}
+.hf-grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:var(--wu-global-space4);align-items:stretch}
+.hf-pcard{display:grid;gap:10px;align-content:start}
+.hf-pcard-h{display:flex;align-items:center;gap:8px}
+.hf-pcard-h h3{font-size:14px;font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hf-pcard-h .wu-icon-btn{margin-left:auto}
+.hf-roles{display:flex;align-items:center;flex-wrap:wrap;gap:6px 10px;margin:0;font-size:13px;color:var(--wu-semantic-secondary)}
+.hf-roles .wu-badge{font-weight:700}
+.hf-badges{gap:8px}
+.hf-pcard .wu-btn{justify-content:center}
+.hf-tcard{display:grid;gap:8px;align-content:start}
+.hf-tcard h3{font-size:14px;font-weight:600}
+.hf-tcard p{margin:0;font-size:13px;color:var(--wu-semantic-secondary);line-height:1.6}
+.hf-tcard .wu-btn{justify-content:center}
+.hf-new-tpl{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;min-height:150px;color:var(--wu-semantic-caption)}
+.hf-new-tpl:hover{color:var(--wu-semantic-text)}
+.hf-new-tpl .t{font-size:13px;font-weight:600}
+/* 弹层静态展示 */
+.hf-fieldset{border:0;margin:0;padding:0;min-width:0;display:grid;gap:4px}
+.hf-fieldset legend{padding:0 0 8px;font-weight:600;font-size:14px;color:var(--wu-semantic-text)}
+.hf-static-dialog{max-width:100%}
+</style>
+</head>
+<body class="wu">
+<div class="doc">
+
+<div class="dhead">
+  <div class="kick">HIGH-FIDELITY SCREEN · HF-00 · v1.0</div>
+  <h1>工程首页（无壳独立页）</h1>
+  <p>最近工程与节目模板入口。启动工作台的第一个画面，也是任意制作页「返回工程」的落点。本屏不含应用壳（TopBar / 阶段轨 / FootBar），为独立全屏页。</p>
+  <div class="meta">
+    <span>布局与元素权威 01 §2</span>
+    <span>视觉与组件 workspace-ui v0.2 基线（vendor/ 原样接入）</span>
+    <span>画布 1440 逻辑宽</span>
+    <span>baseline · 已定稿</span>
+  </div>
+</div>
+
+<h2 class="sec"><span class="no">一</span>高保真稿 · 默认态（存在最近工程）</h2>
+<p class="lead">按 1440 逻辑宽度绘制，窗口不足时自动等比缩放。全部视觉取自基线令牌：暖白画布 <code>#FBF8F3</code>、primary 深灰白字（产品主操作）、brand 橙底深灰字（仅「新建本期」一处点缀）、卡片 16px 圆角 1px 浅边无阴影、控件 40px、Inter / Noto Sans SC 字栈、160ms 过渡、蓝色 2px 焦点环。图标为基线 32 枚之一（24 视框 · 1.75 描边 · currentColor）。</p>
+
+<div class="vp-bar">
+  <span class="ttl">工程首页 · 1440 × 860</span>
+  <span class="sp"></span>
+  <span class="pct" id="pct">显示 100%</span>
+  <button id="bFit" class="on">适应窗口</button>
+  <button id="bOne">1:1</button>
+</div>
+<div class="vp" id="vp">
+  <div class="frame" id="frame">
+    <div class="hf-home">
+      <!-- 顶区：标识 + 动作（01 §2.1） -->
+      <header class="hf-home-top">
+        <span class="hf-brand"><span class="hf-mark"><i></i><i></i></span>双声播客工坊</span>
+        <span class="hf-spacer"></span>
+        <button type="button" class="wu-btn" data-variant="secondary"><svg class="wu-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V3m-5 5 5-5 5 5M4 15v6h16v-6"/></svg><span class="wu-btn-label">导入工程</span></button>
+        <button type="button" class="wu-btn" data-variant="brand"><svg class="wu-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span class="wu-btn-label">新建本期</span></button>
+      </header>
+      <main class="hf-home-main">
+        <!-- 最近工程 -->
+        <section>
+          <div class="hf-sec-head">
+            <h2>最近工程</h2>
+            <span class="wu-caption">3 个</span>
+            <span class="hf-spacer"></span>
+            <button type="button" class="wu-btn" data-variant="secondary" data-size="sm"><svg class="wu-icon sm" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7V5h6l2 2h10v13H3Z"/></svg><span class="wu-btn-label">打开工程目录</span></button>
+          </div>
+          <div class="hf-grid3">
+            <!-- EP003：进行中 · 有后台任务 -->
+            <article class="wu-card hf-pcard">
+              <div class="hf-pcard-h">
+                <h3>EP003 · AI 算力周报</h3>
+                <button type="button" class="wu-btn wu-icon-btn" data-size="sm" aria-label="EP003 更多操作"><svg class="wu-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1" fill="currentColor"/><circle cx="12" cy="12" r="1" fill="currentColor"/><circle cx="19" cy="12" r="1" fill="currentColor"/></svg></button>
+              </div>
+              <p class="hf-roles"><span class="wu-badge" data-tone="info">A</span>李雷 · 主持<span class="wu-badge" data-tone="speaker-b">B</span>韩梅梅 · 嘉宾</p>
+              <div class="wu-row hf-badges">
+                <span class="wu-badge">阶段④ · 预览画面</span>
+                <span class="wu-badge">成片 v2</span>
+              </div>
+              <div class="wu-row hf-badges">
+                <span class="wu-badge" data-tone="warning">后台任务 2</span>
+              </div>
+              <p class="wu-caption">最后编辑 09-10</p>
+              <button type="button" class="wu-btn" data-size="sm"><span class="wu-btn-label">继续制作</span></button>
+            </article>
+            <!-- EP002：渲染中 -->
+            <article class="wu-card hf-pcard">
+              <div class="hf-pcard-h">
+                <h3>EP002 · 开源模型观察</h3>
+                <button type="button" class="wu-btn wu-icon-btn" data-size="sm" aria-label="EP002 更多操作"><svg class="wu-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1" fill="currentColor"/><circle cx="12" cy="12" r="1" fill="currentColor"/><circle cx="19" cy="12" r="1" fill="currentColor"/></svg></button>
+              </div>
+              <p class="hf-roles"><span class="wu-badge" data-tone="info">A</span>李雷 · 主持<span class="wu-badge" data-tone="speaker-b">B</span>韩梅梅 · 嘉宾</p>
+              <div class="wu-row hf-badges">
+                <span class="wu-badge">阶段⑤ · 生成导出</span>
+                <span class="wu-badge">成片 v1 · 5:12</span>
+              </div>
+              <div class="wu-row hf-badges">
+                <span class="wu-badge" data-tone="info">渲染中 2/9 段</span>
+              </div>
+              <p class="wu-caption">最后编辑 09-08</p>
+              <button type="button" class="wu-btn" data-size="sm"><span class="wu-btn-label">继续制作</span></button>
+            </article>
+            <!-- EP001：草稿 -->
+            <article class="wu-card hf-pcard">
+              <div class="hf-pcard-h">
+                <h3>EP001 · 播客起名记</h3>
+                <button type="button" class="wu-btn wu-icon-btn" data-size="sm" aria-label="EP001 更多操作"><svg class="wu-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1" fill="currentColor"/><circle cx="12" cy="12" r="1" fill="currentColor"/><circle cx="19" cy="12" r="1" fill="currentColor"/></svg></button>
+              </div>
+              <p class="hf-roles"><span class="wu-badge" data-tone="info">A</span>李雷 · 主持<span class="wu-badge" data-tone="speaker-b">B</span>韩梅梅 · 嘉宾</p>
+              <div class="wu-row hf-badges">
+                <span class="wu-badge">阶段③ · 试听配音</span>
+                <span class="wu-badge">草稿</span>
+              </div>
+              <p class="wu-caption">最后编辑 09-05</p>
+              <button type="button" class="wu-btn" data-size="sm"><span class="wu-btn-label">继续制作</span></button>
+            </article>
+          </div>
+        </section>
+        <!-- 节目模板 -->
+        <section>
+          <div class="hf-sec-head">
+            <h2>节目模板</h2>
+            <span class="wu-caption">2 个</span>
+            <span class="hf-spacer"></span>
+            <button type="button" class="wu-btn" data-variant="secondary" data-size="sm"><span class="wu-btn-label">保存为模板</span></button>
+          </div>
+          <div class="hf-grid3">
+            <article class="wu-card hf-tcard">
+              <h3>科技周报</h3>
+              <p>A·李雷（主持）/ B·韩梅梅（嘉宾）· 演播室同框 · 每周更新节奏</p>
+              <div class="wu-row">
+                <span class="wu-badge">轻松对谈</span>
+                <span class="wu-badge">横屏 16:9</span>
+                <span class="wu-badge">本地引擎</span>
+                <span class="wu-badge">3 确认点</span>
+              </div>
+              <button type="button" class="wu-btn" data-variant="secondary" data-size="sm"><span class="wu-btn-label">用此模板新建</span></button>
+            </article>
+            <article class="wu-card hf-tcard">
+              <h3>人物访谈</h3>
+              <p>A·主持（追问）/ B·嘉宾（观点输出）· 深度问答结构 · 可绑定 MiniMax 音色</p>
+              <div class="wu-row">
+                <span class="wu-badge">深度问答</span>
+                <span class="wu-badge">横屏 16:9</span>
+                <span class="wu-badge">本地 + MiniMax</span>
+                <span class="wu-badge">3 确认点</span>
+              </div>
+              <button type="button" class="wu-btn" data-variant="secondary" data-size="sm"><span class="wu-btn-label">用此模板新建</span></button>
+            </article>
+            <a class="wu-card hf-new-tpl" href="#" aria-label="新建模板">
+              <svg class="wu-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+              <span class="t">新建模板</span>
+            </a>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+</div>
+<div class="vp-note">无壳独立页：不含 TopBar / 阶段轨 / FootBar（01 §2.1）· 卡片高度由内容决定 · 「打开工程目录」调起系统资源管理器 · 交互卡片悬停仅加深边框（基线 interactive 变体）</div>
+
+<h2 class="sec"><span class="no">二</span>状态变体</h2>
+<p class="lead">实况渲染，变体只呈现差异区域，其余与主稿一致。V2 附真实弹窗可点开体验（原生 showModal + Esc 关闭）。</p>
+<div class="var-grid">
+
+  <div class="var">
+    <div class="cap">V1 · 首次启动（无任何工程）</div>
+    <div class="desc">最近工程区收缩为空态引导（基线 wu-empty + empty-library 插画）；顶部动作不变。三种起步方式在阶段①重复出现（01 §2.3），不在首页展开。</div>
+    <div class="demo">
+      <div class="wu-empty">
+        <svg width="160" viewBox="0 0 256 192" aria-hidden="true"><ellipse cx="128" cy="163" rx="93" ry="9" fill="#F4F1EC"/><g stroke="#30343A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="66" y="40" width="140" height="104" rx="10" fill="#FFFEFA"/><path d="M46 75h68l12 14h82v62H46Z" fill="#F67748"/><path d="M84 62h80M84 74h45"/><path d="M55 112h144" opacity=".3"/></g></svg>
+        <h3 style="margin:8px 0 4px">还没有工程</h3>
+        <p class="wu-muted" style="margin:0 0 16px">新建一期，从话题、文章或已有脚本开始；也可以导入此前导出的工程 zip。</p>
+        <div class="wu-row" style="justify-content:center">
+          <button type="button" class="wu-btn" data-variant="brand"><span class="wu-btn-label">新建本期</span></button>
+          <button type="button" class="wu-btn" data-variant="secondary"><span class="wu-btn-label">导入工程</span></button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="var">
+    <div class="cap">V2 · 新建本期 → 模板选择弹层</div>
+    <div class="desc">点击「新建本期」后弹出（基线 Dialog：520px 上限、16px 圆角、统一浮层阴影、footer 上边框）；选择模板或空白工程后进入阶段①。</div>
+    <div class="demo">
+      <div class="wu-dialog hf-static-dialog" role="group" aria-label="新建本期弹层（静态展示）">
+        <div class="wu-dialog-body wu-stack">
+          <h3 style="font-size:16px;font-weight:600">新建本期</h3>
+          <p class="wu-muted" style="margin:0">从模板开始，或创建空白工程——模板只带入可复用配置与素材引用。</p>
+          <fieldset class="hf-fieldset">
+            <legend>选择方式</legend>
+            <label class="wu-choice"><input type="radio" name="tplv" checked>空白工程 · 自由配置全部参数</label>
+            <label class="wu-choice"><input type="radio" name="tplv">科技周报 · 轻松对谈 · A 李雷 / B 韩梅梅</label>
+            <label class="wu-choice"><input type="radio" name="tplv">人物访谈 · 深度问答 · 本地 + MiniMax</label>
+          </fieldset>
+        </div>
+        <footer class="wu-dialog-footer">
+          <button type="button" class="wu-btn" data-variant="ghost" data-size="sm"><span class="wu-btn-label">取消</span></button>
+          <button type="button" class="wu-btn" data-variant="brand" data-size="sm"><span class="wu-btn-label">创建</span></button>
+        </footer>
+      </div>
+      <p class="wu-caption" style="margin:12px 0 0">
+        <button type="button" class="wu-btn" data-variant="ghost" data-size="sm" data-wu-dialog-open="tpl-dialog"><span class="wu-btn-label">试开真实弹窗</span></button>
+      </p>
+      <dialog class="wu-dialog" id="tpl-dialog" aria-labelledby="tpld-t">
+        <form method="dialog">
+          <div class="wu-dialog-body wu-stack">
+            <h3 id="tpld-t" style="font-size:16px;font-weight:600">新建本期</h3>
+            <p class="wu-muted" style="margin:0">从模板开始，或创建空白工程——模板只带入可复用配置与素材引用。</p>
+            <label class="wu-choice"><input type="radio" name="tplr" checked>空白工程</label>
+            <label class="wu-choice"><input type="radio" name="tplr">科技周报</label>
+            <label class="wu-choice"><input type="radio" name="tplr">人物访谈</label>
+          </div>
+          <footer class="wu-dialog-footer">
+            <button type="button" class="wu-btn" data-variant="ghost" data-wu-dialog-close><span class="wu-btn-label">取消</span></button>
+            <button type="submit" class="wu-btn" data-variant="brand"><span class="wu-btn-label">创建</span></button>
+          </footer>
+        </form>
+      </dialog>
+    </div>
+  </div>
+
+</div>
+
+<h2 class="sec"><span class="no">三</span>状态矩阵</h2>
+<div class="dcard">
+  <table class="dt">
+    <thead><tr><th>对象</th><th>状态</th><th>呈现（基线组件与色调）</th><th>依据</th></tr></thead>
+    <tbody>
+      <tr><td rowspan="4"><b>工程卡片</b></td><td>正常</td><td><code>wu-card</code>：名称 / 双方角色（A=info 徽章、B=speaker-b 徽章 + 文字）/ 当前阶段 / 最新成片版本 / 最后编辑时间 +「继续制作」primary sm</td><td>01 §2.2</td></tr>
+      <tr><td>有后台任务</td><td><code>wu-badge</code> warning「后台任务 N」；与「继续制作」并存，<b>不重复提交</b></td><td>01 §2.2</td></tr>
+      <tr><td>渲染中</td><td>warning/info 徽章 + 文字进度（如「渲染中 2/9 段」）；成片版本独立展示</td><td>01 §2.2</td></tr>
+      <tr><td>草稿</td><td>中性徽章「草稿」；无成片版本行</td><td>01 §2.1</td></tr>
+      <tr><td><b>「继续制作」</b></td><td>进入上次工作位置</td><td>卡片内 primary sm；任务执行中时同时展示任务入口</td><td>01 §2.2</td></tr>
+      <tr><td><b>「更多操作」图标按钮</b></td><td>展开</td><td>复制工程（素材可复制复用，<b>进行中任务不复制</b>）/ 打开工程目录 / 导出工程 zip；按钮带 aria-label</td><td>01 §2.2 · 基线 IconButton</td></tr>
+      <tr><td rowspan="2"><b>导入工程</b></td><td>正常</td><td>选择 zip → 校验目录结构与 <code>schemaVersion</code> → 打开</td><td>01 §2.2</td></tr>
+      <tr><td>结构不匹配</td><td>提示迁移，不静默打开</td><td>01 §2.2</td></tr>
+      <tr><td rowspan="2"><b>保存为模板</b></td><td>有当前工程可选</td><td>从所选工程沉淀：角色搭配 / 风格 / 场景 / 声音绑定 / 镜头风格 / 导出规格 / 确认策略</td><td>01 §2.2</td></tr>
+      <tr><td>无可保存工程</td><td>禁用（基线：opacity .55 + not-allowed）</td><td>01 §13.3</td></tr>
+      <tr><td><b>模板卡</b></td><td>点击</td><td>用模板新建工程 → 直接进入阶段①（模板默认值带入「内容要求」）</td><td>01 §2.2</td></tr>
+      <tr><td><b>产品标识（制作页）</b></td><td>点击返回首页</td><td>有未保存改动时弹确认（本页为返回落点）</td><td>01 §1.2</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<h2 class="sec"><span class="no">四</span>边界说明</h2>
+<div class="dcard">
+  <ul class="b">
+    <li><b>风格基准</b>：本屏全部视觉来自 workspace-ui v0.2 基线（<code>vendor/workspace-ui/</code> 原样引入 tokens.css + components.css + components.js），页面仅做布局组合，不复制色值。</li>
+    <li><b>按钮语义</b>：primary 深灰 = 产品常规主操作（继续制作 / 下一步）；brand 橙 = 每视图仅一处品牌动作（新建本期 / 弹窗创建）；secondary = 次操作；ghost = 弹窗取消等轻操作。</li>
+    <li><b>状态双通道</b>：所有徽章均「色调 + 文字」，无纯色点（基线 SPEC）。</li>
+    <li><b>基线之上的登记扩展（2 项）</b>：① 紧凑图标按钮 32px（<code>.wu-icon-btn[data-size=sm]</code>）；② 发言人 B 色调徽章 <code>data-tone="speaker-b"</code>（#A8405E / #FAEEF2，对比度 5.1:1；A 直接复用基线 info 色调）。</li>
+    <li><b>模板边界</b>：保存为模板只复制可复用配置与已选素材引用，不携带本期台词、时间码、任务状态、旧验收结果。</li>
+    <li><b>复制工程</b>：建立新工程身份；素材可复制复用，进行中的任务不复制。</li>
+    <li><b>导入校验</b>：目录结构与 <code>schemaVersion</code> 不匹配时提示迁移，不直接打开。</li>
+    <li><b>任务徽章与继续制作并存</b>：后台任务执行中时两者同时展示，继续制作不重复提交任务。</li>
+    <li><b>空态边界</b>：三种起步方式在阶段①重复出现，首页空态只做引导不展开表单（01 §2.3）；插画为基线 empty-library（装饰，aria-hidden）。</li>
+    <li><b>卡片高度</b>：由内容决定（有无任务徽章行不同高），网格内排布，不设固定高度；静态卡片无悬停反馈，可交互卡片（新建模板）仅加深边框。</li>
+    <li><b>键盘</b>：本页无快捷键要求；Tab 顺序遵循 DOM，焦点为蓝色 2px 轮廓 3px 偏移（基线）。</li>
+  </ul>
+</div>
+
+<h2 class="sec"><span class="no">五</span>衔接与配套</h2>
+<div class="cols2">
+  <div class="dcard">
+    <h5 style="font-size:13.5px;margin:0 0 6px;font-weight:600">上下游</h5>
+    <ul class="b">
+      <li>「新建本期 / 用此模板新建」→ <b>HF-01 阶段①创建本期</b>（模板默认值带入）</li>
+      <li>「继续制作」→ 上次工作的阶段页（由工程数据推导，本屏不判断）</li>
+      <li>任务徽章 → 任务中心（HF-08，待设计）</li>
+    </ul>
+  </div>
+  <div class="dcard">
+    <h5 style="font-size:13.5px;margin:0 0 6px;font-weight:600">验证状态</h5>
+    <ul class="b">
+      <li>已做：与 01 §2 元素逐项对齐；全部使用基线组件与令牌渲染；标签配平检查通过；真实 Dialog 可开合（Esc / 取消）</li>
+      <li>未做：真实数据渲染、键盘全流程走查、200% 文本缩放、长工程名溢出实测（截断 + title 提示）</li>
+      <li>基线自身状态：implemented-prototype（未完成真实浏览器与辅助技术验收，沿用基线声明）</li>
+    </ul>
+  </div>
+</div>
+
+</div>
+
+<script>
+(function(){
+  var vp=document.getElementById('vp'),fr=document.getElementById('frame'),pct=document.getElementById('pct');
+  var bFit=document.getElementById('bFit'),bOne=document.getElementById('bOne'),mode='fit';
+  function fit(){
+    if(mode==='fit'){
+      var s=Math.min(1,vp.clientWidth/1440);
+      fr.style.transform='scale('+s+')';
+      vp.style.height=(fr.offsetHeight*s)+'px';
+      pct.textContent='显示 '+Math.round(s*100)+'%';
+    }else{
+      fr.style.transform='none';
+      vp.style.height=fr.offsetHeight+'px';
+      pct.textContent='1:1 · 横向滚动';
+    }
+  }
+  window.addEventListener('resize',fit);
+  bFit.onclick=function(){mode='fit';bFit.classList.add('on');bOne.classList.remove('on');fit()};
+  bOne.onclick=function(){mode='one';bOne.classList.add('on');bFit.classList.remove('on');fit()};
+  fit();
+})();
+</script>
+</body>
+</html>

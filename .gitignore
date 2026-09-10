@@ -46,6 +46,12 @@ render/
 *.mp4
 *.mov
 
+# ===== DuoCast 运行时存储（工程/任务/资产/事件/机器设置，本地数据不入库）=====
+apps/storage/
+
+# ===== Trae / 工具临时目录 =====
+.trae-html-share-packages/
+
 # ===== 临时文件 =====
 *.tmp
 *.bak

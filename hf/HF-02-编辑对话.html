@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HF-02 · 阶段② 编辑对话 · 高保真稿 v1.0</title>
+<link rel="stylesheet" href="vendor/workspace-ui/tokens.css">
+<link rel="stylesheet" href="vendor/workspace-ui/components.css">
+<link rel="stylesheet" href="vendor/duo-shell.css">
+<script defer src="vendor/workspace-ui/components.js"></script>
+<style>
+/* ============ 阶段② 屏内组合（全部取值 --wu-* 令牌） ============ */
+.hf-list{width:100%;max-width:760px;margin:0 auto}
+.hf-stats{flex:none;display:flex;align-items:center;gap:14px;padding:8px 20px;background:var(--wu-semantic-surface);border-top:1px solid var(--wu-semantic-border);font-size:12px;color:var(--wu-semantic-secondary);flex-wrap:wrap}
+.hf-toolbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:var(--wu-semantic-surface);border:1px solid var(--wu-semantic-border);border-radius:var(--wu-global-radius-md);padding:8px 12px;margin-bottom:12px}
+.hf-toolbar .cap{font-size:11.5px;color:var(--wu-semantic-caption)}
+.hf-ai{display:inline-flex;align-items:center;gap:4px;font-size:10.5px;font-weight:600;color:var(--wu-semantic-brand-hover);border:1px solid currentColor;border-radius:var(--wu-global-pill);padding:0 7px;line-height:18px;flex:none}
+.hf-ins-list{display:grid;gap:6px;font-size:12.6px;color:var(--wu-semantic-secondary)}
+.hf-ins-list li{display:flex;gap:8px;align-items:baseline}
+.hf-ins-list li::before{content:"·";color:var(--wu-semantic-brand);font-weight:700}
+.hf-fld{display:grid;grid-template-columns:64px 1fr;align-items:center;gap:8px;padding:4px 0}
+.hf-fld>label{font-size:12.5px;color:var(--wu-semantic-secondary);font-weight:600}
+.hf-qa{display:flex;gap:10px;margin-top:8px}
+.hf-qa .q{font-size:12px;color:var(--wu-semantic-secondary)}
+.hf-qa .q b{color:var(--wu-semantic-text);font-weight:600}
+.hf-dict-row{display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--wu-semantic-border);font-size:12.8px}
+.hf-dict-row:last-child{border-bottom:none}
+.hf-dict-row .term{font-weight:600;color:var(--wu-semantic-text);min-width:90px}
+.hf-dict-row .read{color:var(--wu-semantic-secondary)}
+.hf-cand{border:1px dashed var(--wu-semantic-brand);border-radius:var(--wu-global-radius-sm);background:var(--wu-semantic-muted);padding:10px 12px;margin-top:8px}
+.hf-cand .t{font-size:11.5px;font-weight:600;color:var(--wu-semantic-brand-hover);margin-bottom:4px}
+.hf-cand p{font-size:12.8px;line-height:1.7;color:var(--wu-semantic-text);margin:0 0 8px}
+</style>
+</head>
+<body class="wu">
+<div class="doc">
+
+<div class="dhead">
+  <div class="kick">HIGH-FIDELITY SCREEN · HF-02 · v1.0</div>
+  <h1>阶段② · 编辑对话</h1>
+  <p>五阶段第二屏：以自然话轮（Turn）为默认编辑粒度编辑台词、排序与发音属性；选区改写、读音词典、质量提示与脚本确认在此收口。本阶段确认点为「脚本确认」；确认后可选自动启动配音。壳形态：有 Inspector（发言属性 / 内容结构 / 质量提示）、无 TimelineBar（配音确认后才常驻）。</p>
+  <div class="meta">
+    <span>布局与元素权威 01 §4</span>
+    <span>壳蓝图 05 §4.1–4.2（本屏无 TimelineBar）</span>
+    <span>视觉与组件 workspace-ui v0.2 基线 + duo-shell 组合扩展</span>
+    <span>画布 1440 逻辑宽</span>
+    <span>baseline · 已定稿</span>
+  </div>
+</div>
+
+<h2 class="sec"><span class="no">一</span>高保真稿 · 默认态（草稿 R8 · 未确认 · 选中 T05）</h2>
+<p class="lead">按 1440 逻辑宽度绘制。主视图为居中单列话轮列表（max 760）+ 底部统计条；检查器 320 固定右栏。三层对象（Line / Turn / Unit）在数据层存在，用户默认编辑自然的话轮。全部视觉取自基线令牌与 duo-shell 组合层。</p>
+
+<div class="vp-bar">
+  <span class="ttl">阶段② 编辑对话 · 1440 × 900</span>
+  <span class="sp"></span>
+  <span class="pct" id="pct">显示 100%</span>
+  <button id="bFit" class="on">适应窗口</button>
+  <button id="bOne">1:1</button>
+</div>
+<div class="vp" id="vp">
+  <div class="frame" id="frame">
+    <div class="hf-app">
+      <!-- TopBar（01 §1.2） -->
+      <header class="hf-top">
+        <span class="hf-brand"><span class="hf-mark"><i></i><i></i></span>双声播客工坊</span>
+        <span class="hf-proj">EP004 · 推理成本观察</span>
+        <span class="wu-row" style="gap:8px">
+          <span class="wu-badge" data-tone="success">文本 API</span>
+          <span class="wu-badge" data-tone="success">图片 API</span>
+          <span class="wu-badge" data-tone="success">本地引擎</span>
+          <span class="wu-badge">MiniMax 未配置</span>
+        </span>
+        <span class="hf-spacer"></span>
+        <span class="hf-vram">显存<span class="bar"><i></i></span>2.8 / 16 GB</span>
+        <button type="button" class="wu-btn" data-variant="secondary" data-size="sm"><svg class="wu-icon sm" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg><span class="wu-btn-label">任务</span></button>
+        <span class="wu-caption">已保存</span>
+        <button type="button" class="wu-btn" data-variant="secondary" data-size="sm" disabled><svg class="wu-icon sm" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V3m-5 5 5-5 5 5M4 15v6h16v-6"/></svg><span class="wu-btn-label">导出</span></button>
+      </header>
+      <div class="hf-mid">
+        <!-- 阶段轨（01 §1.3） -->
+        <aside class="hf-rail" aria-label="阶段导航">
+          <div class="hf-stg done"><span class="hf-stg-no">1</span><span class="hf-stg-tt"><b>创建本期</b><small>话题与参数</small></span></div>
+          <div class="hf-stg active"><span class="hf-stg-no">2</span><span class="hf-stg-tt"><b>编辑对话</b><small>话轮与读音</small></span><span class="hf-stg-st"><span class="wu-badge" data-tone="warning">待确认</span></span></div>
+          <div class="hf-stg"><span class="hf-stg-no">3</span><span class="hf-stg-tt"><b>试听配音</b><small>音色与时长</small></span><span class="hf-stg-st"><span class="wu-badge">未准备</span></span></div>
+          <div class="hf-stg"><span class="hf-stg-no">4</span><span class="hf-stg-tt"><b>预览画面</b><small>构图镜头样片</small></span><span class="hf-stg-st"><span class="wu-badge">未准备</span></span></div>
+          <div class="hf-stg"><span class="hf-stg-no">5</span><span class="hf-stg-tt"><b>生成导出</b><small>渲染与导出</small></span><span class="hf-stg-st"><span class="wu-badge">未准备</span></span></div>
+          <div class="hf-sep"></div>
+          <div class="hf-entry"><span class="hf-entry-sq"></span>资产库</div>
+          <div class="hf-entry"><span class="hf-entry-sq"></span>服务设置</div>
+          <div class="hf-entry"><span class="hf-entry-sq"></span>任务中心</div>
+          <p class="hf-note">数据边界：工程与成片本地；文本/图片经所选 API</p>
+        </aside>
+        <!-- 主视图（01 §4.1：单列话轮流 + 底部统计条） -->
+        <main class="hf-main">
+          <div class="hf-stage-head">
+            <h2>② 编辑对话</h2>
+            <span class="wu-badge" data-tone="warning">草稿 R8 · 未确认</span>
+            <span class="hf-spacer"></span>
+            <button type="button" class="wu-btn" data-variant="secondary" data-size="sm"><svg class="wu-icon sm" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9L12 3z"/><path d="M18.5 15l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7.7-1.8z"/></svg><span class="wu-btn-label">重新生成</span></button>
+            <button type="button" class="wu-btn" data-variant="secondary" data-size="sm"><svg class="wu-icon sm" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 10h8M8 14h5"/><path d="M4 20V6a2 2 0 0 1 2-2h9l5 5v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/></svg><span class="wu-btn-label">版本 ▾</span></button>
+            <button type="button" class="wu-btn" data-variant="brand" data-size="sm"><svg class="wu-icon sm" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 13l4 4L19 7"/></svg><span class="wu-btn-label">确认脚本</span></button>
+          </div>
+          <div class="hf-body">
+            <div class="hf-list">
+              <!-- 选区工具条（有选区时出现，01 §4.2 选区操作） -->
+              <div class="hf-toolbar">
+                <span class="cap">已选 T04–T05</span>
+                <button type="button" class="wu-btn" data-variant="secondary" data-size="sm"><span class="wu-btn-label">改写</span></button>
+                <button type="button" class="wu-btn" data-variant="secondary" data-size="sm"><span class="wu-btn-label">更口语化</span></button>
+                <button type="button" class="wu-btn" data-variant="secondary" data-size="sm"><span class="wu-btn-label">增加追问</span></button>
+                <button type="button" class="wu-btn" data-variant="secondary" data-size="sm"><span class="wu-btn-label">减少重复</span></button>
+                <button type="button" class="wu-btn" data-variant="secondary" data-size="sm"><span class="wu-btn-label">精简至目标时长</span></button>
+                <span class="hf-spacer"></span>
+                <span class="hf-ai">AI 建议</span>
+              </div>
+              <!-- TurnCard 列表（T05 选中） -->
+              <div class="hf-turn">
+                <div class="hf-turn-head">
+                  <span class="hf-grip"><svg class="wu-icon xs" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5h6M9 12h6M9 19h6"/></svg></span>
+                  <span class="hf-turn-id">#T01</span>
+                  <span class="wu-badge" data-tone="info">A · 主持</span>
+                  <select class="hf-mini-select" aria-label="T01 意图"><option>开场</option><option>回应</option><option>追问</option><option>解释</option><option>举例</option><option>质疑</option><option>总结</option></select>
+                  <span class="hf-spacer"></span>
+                  <button type="button" class="wu-icon-btn" data-size="sm" aria-label="编辑"><svg class="wu-icon sm" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg></button>
+                  <button type="button" class="wu-icon-btn" data-size="sm" aria-label="删除"><svg class="wu-icon sm" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg></button>
+                </div>
+                <p class="hf-turn-text">欢迎回到 AI 算力周报，我是李雷。今天请到了韩梅梅，聊聊推理成本这件事。</p>
+                <div class="hf-turn-meta"><span>语气：自然</span><span>语速：1.0</span><span>来源锚点：全文首段</span></div>
+              </div>
+              <div class="hf-turn">
+                <div class="hf-turn-head">
+                  <span class="hf-grip"><svg class="wu-icon xs" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5h6M9 12h6M9 19h6"/></svg></span>
+                  <span class="hf-turn-id">#T02</span>
+                  <span class="wu-badge" data-tone="speaker-b">B · 嘉宾</span>
+                  <select class="hf-mini-select" aria-label="T02 意图"><option>回应</option></select>
+                  <span class="hf-spacer"></span>
+                  <button type="button" class="wu-icon-btn" data-size="sm" aria-label="编辑"><svg class="wu-icon sm" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg></button>
+                  <button type="button" class="wu-icon-btn" data-size="sm" aria-label="删除"><svg class="wu-icon sm" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg></button>
+                </div>
+                <p class="hf-turn-text">这周最值得聊的就是推理侧优化的几个进展——KV 缓存压缩、批处理调度、投机解码，这些手段叠起来，同样算力预算下的有效吞吐可以差出一个数量级。</p>
+                <div class="hf-turn-meta"><span>语气：介绍</span><span>语速：1.0</span><span class="hf-ai">AI 建议</span><span class="hf-meta-warn"><svg class="wu-icon xs" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 22c5.5 0 10-4.5 10-10S17.5 2 12 2 2 6.5 2 12s4.5 10 10 10zm0-18c4.4 0 8 3.6 8 8s-3.6 8-8 8-8-3.6-8-8 3.6-8 8-8zm-1 13h2v-6h-2v6zm0-8h2V7h-2v2z"/></svg>读音：1 处（KV 缓存）</span></div>
+              </div>
+              <div class="hf-turn">
+                <div class="hf-turn-head">
+                  <span class="hf-grip"><svg class="wu-icon xs" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5h6M9 12h6M9 19h6"/></svg></span>
+                  <span class="hf-turn-id">#T03</span>
+                  <span class="wu-badge" data-tone="info">A · 主持</span>
+                  <select class="hf-mini-select" aria-label="T03 意图"><option>追问</option></select>
+                  <span class="hf-spacer"></span>
+                  <button type="button" class="wu-icon-btn" data-size="sm" aria-label="编辑"><svg class="wu-icon sm" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg></button>
+                  <button type="button" class="wu-icon-btn" data-size="sm" aria-label="删除"><svg class="wu-icon sm" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg></button>
+                </div>
+                <p class="hf-turn-text">先解释一下，为什么单价降了，大家的账单反而更贵了？</p>
+                <div class="hf-turn-meta"><span>语气：好奇</span><span>语速：1.05</span></div>
+              </div>
+              <div class="hf-turn">
+                <div class="hf-turn-head">
+                  <span class="hf-grip"><svg class="wu-icon xs" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5h6M9 12h6M9 19h6"/></svg></span>
+                  <span class="hf-turn-id">#T04</span>
+                  <span class="wu-badge" data-tone="speaker-b">B · 嘉宾</span>
+                  <select class="hf-mini-select" aria-label="T04 意图"><option>解释</option></select>
+                  <span class="hf-spacer"></span>
+                  <button type="button" class="wu-icon-btn" data-size="sm" aria-label="编辑"><svg class="wu-icon sm" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg></button>
+                  <button type="button" class="wu-icon-btn" data-size="sm" aria-label="删除"><svg class="wu-icon sm" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg></button>
+                </div>
+                <p class="hf-turn-text">核心是用量结构变了。单价下降之后，大家把模型塞进更多环节——摘要、检索、代码补全——请求总量反而呈指数级增长。</p>
+                <div class="hf-turn-meta"><span>语气：肯定</span><span>语速：1.0</span></div>
+              </div>
+              <div class="hf-turn selected">
+                <div class="hf-turn-head">
+                  <span class="hf-grip"><svg class="wu-icon xs" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5h6M9 12h6M9 19h6"/></svg></span>
+                  <span class="hf-turn-id">#T05</span>
+                  <span class="wu-badge" data-tone="speaker-b">B · 嘉宾</span>
+                  <select class="hf-mini-select" aria-label="T05 意图"><option>举例</option></select>
+                  <span class="hf-spacer"></span>
+                  <button type="button" class="wu-icon-btn" data-size="sm" aria-label="编辑"><svg class="wu-icon sm" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg></button>
+                  <button type="button" class="wu-icon-btn" data-size="sm" aria-label="删除"><svg class="wu-icon sm" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg></button>
+                </div>
+                <p class="hf-turn-text">比如一家客服公司，过去只在转接时用一次模型，现在每个会话里要跑七八次；单价再低，总量摆在那，账单自然下不来。</p>
+                <div class="hf-turn-meta"><span>语气：举例</span><span>语速：1.0</span><span class="hf-meta-warn"><svg class="wu-icon xs" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 22c5.5 0 10-4.5 10-10S17.5 2 12 2 2 6.5 2 12s4.5 10 10 10zm0-18c4.4 0 8 3.6 8 8s-3.6 8-8 8-8-3.6-8-8 3.6-8 8-8zm-1 13h2v-6h-2v6zm0-8h2V7h-2v2z"/></svg>读音：3 处</span><span class="hf-ai">AI 建议</span></div>
+              </div>
+              <div class="hf-turn">
+                <div class="hf-turn-head">
+                  <span class="hf-grip"><svg class="wu-icon xs" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5h6M9 12h6M9 19h6"/></svg></span>
+                  <span class="hf-turn-id">#T06</span>
+                  <span class="wu-badge" data-tone="info">A · 主持</span>
+                  <select class="hf-mini-select" aria-label="T06 意图"><option>总结</option></select>
+                  <span class="hf-spacer"></span>
+                  <button type="button" class="wu-icon-btn" data-size="sm" aria-label="编辑"><svg class="wu-icon sm" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg></button>
+                  <button type="button" class="wu-icon-btn" data-size="sm" aria-label="删除"><svg class="wu-icon sm" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg></button>
+                </div>
+                <p class="hf-turn-text">所以你的意思是，降价的收益被用量增长吃掉了？</p>
+                <div class="hf-turn-meta"><span>语气：确认</span><span>语速：1.0</span></div>
+              </div>
+              <!-- 列表操作（01 §4.2） -->
+              <div style="display:flex;align-items:center;gap:12px;margin:2px 0 10px">
+                <button type="button" class="wu-btn" data-variant="secondary" data-size="sm"><svg class="wu-icon sm" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span class="wu-btn-label">发言</span></button>
+                <span class="wu-caption">拖动发言左侧手柄排序 · 稳定 ID（T07）不随显示序号改变</span>
+              </div>
+              <div style="display:flex;align-items:center;gap:12px;margin-bottom:6px">
+                <button type="button" class="wu-btn" data-variant="secondary" data-size="sm"><svg class="wu-icon sm" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9l-6-6z"/><path d="M14 3v6h6"/></svg><span class="wu-btn-label">读音词典</span></button>
+                <span class="wu-caption">专名 · 数字 · 缩写；显示文本与朗读文本分别保存</span>
+              </div>
+            </div>
+          </div>
+          <!-- 底部统计条（01 §4.1） -->
+          <div class="hf-stats">
+            <span class="hf-pos">话轮 32</span><span>A 17 / B 15</span><span>字数 1,842</span><span>预估 3:12（基于历史语速）</span>
+            <span class="hf-spacer"></span><span class="wu-caption">自动保存 2s 防抖 · Ctrl+Z 撤销</span>
+          </div>
+        </main>
+        <!-- 检查器（01 §4.1：内容结构 / 所选发言属性 / 质量提示） -->
+        <aside class="hf-inspector" aria-label="检查器">
+          <div class="hf-ins-sec">
+            <h4>内容结构 <span class="wu-caption" style="font-weight:400">R8</span></h4>
+            <ul class="hf-ins-list">
+              <li>核心问题：推理成本下降，账单为何更贵？</li>
+              <li>主要观点：用量结构变化吃掉单价红利</li>
+              <li>必要事实：KV 缓存压缩 / 投机解码 / 端侧小模型</li>
+              <li>段落目的：降本 → 推理侧优化 → 端侧机会</li>
+              <li>双方职责：A 引入追问 · B 输出观点举例</li>
+            </ul>
+          </div>
+          <div class="hf-ins-sec">
+            <h4>所选发言 <span class="wu-caption" style="font-weight:400">#T05</span></h4>
+            <div class="hf-fld"><label>说话人</label><span><span class="wu-badge" data-tone="speaker-b">B · 嘉宾</span></span></div>
+            <div class="hf-fld"><label>意图</label><select class="wu-input" aria-label="意图"><option>举例</option></select></div>
+            <div class="hf-fld"><label>语气</label><input class="wu-input" value="举例" aria-label="语气"></div>
+            <div class="hf-fld"><label>语速</label><span class="hf-seg"><button type="button">-</button><span style="font-size:12px;padding:0 10px;display:inline-flex;align-items:center">1.0</span><button type="button">+</button></span></div>
+            <div class="hf-fld" style="align-items:flex-start"><label style="padding-top:6px">朗读文本</label><span class="wu-caption" style="line-height:1.6">显示文本与朗读文本分别保存（displayText / spokenText）；读法见<a class="hf-link">读音词典</a>。</span></div>
+            <p class="wu-caption" style="margin-top:8px;line-height:1.6">只显示所选语音引擎能执行或已有明确降级解释的选项。</p>
+          </div>
+          <div class="hf-ins-sec">
+            <h4>质量提示</h4>
+            <div class="hf-qa"><span class="q"><b>B 连续三次重复 A 的结论</b><br><span class="hf-ai" style="margin-top:4px;display:inline-flex">AI 建议</span> · 可由改写减少重复处理</span></div>
+            <div class="hf-qa"><span class="q"><b>这一段缺少来源</b><br>本地计算：T04 无来源锚点（程序核对，非 AI 判断）</span></div>
+            <div class="hf-qa"><span class="q"><b>连续独白较长</b><br>本地计算：T02 单条 96 字，建议拆分或插问</span></div>
+          </div>
+        </aside>
+      </div>
+      <!-- FootBar（01 §1.4） -->
+      <footer class="hf-foot">
+        <span class="hf-pos">阶段 2 / 5 · 编辑对话</span>
+        <button type="button" class="wu-btn" data-variant="secondary" data-size="sm"><span class="wu-btn-label">← 上一步</span></button>
+        <span class="wu-badge" data-tone="warning">确认点 · 脚本确认</span>
+        <span class="wu-caption">确认后可选自动启动配音（可在模板关闭）</span>
+        <span class="hf-spacer"></span>
+        <button type="button" class="wu-btn" data-size="sm"><span class="wu-btn-label">下一步 →</span></button>
+      </footer>
+    </div>
+  </div>
+</div>
+<div class="vp-note">本屏壳形态：有 Inspector（320，发言属性 / 内容结构 / 质量提示）· 无 TimelineBar（配音确认后常驻）· 「下一步」仅导航 · 话轮列表居中 max 760 · 选中 T05 时检查器显示其属性</div>
+
+<h2 class="sec"><span class="no">二</span>状态变体</h2>
+<p class="lead">本屏关键状态的实况渲染（非示意），变体只呈现差异区域，其余与主稿一致。</p>
+<div class="var-grid">
+
+  <div class="var">
+    <div class="cap">V1 · 确认脚本成功</div>
+    <div class="desc">主按钮转「已确认 ✓」并禁用；阶段轨②转 done；若模板开启自动配音，提示配音将自动启动（01 §4.2 / §13.2）。</div>
+    <div class="demo">
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <span class="wu-badge" data-tone="success">脚本 R8 · 已确认</span>
+        <span class="hf-spacer"></span>
+        <button type="button" class="wu-btn" data-variant="brand" data-size="sm" disabled><svg class="wu-icon sm" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 13l4 4L19 7"/></svg><span class="wu-btn-label">已确认</span></button>
+      </div>
+      <div class="wu-alert" data-tone="info" style="margin-top:10px">已绑定脚本 R8。模板「科技周报」已开启自动配音，将直接进入阶段③；可在模板设置中关闭。</div>
+    </div>
+  </div>
+
+  <div class="var">
+    <div class="cap">V2 · 选区改写候选</div>
+    <div class="desc">点「改写」后返回<b>候选改写及差异</b>，用户接受后替换；其他发言不自动重写（01 §4.2）。</div>
+    <div class="demo">
+      <div class="hf-turn" style="margin:0">
+        <div class="hf-turn-head"><span class="hf-turn-id">#T04</span><span class="wu-badge" data-tone="speaker-b">B · 嘉宾</span></div>
+        <p class="hf-turn-text" style="background:var(--wu-semantic-warning-bg);border-radius:4px;padding:2px 6px">核心是用量结构变了。单价下降之后，大家把模型塞进更多环节——摘要、检索、代码补全——请求总量反而呈指数级增长。</p>
+      </div>
+      <div class="hf-cand">
+        <div class="t">候选改写 · 差异：把「塞进」改为「放进」、拆短后两句（共改 2 处）</div>
+        <p>核心是用量结构变了。单价降下来之后，大家把模型放进更多环节——摘要、检索、代码补全——请求总量反而翻着倍涨。</p>
+        <div style="display:flex;gap:8px">
+          <button type="button" class="wu-btn" data-variant="brand" data-size="sm"><span class="wu-btn-label">接受</span></button>
+          <button type="button" class="wu-btn" data-variant="ghost" data-size="sm"><span class="wu-btn-label">拒绝</span></button>
+          <span class="wu-caption">其他发言不自动重写</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="var">
+    <div class="cap">V3 · 质量提示采纳</div>
+    <div class="desc">质量提示措辞具体化；长度与占比由本地程序计算，语义判断标注「AI 建议」不作事实保证（01 §4.3）。</div>
+    <div class="demo">
+      <div class="hf-qa"><span class="q"><b>B 连续三次重复 A 的结论</b><br><span class="hf-ai" style="margin-top:4px;display:inline-flex">AI 建议</span> · T08 / T11 / T13 均以「所以你的意思是」开头</span><button type="button" class="wu-btn" data-variant="secondary" data-size="sm"><span class="wu-btn-label">减少重复</span></button></div>
+      <div class="hf-qa" style="margin-top:8px"><span class="q"><b>这一段缺少来源</b><br>本地计算：T14 断言无来源锚点</span><button type="button" class="wu-btn" data-variant="ghost" data-size="sm"><span class="wu-btn-label">忽略</span></button></div>
+    </div>
+  </div>
+
+  <div class="var">
+    <div class="cap">V4 · 读音词典</div>
+    <div class="desc">全局面板维护专名、数字、缩写的读法；显示文本与朗读文本分别保存（01 §4.2）。</div>
+    <div class="demo">
+      <div style="display:flex;align-items:center;margin-bottom:6px"><b style="font-size:13px">读音词典</b><span class="hf-spacer"></span><button type="button" class="wu-btn" data-variant="secondary" data-size="sm"><span class="wu-btn-label">新增</span></button></div>
+      <div class="hf-dict-row"><span class="term">KV 缓存</span><span class="read">读作「K-V 缓存」</span><span class="hf-spacer"></span><span class="wu-caption">全局</span></div>
+      <div class="hf-dict-row"><span class="term">MiniMax</span><span class="read">读作「MiniMax」英文原音</span><span class="hf-spacer"></span><span class="wu-caption">全局</span></div>
+      <div class="hf-dict-row"><span class="term">3:12</span><span class="read">读作「三分十二秒」</span><span class="hf-spacer"></span><span class="wu-caption">本工程</span></div>
+    </div>
+  </div>
+
+  <div class="var">
+    <div class="cap">V5 · 切换说话人</div>
+    <div class="desc">切换说话人更新声音绑定与合成单元划分；若已存在配音，显示涉及哪些现有配音（列出发言 ID，01 §4.2）。</div>
+    <div class="demo">
+      <div class="hf-fld"><label>说话人</label><span><span class="wu-badge" data-tone="info">A · 主持</span></span></div>
+      <div class="wu-alert" data-tone="warning">将 #T05 从 B 切换为 A：会更新声音绑定与合成单元划分。当前无配音，不涉及已有音频。</div>
+      <div class="wu-alert" data-tone="warning" style="margin-top:6px">示例（已有配音时）：将影响现有配音 T05 / T06（相邻同角色短句可能合并）。</div>
+      <div style="display:flex;gap:8px;margin-top:8px"><button type="button" class="wu-btn" data-variant="brand" data-size="sm"><span class="wu-btn-label">切换</span></button><button type="button" class="wu-btn" data-variant="ghost" data-size="sm"><span class="wu-btn-label">取消</span></button></div>
+    </div>
+  </div>
+
+  <div class="var" style="grid-column:1 / -1">
+    <div class="cap">V6 · 精简至目标时长（建议先审后改）</div>
+    <div class="desc">先给出删减建议，接受后才更新；配音后仍以实长再次检查（01 §4.2）。</div>
+    <div class="demo" style="display:flex;gap:20px;align-items:flex-start;flex-wrap:wrap">
+      <div style="flex:1;min-width:300px">
+        <div class="hf-cand" style="margin:0">
+          <div class="t">删减建议 · 共 3 处 · 约 12s（AI 建议）</div>
+          <p>1. T02 删除「——KV 缓存压缩、批处理调度、投机解码」列举（约 6s，核心信息保留在 T04）<br>2. T08 删除重复例证（约 4s）<br>3. T15 合并两处总结（约 2s）</p>
+          <div style="display:flex;gap:8px">
+            <button type="button" class="wu-btn" data-variant="brand" data-size="sm"><span class="wu-btn-label">应用删减</span></button>
+            <button type="button" class="wu-btn" data-variant="ghost" data-size="sm"><span class="wu-btn-label">取消</span></button>
+            <span class="wu-caption">接受后才更新 · 配音后按实长复查</span>
+          </div>
+        </div>
+      </div>
+      <div style="flex:1;min-width:300px">
+        <div class="hf-stats" style="border:1px solid var(--wu-semantic-border);border-radius:8px">
+          <span>当前预估 3:24</span><span>→</span><span class="hf-pos">目标 ≤ 3:12</span>
+          <span class="hf-spacer"></span><span class="wu-caption">偏好不是承诺</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<h2 class="sec"><span class="no">三</span>状态矩阵</h2>
+<div class="dcard">
+  <table class="dt">
+    <thead><tr><th>对象</th><th>状态</th><th>呈现（基线组件与色调）</th><th>依据</th></tr></thead>
+    <tbody>
+      <tr><td rowspan="3"><b>本阶段整体（七态）</b></td><td>待确认 <span class="wu-caption">（默认）</span></td><td>阶段轨②高亮 + warning 徽章「待确认」；主操作「确认脚本」brand 可用</td><td>01 §13.1</td></tr>
+      <tr><td>执行中</td><td>重新生成时阶段轨②徽章转 info「生成中」；流式中断部分内容作为草稿保留，未完成 JSON 不作为有效脚本</td><td>01 §13.1 / §4.4</td></tr>
+      <tr><td>已就绪</td><td>确认后阶段轨②转 done（绿底数字）；「确认脚本」转「已确认 ✓」禁用</td><td>01 §13.1</td></tr>
+      <tr><td rowspan="2"><b>话轮列表</b></td><td>编辑台词</td><td>行内编辑，自动保存新草稿；已有配音保持可听并标明「不对应当前文字」</td><td>01 §4.2</td></tr>
+      <tr><td>增删 / 拖动排序</td><td>更新顺序；稳定 ID（T07）不随显示序号改变</td><td>01 §4.2</td></tr>
+      <tr><td rowspan="2"><b>选区工具条</b></td><td>有选区时</td><td>改写 / 更口语化 / 增加追问 / 减少重复 / 精简至目标时长，标注「AI 建议」</td><td>01 §4.2</td></tr>
+      <tr><td>改写返回</td><td>候选改写及差异 → 接受后替换；其他发言不自动重写</td><td>01 §4.2</td></tr>
+      <tr><td rowspan="2"><b>精简至目标时长</b></td><td>建议阶段</td><td>先给删减建议（AI 建议标注）；接受后才更新</td><td>01 §4.2</td></tr>
+      <tr><td>配音后复查</td><td>仍以实长再次检查，不沿用预估</td><td>01 §4.2 / §5.4</td></tr>
+      <tr><td rowspan="3"><b>发言属性</b></td><td>情绪与语速</td><td>默认自然语气；只显示所选引擎能执行或已有明确降级解释的选项</td><td>01 §4.2</td></tr>
+      <tr><td>切换说话人</td><td>更新声音绑定与合成单元划分；显示涉及哪些现有配音（列出发言 ID）</td><td>01 §4.2</td></tr>
+      <tr><td>读音词典</td><td>全局面板；displayText / spokenText 分别保存</td><td>01 §4.2</td></tr>
+      <tr><td rowspan="3"><b>质量提示</b></td><td>具体措辞</td><td>「B 连续三次重复 A 的结论」「这一段缺少来源」「连续独白较长」</td><td>01 §4.3</td></tr>
+      <tr><td>本地计算</td><td>可确定的长度与占比由本地程序计算（缺来源等）</td><td>01 §4.3</td></tr>
+      <tr><td>语义判断</td><td>文本 API 提供建议，UI 标注「AI 建议」，不作事实保证</td><td>01 §4.3</td></tr>
+      <tr><td><b>失败处理</b></td><td>结构无效</td><td>一次受限修复；仍失败保留原输出与现有稿件，提供重试与手工导入</td><td>01 §4.4</td></tr>
+      <tr><td><b>确认脚本</b></td><td>主按钮</td><td>绑定当前脚本版本；通过后可自动启动配音（可在模板关闭）</td><td>01 §4.2</td></tr>
+      <tr><td><b>FootBar</b></td><td>本阶段</td><td>「确认点 · 脚本确认」warning 徽章；下一步仅导航</td><td>01 §1.4 / §4.2</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<h2 class="sec"><span class="no">四</span>边界说明</h2>
+<div class="dcard">
+  <ul class="b">
+    <li><b>风格基准</b>：全部视觉来自 workspace-ui v0.2 基线 + <code>duo-shell.css</code> 组合扩展（B 发言人色调 / 紧凑图标）；不复制色值，与 HF-00 / HF-01 同族。</li>
+    <li><b>三层对象</b>：Line / Turn / Unit 三层在数据层存在；用户默认编辑自然话轮（Turn），句子与单元由系统派生并在需要的位置显示。</li>
+    <li><b>按钮语义</b>：brand 橙 = 本视图唯一品牌动作「确认脚本」；primary 深灰 = 常规主操作（下一步）；secondary = 重新生成 / 版本 / 改写等工具操作；ghost = 拒绝 / 忽略等轻操作。</li>
+    <li><b>状态双通道</b>：徽章均「色调 + 文字」；待确认用 warning 橙，已确认用 success 绿；T 稳定 ID 用等宽字。</li>
+    <li><b>版本语义</b>：编辑 → 新草稿 R9 不覆盖已用 R8；任务结果到达时草稿已变化 → 只加入历史并标记所属版本（01 §13.2）。</li>
+    <li><b>质量提示边界</b>：长度与占比本地计算；语义判断标注「AI 建议」不作为事实保证；不接受不存在的引用。</li>
+    <li><b>确认后自动配音</b>：仅导航至阶段③；自动配音可在模板关闭。</li>
+    <li><b>本屏无 TimelineBar</b>：配音确认后才常驻（05 §1.5），本阶段只有文字产物。</li>
+    <li><b>键盘</b>：Ctrl+Z 撤销；Space 播放（无音频时禁用）；1–5 切阶段。</li>
+  </ul>
+</div>
+
+<h2 class="sec"><span class="no">五</span>衔接与配套</h2>
+<div class="cols2">
+  <div class="dcard">
+    <h5 style="font-size:13.5px;margin:0 0 6px;font-weight:600">上下游</h5>
+    <ul class="b">
+      <li>「确认脚本」→ <b>HF-03 阶段③试听配音</b>（可自动启动）</li>
+      <li>「重新生成」→ 候选脚本，不覆盖已用版本（01 §13.2）</li>
+      <li>「读音词典」→ 资产库语音绑定（HF-06）；「去服务设置」→ HF-07</li>
+      <li>上一屏：<b>HF-01 阶段①创建本期</b>（生成对话结果进入本屏为候选脚本）</li>
+    </ul>
+  </div>
+  <div class="dcard">
+    <h5 style="font-size:13.5px;margin:0 0 6px;font-weight:600">验证状态</h5>
+    <ul class="b">
+      <li>已做：与 01 §4 元素逐项对齐；壳分区与 05 §4.1–4.2 一致；与 HF-00 / HF-01 共用同一 workspace-ui 基线 + duo-shell 组合层；状态变体实况渲染</li>
+      <li>未做：真实数据渲染、键盘走查（Tab 顺序 / 选区操作）、200% 文本缩放、超长话轮列表滚动</li>
+      <li>基线自身状态：implemented-prototype（未完成真实浏览器与辅助技术验收，沿用基线声明）</li>
+    </ul>
+  </div>
+</div>
+
+</div>
+
+<script>
+(function(){
+  var vp=document.getElementById('vp'),fr=document.getElementById('frame'),pct=document.getElementById('pct');
+  var bFit=document.getElementById('bFit'),bOne=document.getElementById('bOne'),mode='fit';
+  function fit(){
+    if(mode==='fit'){
+      var s=Math.min(1,vp.clientWidth/1440);
+      fr.style.transform='scale('+s+')';
+      vp.style.height=(fr.offsetHeight*s)+'px';
+      pct.textContent='显示 '+Math.round(s*100)+'%';
+    }else{
+      fr.style.transform='none';
+      vp.style.height=fr.offsetHeight+'px';
+      pct.textContent='1:1 · 横向滚动';
+    }
+  }
+  window.addEventListener('resize',fit);
+  bFit.onclick=function(){mode='fit';bFit.classList.add('on');bOne.classList.remove('on');fit()};
+  bOne.onclick=function(){mode='one';bOne.classList.add('on');bFit.classList.remove('on');fit()};
+  fit();
+})();
+</script>
+</body>
+</html>

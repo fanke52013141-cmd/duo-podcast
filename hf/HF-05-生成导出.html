@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HF-05 · 阶段⑤ 生成导出 · 高保真稿 v1.0</title>
+<link rel="stylesheet" href="vendor/workspace-ui/tokens.css">
+<link rel="stylesheet" href="vendor/workspace-ui/components.css">
+<link rel="stylesheet" href="vendor/duo-shell.css">
+<script defer src="vendor/workspace-ui/components.js"></script>
+<style>
+/* ============ 阶段⑤ 屏内组合（全部取值 --wu-* 令牌） ============ */
+.hf-s5{display:flex;flex-direction:column;gap:14px;padding-bottom:4px}
+.hf-summary{background:var(--wu-semantic-surface);border:1px solid var(--wu-semantic-border);border-radius:var(--wu-global-radius-lg);padding:14px 16px}
+.hf-summary-t{display:flex;align-items:center;gap:8px;font-size:13.5px;font-weight:700;margin-bottom:10px}
+.hf-summary-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+@container (max-width:1200px){.hf-summary-grid{grid-template-columns:repeat(2,1fr)}}
+.hf-kv{background:var(--wu-semantic-muted);border-radius:var(--wu-global-radius-sm);padding:8px 12px}
+.hf-kv .k{font-size:11px;color:var(--wu-semantic-caption);margin-bottom:2px}
+.hf-kv .v{font-size:13px;font-weight:600;color:var(--wu-semantic-text)}
+.hf-seg-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+@container (max-width:1200px){.hf-seg-grid{grid-template-columns:repeat(3,1fr)}}
+.hf-segcard{border:1px solid var(--wu-semantic-border);border-radius:var(--wu-global-radius-md);background:var(--wu-semantic-surface);padding:10px 12px}
+.hf-segcard .top{display:flex;align-items:center;gap:8px;font-size:12px;margin-bottom:6px}
+.hf-segcard .tt{font-weight:600;color:var(--wu-semantic-text);font-size:12.5px}
+.hf-segcard .sub{font-size:11px;color:var(--wu-semantic-caption);margin-top:3px;line-height:1.5}
+.hf-export{background:var(--wu-semantic-surface);border:1px solid var(--wu-semantic-border);border-radius:var(--wu-global-radius-lg);padding:14px 16px}
+.hf-export-item{display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--wu-semantic-border);font-size:12.8px;color:var(--wu-semantic-secondary)}
+.hf-export-item:last-child{border-bottom:none}
+.hf-export-item b{color:var(--wu-semantic-text);font-weight:600}
+</style>
+</head>
+<body class="wu">
+<div class="doc">
+
+<div class="dhead">
+  <div class="kick">HIGH-FIDELITY SCREEN · HF-05 · v1.0</div>
+  <h1>阶段⑤ · 生成导出</h1>
+  <p>五阶段第五屏：开始生成前确认摘要（输入快照、复用/待生成段、预估与磁盘预算），分段进度网格全程可视，成片导出（MP4 / WAV / 分轨 / SRT）。本阶段确认点「样片确认」已在前一屏完成，本屏以「开始生成」冻结任务输入快照。壳形态：有 Inspector（导出规格）、有 TimelineBar（常驻）。</p>
+  <div class="meta">
+    <span>布局与元素权威 01 §7</span>
+    <span>壳蓝图 05 §4.1–4.2（含 TimelineBar）</span>
+    <span>视觉与组件 workspace-ui v0.2 基线 + duo-shell 组合扩展</span>
+    <span>画布 1440 逻辑宽</span>
+    <span>baseline · 已定稿</span>
+  </div>
+</div>
+
+<h2 class="sec"><span class="no">一</span>高保真稿 · 默认态（未开始 · 输入快照未冻结 · 预估基于本机同规格实测）</h2>
+<p class="lead">主视图：开始前摘要面板 → 分段进度网格 → 导出区；Inspector 为导出规格。没有测速数据时明确显示「尚未测定」，不显示编造的预估。开始生成会冻结任务输入快照；相同请求连续点击只创建一项任务。</p>
+
+<div class="vp-bar">
+  <span class="ttl">阶段⑤ 生成导出 · 1440 × 900</span>
+  <span class="sp"></span>
+  <span class="pct" id="pct">显示 100%</span>
+  <button id="bFit" class="on">适应窗口</button>
+  <button id="bOne">1:1</button>
+</div>
+<div class="vp" id="vp">
+  <div class="frame" id="frame">
+    <div class="hf-app">
+      <!-- TopBar（01 §1.2） -->
+      <header class="hf-top">
+        <span class="hf-brand"><span class="hf-mark"><i></i><i></i></span>双声播客工坊</span>
+        <span class="hf-proj">EP004 · 推理成本观察</span>
+        <span class="wu-row" style="gap:8px">
+          <span class="wu-badge" data-tone="success">文本 API</span>
+          <span class="wu-badge" data-tone="success">图片 API</span>
+          <span class="wu-badge" data-tone="success">本地引擎</span>
+          <span class="wu-badge">MiniMax 未配置</span>
+        </span>
+        <span class="hf-spacer"></span>
+        <span class="hf-vram">显存<span class="bar"><i></i></span>2.8 / 16 GB</span>
+        <button type="button" class="wu-btn" data-variant="secondary" data-size="sm"><svg class="wu-icon sm" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg><span class="wu-btn-label">任务</span></button>
+        <span class="wu-caption">已保存</span>
+        <button type="button" class="wu-btn" data-variant="secondary" data-size="sm" disabled><svg class="wu-icon sm" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V3m-5 5 5-5 5 5M4 15v6h16v-6"/></svg><span class="wu-btn-label">导出</span></button>
+      </header>
+      <div class="hf-mid">
+        <!-- 阶段轨（01 §1.3） -->
+        <aside class="hf-rail" aria-label="阶段导航">
+          <div class="hf-stg done"><span class="hf-stg-no">1</span><span class="hf-stg-tt"><b>创建本期</b><small>话题与参数</small></span></div>
+          <div class="hf-stg done"><span class="hf-stg-no">2</span><span class="hf-stg-tt"><b>编辑对话</b><small>话轮与读音</small></span></div>
+          <div class="hf-stg done"><span class="hf-stg-no">3</span><span class="hf-stg-tt"><b>试听配音</b><small>音色与时长</small></span></div>
+          <div class="hf-stg done"><span class="hf-stg-no">4</span><span class="hf-stg-tt"><b>预览画面</b><small>构图镜头样片</small></span></div>
+          <div class="hf-stg active"><span class="hf-stg-no">5</span><span class="hf-stg-tt"><b>生成导出</b><small>渲染与导出</small></span><span class="hf-stg-st"><span class="wu-badge">可执行</span></span></div>
+          <div class="hf-sep"></div>
+          <div class="hf-entry"><span class="hf-entry-sq"></span>资产库</div>
+          <div class="hf-entry"><span class="hf-entry-sq"></span>服务设置</div>
+          <div class="hf-entry"><span class="hf-entry-sq"></span>任务中心</div>
+          <p class="hf-note">数据边界：工程与成片本地；文本/图片经所选 API</p>
+        </aside>
+        <!-- 主视图（01 §7.1–7.3） -->
+        <main class="hf-main">
+          <div class="hf-stage-head">
+            <h2>⑤ 生成导出</h2>
+            <span class="wu-badge">输入快照 R9/V3/S2 · 未冻结</span>
+            <span class="hf-spacer"></span>
+            <button type="button" class="wu-btn" data-variant="brand"><svg class="wu-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 5l12 7-12 7V5z"/></svg><span class="wu-btn-label">开始生成</span></button>
+          </div>
+          <div class="hf-body">
+            <div class="hf-s5">
+              <!-- 开始前摘要面板（01 §7.1） -->
+              <section class="hf-summary">
+                <div class="hf-summary-t">开始生成前确认 <span class="wu-caption">输入快照将在点击「开始生成」时冻结</span></div>
+                <div class="hf-summary-grid">
+                  <div class="hf-kv"><div class="k">实际时长</div><div class="v">02:48.120</div></div>
+                  <div class="hf-kv"><div class="k">画布</div><div class="v">横屏 16:9 · 480p→16:9 导出画布</div></div>
+                  <div class="hf-kv"><div class="k">语音来源</div><div class="v">本地引擎</div></div>
+                  <div class="hf-kv"><div class="k">视频模式</div><div class="v">双人动态同框</div></div>
+                  <div class="hf-kv"><div class="k">分段</div><div class="v">复用 3 · 待生成 6</div></div>
+                  <div class="hf-kv"><div class="k">预估</div><div class="v">25–40 分钟（本机同规格实测）</div></div>
+                  <div class="hf-kv"><div class="k">磁盘预算</div><div class="v">~2.1 GB（可用 180 GB）</div></div>
+                  <div class="hf-kv"><div class="k">当前版本</div><div class="v">R9 / V3 / S2</div></div>
+                </div>
+              </section>
+              <!-- 分段进度网格（01 §7.2） -->
+              <section>
+                <div class="hf-zone-t">分段进度 <span class="wu-caption">基础视频 → 保留区间合成 → 镜头裁切与版式 → 可选补帧 → 可选烧录字幕 → 合并音轨 → 编码 → 校验（02 §6.5）</span></div>
+                <div class="hf-seg-grid">
+                  <div class="hf-segcard"><div class="top"><span class="wu-badge" data-tone="success">复用</span><span class="tt">#01 片头</span></div><div class="sub">01:23.0 · 快照一致 ✓</div></div>
+                  <div class="hf-segcard"><div class="top"><span class="wu-badge" data-tone="success">复用</span><span class="tt">#02 段1 A→B</span></div><div class="sub">00:34.2 · 快照一致 ✓</div></div>
+                  <div class="hf-segcard"><div class="top"><span class="wu-badge" data-tone="success">复用</span><span class="tt">#03 段2 B→A</span></div><div class="sub">00:41.8 · 快照一致 ✓</div></div>
+                  <div class="hf-segcard"><div class="top"><span class="wu-badge">待生成</span><span class="tt">#04 段3 A→B</span></div><div class="sub">口型视频 · 480p</div></div>
+                  <div class="hf-segcard"><div class="top"><span class="wu-badge">待生成</span><span class="tt">#05 段4 B 独白</span></div><div class="sub">口型视频 · 480p</div></div>
+                  <div class="hf-segcard"><div class="top"><span class="wu-badge">待生成</span><span class="tt">#06 段5 A→B</span></div><div class="sub">口型视频 · 480p</div></div>
+                  <div class="hf-segcard"><div class="top"><span class="wu-badge">待生成</span><span class="tt">#07 段6 B→A</span></div><div class="sub">口型视频 · 480p</div></div>
+                  <div class="hf-segcard"><div class="top"><span class="wu-badge">待生成</span><span class="tt">#08 片尾</span></div><div class="sub">静态 + 字幕</div></div>
+                </div>
+              </section>
+              <!-- 导出区（01 §7.3） -->
+              <section class="hf-export">
+                <div class="hf-zone-t">导出 <span class="wu-caption">正式产物使用不可变版本路径，不覆盖同名 final.mp4</span></div>
+                <div class="hf-export-item"><b>MP4</b><span class="hf-spacer"></span><span class="wu-caption">成片 · 480p</span></div>
+                <div class="hf-export-item"><b>混音 WAV</b><span class="hf-spacer"></span><span class="wu-caption">48kHz 主轨 · 样本次数权威</span></div>
+                <div class="hf-export-item"><b>A/B 分轨</b><span class="hf-spacer"></span><span class="wu-caption">独立音轨</span></div>
+                <div class="hf-export-item"><b>SRT 字幕</b><label class="wu-choice" style="min-height:auto"><input type="checkbox"><span>烧录字幕（可选，仅影响对应后处理）</span></label><span class="hf-spacer"></span><span class="wu-caption">显示文本不含引擎专用标签</span></div>
+                <div style="display:flex;gap:8px;margin-top:10px;align-items:center">
+                  <button type="button" class="wu-btn" data-variant="secondary" data-size="sm"><span class="wu-btn-label">打开输出目录</span></button>
+                  <button type="button" class="wu-btn" data-size="sm" disabled><span class="wu-btn-label">导出</span></button>
+                  <span class="wu-caption">需先生成成片</span>
+                </div>
+              </section>
+            </div>
+          </div>
+        </main>
+        <!-- 检查器（05 §4.3：导出规格） -->
+        <aside class="hf-inspector" aria-label="检查器">
+          <div class="hf-ins-sec">
+            <h4>导出规格</h4>
+            <div class="hf-fld" style="grid-template-columns:64px 1fr"><label>画布</label><input class="wu-input" value="480p → 16:9 导出画布" readonly></div>
+            <div class="hf-fld" style="grid-template-columns:64px 1fr"><label>分辨率</label><select class="wu-input" aria-label="分辨率"><option>480p（快）</option><option>720p</option><option>1080p（慢）</option></select></div>
+            <div class="hf-fld" style="grid-template-columns:64px 1fr"><label>编码</label><select class="wu-input" aria-label="编码"><option>H.264</option><option>H.265</option></select></div>
+            <div style="display:grid;gap:6px;margin-top:8px">
+              <label class="wu-choice"><input type="checkbox"><span>补帧（可选）</span></label>
+              <label class="wu-choice"><input type="checkbox"><span>烧录字幕（可选）</span></label>
+            </div>
+          </div>
+          <div class="hf-ins-sec">
+            <h4>后处理顺序</h4>
+            <p class="wu-caption" style="line-height:1.8">基础视频 → 按保留区间合成 → 镜头裁切与版式 → 可选补帧 → 可选烧录字幕 → 合并权威音轨 → 编码 → 校验。<br>导出失败只重跑相应后处理或编码，不重新生成全部口型视频。</p>
+          </div>
+          <div class="hf-ins-sec">
+            <h4>竖屏导出</h4>
+            <p class="wu-caption" style="line-height:1.8">先展示裁切预览；人物无法同时保留时提供上下双窗或整幅嵌入竖屏画布；能后期实现的只重跑后处理。</p>
+          </div>
+        </aside>
+      </div>
+      <!-- TimelineBar（05 §1.5 深色面板，配音确认后常驻） -->
+      <div class="hf-timeline" aria-label="时间轨">
+        <span class="hf-tl-time"><svg class="wu-icon sm" viewBox="0 0 24 24" aria-hidden="true" style="color:var(--wu-semantic-brand)"><path d="M6 5l12 7-12 7V5z"/></svg>01:23.4 / 02:48.120</span>
+        <div class="hf-tl-tracks">
+          <div class="hf-tl-track"><span class="hf-tl-seg a" style="left:1%;width:34%"></span><span class="hf-tl-seg a" style="left:52%;width:20%"></span><span class="hf-tl-seg b" style="left:38%;width:12%"></span><span class="hf-tl-seg b" style="left:74%;width:22%"></span><span class="hf-tl-play" style="left:41%"></span></div>
+          <div class="hf-tl-track" style="height:8px"><span class="hf-tl-mark" style="left:6%"></span><span class="hf-tl-mark" style="left:20%"></span><span class="hf-tl-mark" style="left:38%"></span><span class="hf-tl-mark" style="left:52%"></span><span class="hf-tl-mark" style="left:74%"></span><span class="hf-tl-mark" style="left:88%"></span></div>
+        </div>
+        <span class="hf-tl-label">分段边界：1 / 2 / 3 / 4 / 5 / 6</span>
+        <span class="hf-tl-label">A 轨 / B 轨</span>
+      </div>
+      <!-- FootBar（01 §1.4） -->
+      <footer class="hf-foot">
+        <span class="hf-pos">阶段 5 / 5 · 生成导出</span>
+        <button type="button" class="wu-btn" data-variant="secondary" data-size="sm"><span class="wu-btn-label">← 上一步</span></button>
+        <span class="wu-badge" data-tone="success">确认点 · 样片确认 已完成</span>
+        <span class="hf-spacer"></span>
+        <button type="button" class="wu-btn" data-variant="secondary" data-size="sm"><svg class="wu-icon sm" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9l9-6 9 6"/><path d="M5 9v11h14V9"/></svg><span class="wu-btn-label">返回工程首页</span></button>
+      </footer>
+    </div>
+  </div>
+</div>
+<div class="vp-note">本屏壳形态：有 Inspector（导出规格 / 后处理顺序 / 竖屏导出）· 有 TimelineBar · 「开始生成」brand 冻结输入快照；未开始前「导出」禁用 · 预估基于本机同规格实测</div>
+
+<h2 class="sec"><span class="no">二</span>状态变体</h2>
+<p class="lead">本屏关键状态的实况渲染（非示意），变体只呈现差异区域，其余与主稿一致。</p>
+<div class="var-grid">
+
+  <div class="var">
+    <div class="cap">V1 · 生成运行中</div>
+    <div class="desc">输入快照已冻结；分段网格显示运行中 / 排队 / 完成；支持「当前段完成后暂停」「取消当前生成」；相同请求只创建一项任务（01 §7.2）。</div>
+    <div class="demo">
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <span class="wu-badge" data-tone="info">输入快照 R9/V3/S2 · 已冻结</span>
+        <span class="hf-spacer"></span>
+        <button type="button" class="wu-btn" data-variant="secondary" data-size="sm"><span class="wu-btn-label">当前段完成后暂停</span></button>
+        <button type="button" class="wu-btn" data-variant="ghost" data-size="sm"><span class="wu-btn-label">取消当前生成</span></button>
+      </div>
+      <div class="hf-seg-grid" style="margin-top:10px">
+        <div class="hf-segcard"><div class="top"><span class="wu-badge" data-tone="info">生成中 62%</span><span class="tt">#05 段4</span></div><div class="hf-prog"><i style="width:62%"></i></div></div>
+        <div class="hf-segcard"><div class="top"><span class="wu-badge">排队</span><span class="tt">#06 段5</span></div><div class="sub">等待 GPU</div></div>
+        <div class="hf-segcard"><div class="top"><span class="wu-badge" data-tone="success">完成</span><span class="tt">#04 段3</span></div><div class="sub">00:38.6 ✓</div></div>
+      </div>
+      <p class="wu-caption" style="margin-top:8px">取消后已完成段保留；当前段完成后暂停即停止派发新段。</p>
+    </div>
+  </div>
+
+  <div class="var">
+    <div class="cap">V2 · 某段失败（默认暂停后续）</div>
+    <div class="desc">保留其他段，显示错误位置；默认暂停后续串行生成，支持原位重试（01 §7.2）。</div>
+    <div class="demo">
+      <div class="hf-segcard" style="border-color:var(--wu-semantic-danger);box-shadow:0 0 0 1px var(--wu-semantic-danger)">
+        <div class="top"><span class="wu-badge" data-tone="danger">失败</span><span class="tt">#06 段5 A→B</span></div>
+        <div class="sub">GPU OOM · 02:10.4</div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+        <button type="button" class="wu-btn" data-variant="secondary" data-size="sm"><span class="wu-btn-label">原位重试</span></button>
+        <button type="button" class="wu-btn" data-variant="ghost" data-size="sm"><span class="wu-btn-label">继续后续</span></button>
+      </div>
+      <div class="wu-alert" data-tone="warning" style="margin-top:8px">已默认暂停后续串行生成；其他段产物保留。</div>
+    </div>
+  </div>
+
+  <div class="var">
+    <div class="cap">V3 · 无测速数据（不编造预估）</div>
+    <div class="desc">没有测速数据时明确显示「尚未测定」，不显示编造的预估（01 §7.1）。</div>
+    <div class="demo">
+      <div class="hf-kv"><div class="k">预估</div><div class="v">尚未测定（首次渲染后回填）</div></div>
+      <p class="wu-caption" style="margin-top:8px">ETA 用同规格历史测量；无历史时不填数字。</p>
+    </div>
+  </div>
+
+  <div class="var">
+    <div class="cap">V4 · 编辑脚本或画面（版本差异）</div>
+    <div class="desc">生成期间编辑脚本或画面 → 进入新草稿版本；后台继续生成原快照，界面明确标注版本差异（01 §7.2 / §13.2）。</div>
+    <div class="demo">
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <span class="wu-badge" data-tone="warning">输入已编辑 · 草稿 R10</span>
+        <span class="wu-badge" data-tone="info">后台继续生成 R9 快照</span>
+      </div>
+      <p class="wu-caption" style="margin-top:8px;line-height:1.6">任务结果只加入历史并标记所属版本，不覆盖新草稿；旧成片可独立播放和导出。</p>
+    </div>
+  </div>
+
+  <div class="var" style="grid-column:1 / -1">
+    <div class="cap">V5 · 导出失败（只重跑后处理）</div>
+    <div class="desc">导出失败只重跑相应后处理或编码，不重新生成全部口型视频；成片检查可定位片段并局部重跑（01 §7.2 / §7.3）。</div>
+    <div class="demo" style="display:flex;gap:20px;align-items:flex-start;flex-wrap:wrap">
+      <div style="flex:1;min-width:300px">
+        <div class="hf-export-item" style="border-color:var(--wu-semantic-danger);box-shadow:0 0 0 1px var(--wu-semantic-danger);border-radius:8px"><b>MP4</b><span class="wu-badge" data-tone="danger">编码失败</span><span class="hf-spacer"></span><button type="button" class="wu-btn" data-variant="secondary" data-size="sm"><span class="wu-btn-label">重试编码</span></button></div>
+        <div class="hf-export-item"><b>混音 WAV</b><span class="wu-badge" data-tone="success">✓</span></div>
+        <div class="hf-export-item"><b>SRT 字幕</b><span class="wu-badge" data-tone="success">✓</span></div>
+      </div>
+      <div style="flex:1;min-width:300px">
+        <p class="wu-caption" style="margin-top:0;line-height:1.7">失败范围仅限编码后处理，基础口型视频已缓存；重试不重新生成全部口型视频。成片检查可定位到片段 / 台词 / 镜头并局部重跑。</p>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<h2 class="sec"><span class="no">三</span>状态矩阵</h2>
+<div class="dcard">
+  <table class="dt">
+    <thead><tr><th>对象</th><th>状态</th><th>呈现（基线组件与色调）</th><th>依据</th></tr></thead>
+    <tbody>
+      <tr><td rowspan="3"><b>本阶段整体（七态）</b></td><td>可执行 <span class="wu-caption">（默认）</span></td><td>阶段轨⑤高亮无徽章；「开始生成」brand 可用</td><td>01 §13.1</td></tr>
+      <tr><td>执行中</td><td>分段网格运行中 / 排队 / 完成；输入快照徽章 info「已冻结」；支持暂停与取消</td><td>01 §13.1</td></tr>
+      <tr><td>失败</td><td>danger 徽章 + 原位重试；默认暂停后续串行生成</td><td>01 §13.1</td></tr>
+      <tr><td rowspan="2"><b>开始生成</b></td><td>冻结快照</td><td>点击后冻结任务输入快照；相同请求连续点击只创建一项任务</td><td>01 §7.2</td></tr>
+      <tr><td>编辑期间</td><td>进入新草稿版本；后台继续生成原快照，界面标注版本差异</td><td>01 §7.2</td></tr>
+      <tr><td rowspan="2"><b>暂停 / 取消</b></td><td>当前段完成后暂停</td><td>停止派发新段，当前段完成后保存</td><td>01 §7.2</td></tr>
+      <tr><td>取消当前生成</td><td>停止派发，尝试中断本任务持有的本地推理；已完成段保留</td><td>01 §7.2</td></tr>
+      <tr><td rowspan="3"><b>导出</b></td><td>导出物</td><td>MP4 / 混音 WAV / A/B 分轨 / SRT；烧录字幕可选；[打开输出目录]</td><td>01 §7.3</td></tr>
+      <tr><td>导出失败</td><td>只重跑相应后处理或编码，不重新生成全部口型视频</td><td>01 §7.2</td></tr>
+      <tr><td>版本路径</td><td>正式产物不可变版本路径，不覆盖同名 final.mp4</td><td>01 §7.3</td></tr>
+      <tr><td><b>成片检查</b></td><td>可定位</td><td>定位片段、回到对应台词或镜头，记录问题并局部重跑</td><td>01 §7.2</td></tr>
+      <tr><td><b>竖屏导出</b></td><td>先预览</td><td>先展示裁切预览；人物无法同时保留时上下双窗或整幅嵌入竖屏画布</td><td>01 §7.3</td></tr>
+      <tr><td><b>关闭浏览器</b></td><td>后台继续</td><td>不停止后台；退出本地服务前提供「当前段完成后退出 / 立即取消并退出」</td><td>01 §7.2</td></tr>
+      <tr><td><b>预估口径</b></td><td>无测速数据</td><td>明确显示「尚未测定」，不显示编造的预估</td><td>01 §7.1</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<h2 class="sec"><span class="no">四</span>边界说明</h2>
+<div class="dcard">
+  <ul class="b">
+    <li><b>风格基准</b>：全部视觉来自 workspace-ui v0.2 基线 + <code>duo-shell.css</code> 组合扩展；分段卡片 / 摘要卡 / 导出清单均为基线卡片 + 徽章组合。</li>
+    <li><b>预估口径</b>：ETA 用同规格历史测量（本机实测）；无历史显示「尚未测定」，不填数字。</li>
+    <li><b>快照语义</b>：开始生成冻结输入快照；编辑产生新草稿版本，后台继续生成原快照，结果只加入历史并标记所属版本。</li>
+    <li><b>失败语义</b>：某段失败默认暂停后续串行生成；导出失败只重跑后处理或编码。</li>
+    <li><b>字幕口径</b>：SRT 独立从校正后的时间信息生成；显示文本不包含引擎专用标签；开关字幕只影响对应后处理。</li>
+    <li><b>版本路径</b>：正式产物使用不可变版本路径，不覆盖同名 final.mp4；版本保留默认 10 版。</li>
+    <li><b>退出行为</b>：关闭浏览器不停止后台；退出本地服务前提供两种退出方式并说明已完成内容已保存。</li>
+    <li><b>Footer</b>：第 5 阶段「下一步」替换为「返回工程首页」（本屏为流程终点）。</li>
+  </ul>
+</div>
+
+<h2 class="sec"><span class="no">五</span>衔接与配套</h2>
+<div class="cols2">
+  <div class="dcard">
+    <h5 style="font-size:13.5px;margin:0 0 6px;font-weight:600">上下游</h5>
+    <ul class="b">
+      <li>「开始生成」任务 → <b>HF-08 任务中心</b>（运行中 / 排队 / 已结束）</li>
+      <li>「导出」产物 → 工程首页最近工程 / 历史成片；输出目录为本地工程目录</li>
+      <li>上一屏：<b>HF-04 阶段④预览画面</b>（样片确认后进入）</li>
+      <li>编辑脚本 / 画面 → 回到阶段② / ④ 的新草稿版本</li>
+    </ul>
+  </div>
+  <div class="dcard">
+    <h5 style="font-size:13.5px;margin:0 0 6px;font-weight:600">验证状态</h5>
+    <ul class="b">
+      <li>已做：与 01 §7 元素逐项对齐；壳分区与 05 §4.1–4.2 一致；分段卡片状态（复用 / 待生成 / 生成中 / 失败）实况渲染</li>
+      <li>未做：真实任务进度、暂停 / 取消交互、键盘走查、200% 文本缩放</li>
+      <li>基线自身状态：implemented-prototype（沿用基线声明）</li>
+    </ul>
+  </div>
+</div>
+
+</div>
+
+<script>
+(function(){
+  var vp=document.getElementById('vp'),fr=document.getElementById('frame'),pct=document.getElementById('pct');
+  var bFit=document.getElementById('bFit'),bOne=document.getElementById('bOne'),mode='fit';
+  function fit(){
+    if(mode==='fit'){
+      var s=Math.min(1,vp.clientWidth/1440);
+      fr.style.transform='scale('+s+')';
+      vp.style.height=(fr.offsetHeight*s)+'px';
+      pct.textContent='显示 '+Math.round(s*100)+'%';
+    }else{
+      fr.style.transform='none';
+      vp.style.height=fr.offsetHeight+'px';
+      pct.textContent='1:1 · 横向滚动';
+    }
+  }
+  window.addEventListener('resize',fit);
+  bFit.onclick=function(){mode='fit';bFit.classList.add('on');bOne.classList.remove('on');fit()};
+  bOne.onclick=function(){mode='one';bOne.classList.add('on');bFit.classList.remove('on');fit()};
+  fit();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HF-07 · 服务设置 · 高保真稿 v1.0</title>
+<link rel="stylesheet" href="vendor/workspace-ui/tokens.css">
+<link rel="stylesheet" href="vendor/workspace-ui/components.css">
+<link rel="stylesheet" href="vendor/duo-shell.css">
+<script defer src="vendor/workspace-ui/components.js"></script>
+<style>
+/* ============ 服务设置 屏内组合（全部取值 --wu-* 令牌） ============ */
+.hf-h{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:12px 20px 4px}
+.hf-h h2{font-size:18px;font-weight:700;margin:0 4px 0 0}
+.hf-body2{flex:1;min-height:0;overflow:auto;padding:10px 20px 20px}
+.hf-s7{display:flex;gap:14px;align-items:flex-start}
+.hf-formcol{flex:1;min-width:0;display:flex;flex-direction:column;gap:12px}
+.hf-block{background:var(--wu-semantic-surface);border:1px solid var(--wu-semantic-border);border-radius:var(--wu-global-radius-lg);padding:14px 16px}
+.hf-block-t{display:flex;align-items:center;gap:8px;font-size:13.5px;font-weight:700;margin-bottom:10px}
+.hf-block-t .wu-caption{font-weight:400}
+.hf-fld{display:grid;grid-template-columns:72px 1fr auto;align-items:center;gap:10px;padding:5px 0}
+.hf-fld>label{font-size:12.8px;color:var(--wu-semantic-secondary);font-weight:600}
+.hf-cap{flex:0 0 360px;display:flex;flex-direction:column;background:var(--wu-semantic-surface);border:1px solid var(--wu-semantic-border);border-radius:var(--wu-global-radius-lg);padding:14px 16px}
+.hf-cap-t{display:flex;align-items:center;gap:8px;font-size:13.5px;font-weight:700;margin-bottom:10px}
+.hf-cap-row{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--wu-semantic-border);font-size:12.8px;color:var(--wu-semantic-secondary)}
+.hf-cap-row:last-child{border-bottom:none}
+.hf-cap-row .nm{font-weight:600;color:var(--wu-semantic-text);min-width:140px}
+.hf-dot{width:8px;height:8px;border-radius:50%;background:var(--wu-semantic-muted);flex:none}
+.hf-dot.ok{background:var(--wu-semantic-success)}
+.hf-dot.no{background:var(--wu-semantic-caption)}
+</style>
+</head>
+<body class="wu">
+<div class="doc">
+
+<div class="dhead">
+  <div class="kick">HIGH-FIDELITY SCREEN · HF-07 · v1.0</div>
+  <h1>服务设置</h1>
+  <p>独立入口。仅四块配置：文本 API、图片 API、本地引擎、MiniMax 语音 + 能力状态面板。凭据保存在<b>机器级设置</b>，工程只引用配置 ID，打包工程不含 API 密钥；不增加产品账号系统。壳形态：独立全屏，无 Inspector。</p>
+  <div class="meta">
+    <span>布局与元素权威 01 §9</span>
+    <span>壳蓝图 05 §4.1–4.2（独立入口，无 Inspector）</span>
+    <span>视觉与组件 workspace-ui v0.2 基线 + duo-shell 组合扩展</span>
+    <span>画布 1440 逻辑宽</span>
+    <span>baseline · 已定稿</span>
+  </div>
+</div>
+
+<h2 class="sec"><span class="no">一</span>高保真稿 · 默认态（全部服务正常）</h2>
+<p class="lead">左列四块配置表单，右列能力状态面板（各能力<b>分开登记</b>：连接成功不代表具备人物一致性或多参考图能力）。测试按钮区分<b>付费试听与只读连通检查</b>；测试标注是否产生费用。</p>
+
+<div class="vp-bar">
+  <span class="ttl">服务设置 · 1440 × 900</span>
+  <span class="sp"></span>
+  <span class="pct" id="pct">显示 100%</span>
+  <button id="bFit" class="on">适应窗口</button>
+  <button id="bOne">1:1</button>
+</div>
+<div class="vp" id="vp">
+  <div class="frame" id="frame">
+    <div class="hf-app">
+      <!-- TopBar（01 §1.2） -->
+      <header class="hf-top">
+        <span class="hf-brand"><span class="hf-mark"><i></i><i></i></span>双声播客工坊</span>
+        <span class="hf-proj">EP004 · 推理成本观察</span>
+        <span class="wu-row" style="gap:8px">
+          <span class="wu-badge" data-tone="success">文本 API</span>
+          <span class="wu-badge" data-tone="success">图片 API</span>
+          <span class="wu-badge" data-tone="success">本地引擎</span>
+          <span class="wu-badge">MiniMax 未配置</span>
+        </span>
+        <span class="hf-spacer"></span>
+        <span class="hf-vram">显存<span class="bar"><i></i></span>2.8 / 16 GB</span>
+        <button type="button" class="wu-btn" data-variant="secondary" data-size="sm"><svg class="wu-icon sm" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg><span class="wu-btn-label">任务</span></button>
+        <span class="wu-caption">已保存</span>
+        <button type="button" class="wu-btn" data-variant="secondary" data-size="sm" disabled><svg class="wu-icon sm" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V3m-5 5 5-5 5 5M4 15v6h16v-6"/></svg><span class="wu-btn-label">导出</span></button>
+      </header>
+      <div class="hf-mid">
+        <!-- 阶段轨（01 §1.3，独立入口高亮） -->
+        <aside class="hf-rail" aria-label="阶段导航">
+          <div class="hf-stg done"><span class="hf-stg-no">1</span><span class="hf-stg-tt"><b>创建本期</b><small>话题与参数</small></span></div>
+          <div class="hf-stg done"><span class="hf-stg-no">2</span><span class="hf-stg-tt"><b>编辑对话</b><small>话轮与读音</small></span></div>
+          <div class="hf-stg done"><span class="hf-stg-no">3</span><span class="hf-stg-tt"><b>试听配音</b><small>音色与时长</small></span></div>
+          <div class="hf-stg done"><span class="hf-stg-no">4</span><span class="hf-stg-tt"><b>预览画面</b><small>构图镜头样片</small></span></div>
+          <div class="hf-stg done"><span class="hf-stg-no">5</span><span class="hf-stg-tt"><b>生成导出</b><small>渲染与导出</small></span></div>
+          <div class="hf-sep"></div>
+          <div class="hf-entry"><span class="hf-entry-sq"></span>资产库</div>
+          <div class="hf-entry active"><span class="hf-entry-sq" style="background:var(--wu-semantic-brand)"></span>服务设置</div>
+          <div class="hf-entry"><span class="hf-entry-sq"></span>任务中心</div>
+          <p class="hf-note">数据边界：工程与成片本地；文本/图片经所选 API</p>
+        </aside>
+        <!-- 主视图（01 §9.1：四块配置 + 能力状态面板） -->
+        <main class="hf-main">
+          <div class="hf-h">
+            <h2>服务设置</h2>
+            <span class="wu-caption">仅四块 · 凭据存机器级设置 · 工程只引用配置 ID</span>
+          </div>
+          <div class="hf-body2">
+            <div class="hf-s7">
+              <div class="hf-formcol">
+                <!-- 文本 API（01 §9.1） -->
+                <section class="hf-block">
+                  <div class="hf-block-t">文本 API <span class="wu-caption">对话生成 · 改写 · 语义建议</span></div>
+                  <div class="hf-fld"><label>地址</label><input class="wu-input" value="https://api.example.com/v1" aria-label="文本 API 地址"><span class="wu-caption">Base URL</span></div>
+                  <div class="hf-fld"><label>模型</label><select class="wu-input" aria-label="模型"><option>gpt-4o-mini</option><option>qwen2.5-72b</option></select><span class="wu-caption"></span></div>
+                  <div class="hf-fld"><label>凭据</label><select class="wu-input" aria-label="凭据引用"><option>机器级密钥库 · key_text_01</option><option>使用系统环境变量</option></select><button type="button" class="wu-btn" data-variant="secondary" data-size="sm"><span class="wu-btn-label">测试连接</span></button></div>
+                  <div class="hf-fld" style="align-items:flex-start"><label style="padding-top:6px">API 预算</label><div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap"><label class="wu-choice"><input type="checkbox" checked><span>每期上限</span></label><input class="wu-input" value="2.00" style="width:110px" aria-label="每期上限金额"><span class="wu-caption">元 · 超出提示不硬拦</span></div></div>
+                </section>
+                <!-- 图片 API（01 §9.1） -->
+                <section class="hf-block">
+                  <div class="hf-block-t">图片 API <span class="wu-caption">同框底图 · 角色形象 · 场景</span></div>
+                  <div class="hf-fld"><label>地址</label><input class="wu-input" value="https://image.example.com/v1" aria-label="图片 API 地址"><span class="wu-caption">Base URL</span></div>
+                  <div class="hf-fld"><label>模型</label><select class="wu-input" aria-label="图片模型"><option>flux-pro</option></select><span class="wu-caption"></span></div>
+                  <div class="hf-fld"><label>凭据</label><select class="wu-input" aria-label="凭据引用"><option>机器级密钥库 · key_img_01</option></select><button type="button" class="wu-btn" data-variant="secondary" data-size="sm"><span class="wu-btn-label">测试连接</span></button></div>
+                  <p class="wu-caption" style="line-height:1.7">测试按钮区分<b>付费试听</b>与<b>只读连通检查</b>；有费用时标注「此测试会产生费用」。连接成功不代表具备人物一致性或多参考图能力。</p>
+                </section>
+                <!-- 本地引擎（01 §9.1） -->
+                <section class="hf-block">
+                  <div class="hf-block-t">本地引擎 <span class="wu-caption">本地 TTS · 本地口型 · 渲染</span></div>
+                  <div class="hf-fld"><label>状态</label><span><span class="wu-badge" data-tone="success">本地 TTS 就绪</span> <span class="wu-badge" data-tone="success">本地口型就绪</span></span><span></span></div>
+                  <div class="hf-fld"><label>显存</label><span class="hf-vram">显存<span class="bar"><i></i></span>2.8 / 16 GB</span><button type="button" class="wu-btn" data-variant="ghost" data-size="sm"><span class="wu-btn-label">自检</span></button></div>
+                </section>
+                <!-- MiniMax 语音（01 §9.1） -->
+                <section class="hf-block">
+                  <div class="hf-block-t">MiniMax 语音 <span class="wu-caption">云 TTS · voice_id 绑定</span></div>
+                  <div class="hf-fld"><label>状态</label><span><span class="wu-badge" data-tone="success">2 个绑定有效</span></span><button type="button" class="wu-btn" data-variant="secondary" data-size="sm"><span class="wu-btn-label">管理绑定</span></button></div>
+                  <p class="wu-caption" style="line-height:1.7">付费试听与只读连通检查区分；音色可用性在能力面板单独登记。</p>
+                </section>
+              </div>
+              <!-- 能力状态面板（01 §9.1：分开登记） -->
+              <aside class="hf-cap">
+                <div class="hf-cap-t">能力状态 <span class="wu-caption">分开登记，不做合并结论</span></div>
+                <div class="hf-cap-row"><span class="hf-dot ok"></span><span class="nm">文本连通性</span><span class="wu-badge" data-tone="success">已连接</span></div>
+                <div class="hf-cap-row"><span class="hf-dot ok"></span><span class="nm">图片 · 文生图</span><span class="wu-badge" data-tone="success">已连接</span></div>
+                <div class="hf-cap-row"><span class="hf-dot ok"></span><span class="nm">图片 · 单图编辑</span><span class="wu-badge" data-tone="success">已连接</span></div>
+                <div class="hf-cap-row"><span class="hf-dot no"></span><span class="nm">图片 · 多参考图编辑</span><span class="wu-badge" data-tone="warning">不支持（同框图走上传替代）</span></div>
+                <div class="hf-cap-row"><span class="hf-dot ok"></span><span class="nm">本地 TTS</span><span class="wu-badge" data-tone="success">就绪</span></div>
+                <div class="hf-cap-row"><span class="hf-dot ok"></span><span class="nm">本地口型</span><span class="wu-badge" data-tone="success">就绪</span></div>
+                <div class="hf-cap-row"><span class="hf-dot ok"></span><span class="nm">MiniMax 音色可用</span><span class="wu-badge" data-tone="success">2 个绑定有效</span></div>
+                <p class="wu-caption" style="margin-top:10px;line-height:1.7">某一服务离线只影响需要它的操作；用户仍可编辑和播放已有素材。</p>
+              </aside>
+            </div>
+          </div>
+        </main>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="vp-note">本屏为独立入口：TopBar + 阶段轨（服务设置高亮）· 无 Inspector（全宽表单）· 能力状态分开登记 · 测试按钮标注是否产生费用</div>
+
+<h2 class="sec"><span class="no">二</span>状态变体</h2>
+<p class="lead">本屏关键状态的实况渲染（非示意），变体只呈现差异区域，其余与主稿一致。</p>
+<div class="var-grid">
+
+  <div class="var">
+    <div class="cap">V1 · 文本 API 异常</div>
+    <div class="desc">异常时 TopBar 徽章转 danger；只禁用依赖该服务的操作，编辑与播放不受影响（01 §9 / §13.3）。</div>
+    <div class="demo">
+      <span class="wu-row hf-svc">
+        <span class="wu-badge" data-tone="danger">文本 API 异常</span>
+        <span class="wu-badge" data-tone="success">图片 API</span>
+        <span class="wu-badge" data-tone="success">本地引擎</span>
+        <span class="wu-badge">MiniMax 未配置</span>
+      </span>
+      <div class="hf-fld" style="margin-top:10px"><label>测试结果</label><span class="wu-badge" data-tone="danger">连接失败 · 401</span><span></span></div>
+      <div class="wu-alert" data-tone="warning">文本 API 不可用，生成对话 / 改写等操作将被禁用；编辑与播放已有素材不受影响。</div>
+    </div>
+  </div>
+
+  <div class="var">
+    <div class="cap">V2 · API 预算缺价格配置</div>
+    <div class="desc">缺价格配置时展示字符数、请求数和实际用量，不伪造金额（01 §9.1）。</div>
+    <div class="demo">
+      <div class="hf-fld"><label>API 预算</label><label class="wu-choice"><input type="checkbox" checked><span>每期上限</span></label><span></span></div>
+      <div class="hf-cap-row"><span class="hf-dot ok"></span><span class="nm">本期用量</span><span class="wu-caption">38.2 万字符 · 142 请求 · 无价格配置（不伪造金额）</span></div>
+    </div>
+  </div>
+
+  <div class="var">
+    <div class="cap">V3 · 能力登记分开（连接 ≠ 能力）</div>
+    <div class="desc">连接成功不代表具备人物一致性或多参考图能力；多参考图编辑不支持时同框图走上传替代（01 §9.1）。</div>
+    <div class="demo">
+      <div class="hf-cap-row"><span class="hf-dot ok"></span><span class="nm">图片 · 文生图</span><span class="wu-badge" data-tone="success">已连接</span></div>
+      <div class="hf-cap-row"><span class="hf-dot no"></span><span class="nm">图片 · 多参考图编辑</span><span class="wu-badge" data-tone="warning">不支持</span></div>
+      <div class="hf-cap-row"><span class="hf-dot no"></span><span class="nm">人物一致性</span><span class="wu-badge" data-tone="warning">未验证</span></div>
+      <p class="wu-caption" style="margin-top:8px">文生图连通 ≠ 人物一致性；多参考图能力缺失时同框图走「上传已完成同框图」替代。</p>
+    </div>
+  </div>
+
+</div>
+
+<h2 class="sec"><span class="no">三</span>状态矩阵</h2>
+<div class="dcard">
+  <table class="dt">
+    <thead><tr><th>对象</th><th>状态</th><th>呈现（基线组件与色调）</th><th>依据</th></tr></thead>
+    <tbody>
+      <tr><td rowspan="2"><b>四块配置</b></td><td>正常</td><td>地址 / 模型 / 凭据引用 / 测试连接；连接成功徽章 success</td><td>01 §9.1</td></tr>
+      <tr><td>异常</td><td>TopBar 徽章 danger + 测试失败信息；只禁用依赖该服务的操作</td><td>01 §9 / §13.3</td></tr>
+      <tr><td><b>凭据存放</b></td><td>机器级</td><td>保存在机器设置，工程只引用配置 ID；打包工程不含 API 密钥</td><td>01 §9.1</td></tr>
+      <tr><td rowspan="3"><b>能力状态</b></td><td>分开登记</td><td>文本连通性 / 图片文生图 / 单图编辑 / 多参考图编辑 / 本地 TTS / 本地口型 / MiniMax 音色可用 各行独立徽章</td><td>01 §9.1</td></tr>
+      <tr><td>连接 ≠ 能力</td><td>连接成功不代表具备人物一致性或多参考图能力</td><td>01 §9.1</td></tr>
+      <tr><td>离线影响</td><td>某一服务离线只影响需要它的操作；编辑与播放已有素材不受影响</td><td>01 §9.1</td></tr>
+      <tr><td><b>测试区分</b></td><td>付费 vs 只读</td><td>付费试听与只读连通检查区分；测试按钮标注是否产生费用</td><td>01 §9.1</td></tr>
+      <tr><td><b>API 预算</b></td><td>缺价格配置</td><td>展示字符数、请求数和实际用量，不伪造金额</td><td>01 §9.1</td></tr>
+      <tr><td><b>账号边界</b></td><td>无产品账号</td><td>不增加产品账号系统</td><td>01 §9.1</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<h2 class="sec"><span class="no">四</span>边界说明</h2>
+<div class="dcard">
+  <ul class="b">
+    <li><b>风格基准</b>：全部视觉来自 workspace-ui v0.2 基线 + <code>duo-shell.css</code> 组合扩展；能力状态行用「圆点 + 徽章文字」双通道，无纯色点。</li>
+    <li><b>仅四块</b>：文本 API / 图片 API / 本地引擎 / MiniMax 语音；不增加产品账号系统。</li>
+    <li><b>凭据边界</b>：机器级密钥库引用；工程只引用配置 ID；打包工程不含 API 密钥。</li>
+    <li><b>能力边界</b>：各能力分开登记；连接成功不代表具备人物一致性或多参考图能力；多参考图编辑不支持时同框图走上传替代。</li>
+    <li><b>费用口径</b>：付费试听与只读连通检查区分；测试按钮标注是否产生费用；缺价格配置时展示用量不伪造金额。</li>
+    <li><b>离线影响</b>：某一服务离线只影响需要它的操作；用户仍可编辑和播放已有素材。</li>
+  </ul>
+</div>
+
+<h2 class="sec"><span class="no">五</span>衔接与配套</h2>
+<div class="cols2">
+  <div class="dcard">
+    <h5 style="font-size:13.5px;margin:0 0 6px;font-weight:600">上下游</h5>
+    <ul class="b">
+      <li>「去服务设置」→ 来自 HF-01（文本 API 异常）、HF-08（任务失败原因）等所有入口</li>
+      <li>文本 API → HF-01 / HF-02 生成与改写；图片 API → HF-04 构图；本地引擎 / MiniMax → HF-03 配音</li>
+      <li>返回各阶段后 TopBar 服务徽章实时反映本屏配置</li>
+    </ul>
+  </div>
+  <div class="dcard">
+    <h5 style="font-size:13.5px;margin:0 0 6px;font-weight:600">验证状态</h5>
+    <ul class="b">
+      <li>已做：与 01 §9 元素逐项对齐；四块 + 能力面板布局与 05 §4.3 一致；状态变体实况渲染</li>
+      <li>未做：真实连接测试、密钥库交互、键盘走查、200% 文本缩放</li>
+      <li>基线自身状态：implemented-prototype（沿用基线声明）</li>
+    </ul>
+  </div>
+</div>
+
+</div>
+
+<script>
+(function(){
+  var vp=document.getElementById('vp'),fr=document.getElementById('frame'),pct=document.getElementById('pct');
+  var bFit=document.getElementById('bFit'),bOne=document.getElementById('bOne'),mode='fit';
+  function fit(){
+    if(mode==='fit'){
+      var s=Math.min(1,vp.clientWidth/1440);
+      fr.style.transform='scale('+s+')';
+      vp.style.height=(fr.offsetHeight*s)+'px';
+      pct.textContent='显示 '+Math.round(s*100)+'%';
+    }else{
+      fr.style.transform='none';
+      vp.style.height=fr.offsetHeight+'px';
+      pct.textContent='1:1 · 横向滚动';
+    }
+  }
+  window.addEventListener('resize',fit);
+  bFit.onclick=function(){mode='fit';bFit.classList.add('on');bOne.classList.remove('on');fit()};
+  bOne.onclick=function(){mode='one';bOne.classList.add('on');bFit.classList.remove('on');fit()};
+  fit();
+})();
+</script>
+</body>
+</html>

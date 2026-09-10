@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HF-04 · 阶段④ 预览画面 · 高保真稿 v1.0</title>
+<link rel="stylesheet" href="vendor/workspace-ui/tokens.css">
+<link rel="stylesheet" href="vendor/workspace-ui/components.css">
+<link rel="stylesheet" href="vendor/duo-shell.css">
+<script defer src="vendor/workspace-ui/components.js"></script>
+<style>
+/* ============ 阶段④ 屏内组合（全部取值 --wu-* 令牌） ============ */
+.hf-s4{display:flex;flex-direction:column;gap:14px;padding-bottom:4px}
+.hf-zone{background:var(--wu-semantic-surface);border:1px solid var(--wu-semantic-border);border-radius:var(--wu-global-radius-lg);padding:14px 16px}
+.hf-zone-t{display:flex;align-items:center;gap:8px;font-size:13.5px;font-weight:700;margin-bottom:10px}
+.hf-zone-t .wu-caption{font-weight:400}
+.hf-canvas{position:relative;height:252px;border-radius:var(--wu-global-radius-md);overflow:hidden;background:linear-gradient(150deg,var(--wu-semantic-muted) 0%,var(--wu-semantic-surface) 55%,var(--wu-semantic-canvas) 100%);border:1px solid var(--wu-semantic-border)}
+.hf-canvas .scene-hint{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--wu-semantic-caption);font-size:12px;letter-spacing:1px}
+.hf-region{position:absolute;border:2px dashed var(--wu-semantic-info);border-radius:8px;background:var(--wu-semantic-info-bg)}
+.hf-region.b{border-color:var(--hf-speaker-b);background:var(--hf-speaker-b-bg)}
+.hf-region .tag{position:absolute;left:6px;top:6px;font-size:10.5px;font-weight:700;background:var(--wu-semantic-info);color:var(--wu-semantic-on-primary);border-radius:4px;padding:1px 7px}
+.hf-region.b .tag{background:var(--hf-speaker-b)}
+.hf-canvas .cta{position:absolute;left:0;right:0;bottom:12px;display:flex;justify-content:center}
+.hf-assetrow{display:flex;gap:14px;align-items:center;flex-wrap:wrap;margin-top:12px}
+.hf-assetrow .item{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--wu-semantic-secondary)}
+.hf-check{display:grid;gap:8px;margin-top:10px}
+.hf-check .wu-choice{font-size:12.8px}
+.hf-sample-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.hf-coords{display:grid;grid-template-columns:84px 1fr;gap:6px;font-size:11.8px;color:var(--wu-semantic-secondary);align-items:baseline}
+.hf-coords b{color:var(--wu-semantic-text);font-weight:600;font-family:var(--wu-global-mono);font-size:11px}
+</style>
+</head>
+<body class="wu">
+<div class="doc">
+
+<div class="dhead">
+  <div class="kick">HIGH-FIDELITY SCREEN · HF-04 · v1.0</div>
+  <h1>阶段④ · 预览画面</h1>
+  <p>五阶段第四屏：准备构图（同框底图 + 人物区域）、选择镜头预设并做轻量预览、生成并检查样片；本阶段确认点为「样片确认」。页面含「构图 / 镜头 / 样片」三个页内区域。壳形态：有 Inspector（底图来源 / 人物区域 / 坐标信息）、有 TimelineBar（配音确认后常驻）。</p>
+  <div class="meta">
+    <span>布局与元素权威 01 §6</span>
+    <span>壳蓝图 05 §4.1–4.2（含 TimelineBar）</span>
+    <span>视觉与组件 workspace-ui v0.2 基线 + duo-shell 组合扩展</span>
+    <span>画布 1440 逻辑宽</span>
+    <span>baseline · 已定稿</span>
+  </div>
+</div>
+
+<h2 class="sec"><span class="no">一</span>高保真稿 · 默认态（构图已就绪 · 样片未生成 · 视觉 V3 已用）</h2>
+<p class="lead">主视图纵向三区：构图（画布 + 底图来源）/ 镜头（预设 + 轻量预览）/ 样片（区间 + 检查清单）；页内 Tab 作为分区锚点。样片确认 = 本阶段确认点；低规格快速样片不能充当高规格正式片段。</p>
+
+<div class="vp-bar">
+  <span class="ttl">阶段④ 预览画面 · 1440 × 900</span>
+  <span class="sp"></span>
+  <span class="pct" id="pct">显示 100%</span>
+  <button id="bFit" class="on">适应窗口</button>
+  <button id="bOne">1:1</button>
+</div>
+<div class="vp" id="vp">
+  <div class="frame" id="frame">
+    <div class="hf-app">
+      <!-- TopBar（01 §1.2） -->
+      <header class="hf-top">
+        <span class="hf-brand"><span class="hf-mark"><i></i><i></i></span>双声播客工坊</span>
+        <span class="hf-proj">EP004 · 推理成本观察</span>
+        <span class="wu-row" style="gap:8px">
+          <span class="wu-badge" data-tone="success">文本 API</span>
+          <span class="wu-badge" data-tone="success">图片 API</span>
+          <span class="wu-badge" data-tone="success">本地引擎</span>
+          <span class="wu-badge">MiniMax 未配置</span>
+        </span>
+        <span class="hf-spacer"></span>
+        <span class="hf-vram">显存<span class="bar"><i></i></span>2.8 / 16 GB</span>
+        <button type="button" class="wu-btn" data-variant="secondary" data-size="sm"><svg class="wu-icon sm" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg><span class="wu-btn-label">任务</span></button>
+        <span class="wu-caption">已保存</span>
+        <button type="button" class="wu-btn" data-variant="secondary" data-size="sm" disabled><svg class="wu-icon sm" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V3m-5 5 5-5 5 5M4 15v6h16v-6"/></svg><span class="wu-btn-label">导出</span></button>
+      </header>
+      <div class="hf-mid">
+        <!-- 阶段轨（01 §1.3） -->
+        <aside class="hf-rail" aria-label="阶段导航">
+          <div class="hf-stg done"><span class="hf-stg-no">1</span><span class="hf-stg-tt"><b>创建本期</b><small>话题与参数</small></span></div>
+          <div class="hf-stg done"><span class="hf-stg-no">2</span><span class="hf-stg-tt"><b>编辑对话</b><small>话轮与读音</small></span></div>
+          <div class="hf-stg done"><span class="hf-stg-no">3</span><span class="hf-stg-tt"><b>试听配音</b><small>音色与时长</small></span></div>
+          <div class="hf-stg active"><span class="hf-stg-no">4</span><span class="hf-stg-tt"><b>预览画面</b><small>构图镜头样片</small></span><span class="hf-stg-st"><span class="wu-badge">可执行</span></span></div>
+          <div class="hf-stg"><span class="hf-stg-no">5</span><span class="hf-stg-tt"><b>生成导出</b><small>渲染与导出</small></span><span class="hf-stg-st"><span class="wu-badge">未准备</span></span></div>
+          <div class="hf-sep"></div>
+          <div class="hf-entry"><span class="hf-entry-sq"></span>资产库</div>
+          <div class="hf-entry"><span class="hf-entry-sq"></span>服务设置</div>
+          <div class="hf-entry"><span class="hf-entry-sq"></span>任务中心</div>
+          <p class="hf-note">数据边界：工程与成片本地；文本/图片经所选 API</p>
+        </aside>
+        <!-- 主视图（01 §6.1：纵向三区） -->
+        <main class="hf-main">
+          <div class="hf-stage-head">
+            <h2>④ 预览画面</h2>
+            <span class="wu-badge" data-tone="success">视觉 V3 · 已用</span>
+            <span class="hf-spacer"></span>
+            <button type="button" class="wu-btn" data-variant="secondary" data-size="sm" disabled><span class="wu-btn-label">接受样片</span></button>
+            <span class="wu-caption">需先生成样片并通过全部检查</span>
+          </div>
+          <div class="hf-body">
+            <div class="hf-s4">
+              <!-- 页内 Tab 锚点（01 §6.1） -->
+              <div class="wu-tabs-list" role="tablist" aria-label="预览画面分区">
+                <button class="wu-tab" role="tab" aria-selected="true" tabindex="0">构图</button>
+                <button class="wu-tab" role="tab" aria-selected="false" tabindex="-1">镜头</button>
+                <button class="wu-tab" role="tab" aria-selected="false" tabindex="-1">样片</button>
+              </div>
+              <!-- 构图区（01 §6.2） -->
+              <section class="hf-zone">
+                <div class="hf-zone-t">构图 <span class="wu-caption">同框底图 · 人物区域标注 · 竖屏提示</span></div>
+                <div class="hf-canvas">
+                  <span class="scene-hint">同框底图 · 录音棚（图片 API 生成，V3）</span>
+                  <div class="hf-region" style="left:6%;top:12%;width:38%;height:76%"><span class="tag">A 区</span></div>
+                  <div class="hf-region b" style="left:56%;top:12%;width:38%;height:76%"><span class="tag">B 区</span></div>
+                  <div class="cta">
+                    <button type="button" class="wu-btn" data-variant="secondary" data-size="sm"><svg class="wu-icon sm" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9L12 3z"/><path d="M18.5 15l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7.7-1.8z"/></svg><span class="wu-btn-label">生成同框底图</span></button>
+                  </div>
+                </div>
+                <div class="hf-assetrow">
+                  <span class="item">场景 <select class="hf-mini-select" aria-label="场景"><option>录音棚 · 资产库</option><option>生成新场景</option><option>上传</option></select></span>
+                  <span class="item">角色 A <select class="hf-mini-select" aria-label="角色 A"><option>李雷 · 资产库</option></select></span>
+                  <span class="item">角色 B <select class="hf-mini-select" aria-label="角色 B"><option>韩梅梅 · 资产库</option></select></span>
+                  <span class="hf-spacer"></span>
+                  <span class="wu-caption">不要求每期重新生成；失败时保存提示词与引用关系可重试</span>
+                </div>
+              </section>
+              <!-- 镜头区（01 §6.3） -->
+              <section class="hf-zone">
+                <div class="hf-zone-t">镜头 <span class="wu-caption">后处理 · 改镜头不触发基础视频重渲染</span></div>
+                <div class="hf-sample-head">
+                  <span style="font-size:12.5px;color:var(--wu-semantic-secondary)">镜头预设</span>
+                  <select class="wu-input" aria-label="镜头预设" style="width:auto;min-height:32px"><option>稳定同框（默认）</option><option>轻微推拉</option><option>发言人裁切</option></select>
+                  <label class="wu-choice"><input type="checkbox"><span>轻微推拉</span></label>
+                  <label class="wu-choice"><input type="checkbox"><span>发言人裁切</span></label>
+                  <span class="hf-spacer"></span>
+                  <button type="button" class="wu-btn" data-variant="secondary" data-size="sm"><svg class="wu-icon sm" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 5l12 7-12 7V5z"/></svg><span class="wu-btn-label">轻量预览</span></button>
+                  <span class="wu-caption">构图预览，无动态口型</span>
+                </div>
+              </section>
+              <!-- 样片区（01 §6.4） -->
+              <section class="hf-zone">
+                <div class="hf-zone-t">样片 <span class="wu-caption">自动选双方都有发言、含 A→B→A 的区间</span></div>
+                <div class="hf-sample-head">
+                  <span style="font-size:12.5px;color:var(--wu-semantic-secondary)">区间</span>
+                  <span class="hf-mono" style="color:var(--wu-semantic-text);background:var(--wu-semantic-muted);padding:3px 10px;border-radius:6px">01:12 – 01:28 · A→B→A</span>
+                  <button type="button" class="wu-btn" data-variant="ghost" data-size="sm"><span class="wu-btn-label">调整</span></button>
+                  <button type="button" class="wu-btn" data-variant="brand" data-size="sm"><svg class="wu-icon sm" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9L12 3z"/></svg><span class="wu-btn-label">生成样片</span></button>
+                  <span class="hf-spacer"></span>
+                  <button type="button" class="wu-btn" data-variant="ghost" data-size="sm"><span class="wu-btn-label">边界预览</span></button>
+                </div>
+                <div class="hf-check">
+                  <label class="wu-choice"><input type="checkbox"><span>错误开口</span></label>
+                  <label class="wu-choice"><input type="checkbox"><span>口型同步</span></label>
+                  <label class="wu-choice"><input type="checkbox"><span>角色一致</span></label>
+                  <label class="wu-choice"><input type="checkbox"><span>边界连续</span></label>
+                  <label class="wu-choice"><input type="checkbox"><span>声音与清晰度</span></label>
+                </div>
+                <p class="wu-caption" style="margin-top:8px">检查<b>不能只检查是否生成成功</b>；接受样片只证明已检查区间和配置，不保证整片无缺陷。</p>
+              </section>
+            </div>
+          </div>
+        </main>
+        <!-- 检查器（01 §6.1：底图来源 / 人物区域 / 坐标信息） -->
+        <aside class="hf-inspector" aria-label="检查器">
+          <div class="hf-ins-sec">
+            <h4>底图来源</h4>
+            <div style="display:flex;gap:8px">
+              <button type="button" class="wu-btn" data-variant="secondary" data-size="sm"><span class="wu-btn-label">生成</span></button>
+              <button type="button" class="wu-btn" data-variant="secondary" data-size="sm"><svg class="wu-icon sm" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 17v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/><path d="M12 3v13"/><path d="M7 8l5-5 5 5"/></svg><span class="wu-btn-label">上传</span></button>
+            </div>
+            <p class="wu-caption" style="margin-top:8px;line-height:1.6">生成时明确引用 A/B 身份图、场景、目标比例；候选图需由人检查身份和遮挡。不支持多参考图编辑时提供上传替代，<b>不默默丢掉人物参考图</b>。</p>
+          </div>
+          <div class="hf-ins-sec">
+            <h4>人物区域</h4>
+            <div class="hf-region" style="position:relative;height:44px;margin-bottom:8px"><span class="tag">A 区</span><span class="hf-mono" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);color:var(--wu-semantic-secondary)">0.06, 0.12, 0.40, 0.82</span></div>
+            <div class="hf-region b" style="position:relative;height:44px;margin-bottom:8px"><span class="tag">B 区</span><span class="hf-mono" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);color:var(--wu-semantic-secondary)">0.56, 0.12, 0.38, 0.82</span></div>
+            <p class="wu-caption" style="line-height:1.6">在<b>最终送入视频工作流的图</b>上标注；矩形框为首版，精细笔刷后置。修改构图后需重新生成人物区域与样片，原图和旧样片保留作比较。</p>
+          </div>
+          <div class="hf-ins-sec">
+            <h4>坐标信息</h4>
+            <div class="hf-coords"><span>原图</span><b>1920 × 1080</b></div>
+            <div class="hf-coords"><span>规范化</span><b>0–1 · 人物区域</b></div>
+            <div class="hf-coords"><span>模型输入</span><b>1024 × 576</b></div>
+            <div class="hf-coords"><span>变换</span><b>线性仿射 · 底图与 mask 同一几何变换</b></div>
+          </div>
+        </aside>
+      </div>
+      <!-- TimelineBar（05 §1.5 深色面板，配音确认后常驻） -->
+      <div class="hf-timeline" aria-label="时间轨">
+        <span class="hf-tl-time"><svg class="wu-icon sm" viewBox="0 0 24 24" aria-hidden="true" style="color:var(--wu-semantic-brand)"><path d="M6 5l12 7-12 7V5z"/></svg>01:23.4 / 02:48.120</span>
+        <div class="hf-tl-tracks">
+          <div class="hf-tl-track"><span class="hf-tl-seg a" style="left:1%;width:34%"></span><span class="hf-tl-seg a" style="left:52%;width:20%"></span><span class="hf-tl-seg b" style="left:38%;width:12%"></span><span class="hf-tl-seg b" style="left:74%;width:22%"></span><span class="hf-tl-play" style="left:41%"></span></div>
+          <div class="hf-tl-track" style="height:8px"><span class="hf-tl-mark" style="left:6%"></span><span class="hf-tl-mark" style="left:20%"></span><span class="hf-tl-mark" style="left:38%"></span><span class="hf-tl-mark" style="left:52%"></span><span class="hf-tl-mark" style="left:74%"></span><span class="hf-tl-mark" style="left:88%"></span></div>
+        </div>
+        <span class="hf-tl-label">样片区间 ▎01:12–01:28</span>
+        <span class="hf-tl-label">A 轨 / B 轨</span>
+      </div>
+      <!-- FootBar（01 §1.4） -->
+      <footer class="hf-foot">
+        <span class="hf-pos">阶段 4 / 5 · 预览画面</span>
+        <button type="button" class="wu-btn" data-variant="secondary" data-size="sm"><span class="wu-btn-label">← 上一步</span></button>
+        <span class="wu-badge" data-tone="warning">确认点 · 样片确认</span>
+        <span class="wu-caption">接受样片绑定本次输入版本、工作流与规格</span>
+        <span class="hf-spacer"></span>
+        <button type="button" class="wu-btn" data-size="sm"><span class="wu-btn-label">下一步 →</span></button>
+      </footer>
+    </div>
+  </div>
+</div>
+<div class="vp-note">本屏壳形态：有 Inspector（底图来源 / 人物区域 / 坐标信息）· 有 TimelineBar · 页内 Tab 作为分区锚点（本稿三分区同时展示）· 未生成样片前「接受样片」禁用 · 画布人物区域为几何标注示意</div>
+
+<h2 class="sec"><span class="no">二</span>状态变体</h2>
+<p class="lead">本屏关键状态的实况渲染（非示意），变体只呈现差异区域，其余与主稿一致。</p>
+<div class="var-grid">
+
+  <div class="var">
+    <div class="cap">V1 · 生成同框底图中</div>
+    <div class="desc">生成时明确引用 A/B 身份图、场景、目标比例；候选图需由人检查身份和遮挡（01 §6.2）。</div>
+    <div class="demo">
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <span class="wu-badge" data-tone="info">同框底图生成中</span>
+        <span class="wu-caption">引用：A 身份图 · B 身份图 · 场景「录音棚」· 16:9</span>
+      </div>
+      <div class="hf-prog" style="margin-top:10px"><i style="width:38%"></i></div>
+      <p class="wu-caption" style="margin-top:8px">图片 API 失败时保存提示词与引用关系，可重试或上传替代素材；不支持多参考图编辑时走上传替代，不默默丢掉人物参考图。</p>
+    </div>
+  </div>
+
+  <div class="var">
+    <div class="cap">V2 · 样片生成中</div>
+    <div class="desc">样片区间 01:12–01:28（A→B→A）；生成中检查清单置灰，可随时调整区间（01 §6.4）。</div>
+    <div class="demo">
+      <div class="hf-sample-head">
+        <span class="hf-mono" style="color:var(--wu-semantic-text);background:var(--wu-semantic-muted);padding:3px 10px;border-radius:6px">01:12 – 01:28 · A→B→A</span>
+        <span class="wu-badge" data-tone="info">样片生成中 62%</span>
+        <span class="hf-spacer"></span>
+        <button type="button" class="wu-btn" data-variant="ghost" data-size="sm"><span class="wu-btn-label">取消</span></button>
+      </div>
+      <div class="hf-prog" style="margin-top:10px"><i style="width:62%"></i></div>
+      <div class="hf-check" style="opacity:.55"><label class="wu-choice"><input type="checkbox" disabled><span>错误开口</span></label><label class="wu-choice"><input type="checkbox" disabled><span>口型同步</span></label></div>
+    </div>
+  </div>
+
+  <div class="var">
+    <div class="cap">V3 · 样片检查完成，可接受</div>
+    <div class="desc">全部检查通过后「接受样片」可用：绑定本次输入版本、工作流与规格；只证明已检查区间和配置，不保证整片无缺陷（01 §6.4）。</div>
+    <div class="demo">
+      <div class="hf-sample-head">
+        <span class="wu-badge" data-tone="success">样片 V3 · 已检查</span>
+        <span class="hf-spacer"></span>
+        <button type="button" class="wu-btn" data-variant="brand" data-size="sm"><svg class="wu-icon sm" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 13l4 4L19 7"/></svg><span class="wu-btn-label">接受样片</span></button>
+      </div>
+      <div class="hf-check" style="margin-top:8px">
+        <label class="wu-choice"><input type="checkbox" checked><span>错误开口 ✓</span></label>
+        <label class="wu-choice"><input type="checkbox" checked><span>口型同步 ✓</span></label>
+        <label class="wu-choice"><input type="checkbox" checked><span>角色一致 ✓</span></label>
+        <label class="wu-choice"><input type="checkbox" checked><span>边界连续 ✓</span></label>
+        <label class="wu-choice"><input type="checkbox" checked><span>声音与清晰度 ✓</span></label>
+      </div>
+      <p class="wu-caption" style="margin-top:8px">样片与正式片段具有完全相同输入、参数、上下文和区间时才可复用；低规格快速样片不能充当高规格正式片段。</p>
+    </div>
+  </div>
+
+  <div class="var">
+    <div class="cap">V4 · 竖屏构图提示</div>
+    <div class="desc">竖屏需独立检查构图；不承诺横屏素材无损裁成竖屏（01 §0.5 / §3.2）。</div>
+    <div class="demo">
+      <div class="wu-alert" data-tone="warning">竖屏建议采用上下分栏双人构图；构图需独立检查，不承诺横屏素材无损裁成竖屏。</div>
+      <div class="hf-canvas" style="height:150px;margin-top:10px">
+        <span class="scene-hint">竖屏 9:16 画布 · 上下分栏</span>
+        <div class="hf-region" style="left:18%;top:6%;width:64%;height:40%"><span class="tag">A 区（上）</span></div>
+        <div class="hf-region b" style="left:18%;top:52%;width:64%;height:40%"><span class="tag">B 区（下）</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="var" style="grid-column:1 / -1">
+    <div class="cap">V5 · 动态模式效果不佳 → 替代形式候选</div>
+    <div class="desc">用户选择后才生成对比样片，不自动改变节目形式（01 §6.4）。</div>
+    <div class="demo">
+      <div class="wu-alert" data-tone="warning">动态模式在部分区间效果不佳，可尝试替代形式（下方候选）；选择后才会生成对比样片，不会自动改变节目形式。</div>
+      <div style="display:flex;gap:10px;margin-top:10px;flex-wrap:wrap">
+        <button type="button" class="wu-btn" data-variant="secondary" data-size="sm"><span class="wu-btn-label">双窗</span></button>
+        <button type="button" class="wu-btn" data-variant="secondary" data-size="sm"><span class="wu-btn-label">单人动态 + 静态全景</span></button>
+        <button type="button" class="wu-btn" data-variant="secondary" data-size="sm"><span class="wu-btn-label">静态 + 配音 + 字幕</span></button>
+      </div>
+      <p class="wu-caption" style="margin-top:8px">每种候选附预估与说明；选择后才生成对比样片。</p>
+    </div>
+  </div>
+
+</div>
+
+<h2 class="sec"><span class="no">三</span>状态矩阵</h2>
+<div class="dcard">
+  <table class="dt">
+    <thead><tr><th>对象</th><th>状态</th><th>呈现（基线组件与色调）</th><th>依据</th></tr></thead>
+    <tbody>
+      <tr><td rowspan="3"><b>本阶段整体（七态）</b></td><td>可执行 <span class="wu-caption">（默认）</span></td><td>阶段轨④高亮无徽章；「生成样片」brand 可用；「接受样片」禁用</td><td>01 §13.1</td></tr>
+      <tr><td>执行中</td><td>同框底图 / 样片生成中：info 徽章 + 进度条，可取消</td><td>01 §13.1</td></tr>
+      <tr><td>待确认</td><td>样片检查完成后徽章转 warning「待确认」；「接受样片」可用</td><td>01 §13.1</td></tr>
+      <tr><td rowspan="2"><b>构图区</b></td><td>底图来源</td><td>生成（引用 A/B 身份图 · 场景 · 比例）/ 上传替代；失败保存提示词与引用关系</td><td>01 §6.2</td></tr>
+      <tr><td>人物区域</td><td>最终送入视频工作流的图上标注；矩形框首版；修改后重生成区域与样片，原图与旧样片保留比较</td><td>01 §6.2</td></tr>
+      <tr><td rowspan="2"><b>镜头区</b></td><td>镜头预设</td><td>默认稳定同框；可选轻微推拉 / 发言人裁切；不默认每次换人必切镜</td><td>01 §6.3</td></tr>
+      <tr><td>轻量预览</td><td>用底图、真实音轨和裁切框预览节奏；明确标记「构图预览，无动态口型」</td><td>01 §6.3</td></tr>
+      <tr><td rowspan="3"><b>样片区</b></td><td>生成样片</td><td>自动选双方都有发言、含 A→B→A 的区间（初始 10–20s）；用户可调整范围</td><td>01 §6.4</td></tr>
+      <tr><td>检查清单</td><td>错误开口 / 口型同步 / 角色一致 / 边界连续 / 声音清晰度；不能只检查是否生成成功</td><td>01 §6.4</td></tr>
+      <tr><td>接受样片</td><td>绑定本次输入版本、工作流与规格；只证明已检查区间，不保证整片无缺陷</td><td>01 §6.4</td></tr>
+      <tr><td><b>复用条件</b></td><td>样片 ↔ 正式段</td><td>完全相同输入、参数、上下文和区间才可复用；低规格快速样片不能充当高规格正式片段</td><td>01 §6.4</td></tr>
+      <tr><td><b>替代形式</b></td><td>动态效果不佳</td><td>显示候选（双窗 / 单人动态+静态全景 / 静态+配音+字幕）；用户选择后才生成对比样片</td><td>01 §6.4</td></tr>
+      <tr><td><b>FootBar</b></td><td>本阶段</td><td>「确认点 · 样片确认」warning 徽章；下一步仅导航</td><td>01 §1.4 / §6</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<h2 class="sec"><span class="no">四</span>边界说明</h2>
+<div class="dcard">
+  <ul class="b">
+    <li><b>风格基准</b>：全部视觉来自 workspace-ui v0.2 基线 + <code>duo-shell.css</code> 组合扩展；人物区域矩形框用 info 蓝 / B 粉描边（几何标注，非真实图片）。</li>
+    <li><b>页内 Tab</b>：本稿三分区同时展示（对齐 01 §6.1 布局图），Tab 作为分区锚点；切到样片 Tab 聚焦样片区（基线决策）。</li>
+    <li><b>样片权威</b>：样片与正式片段复用需输入 / 参数 / 上下文 / 区间完全相同；低规格快速样片不能充当高规格正式片段。</li>
+    <li><b>检查语义</b>：检查清单不能只检查是否生成成功；接受样片只证明已检查区间和配置。</li>
+    <li><b>镜头后处理</b>：镜头属于后处理（数字运镜 / 裁切 / 版式），改镜头不触发基础视频重渲染。</li>
+    <li><b>坐标权威</b>：三类坐标（原始图 / 规范化人物区域 / 模型实际输入）与确定变换；底图和 mask 使用同一几何变换。</li>
+    <li><b>入口边界</b>：未有配音时允许准备构图，但<b>不能生成真实口型样片</b>。</li>
+  </ul>
+</div>
+
+<h2 class="sec"><span class="no">五</span>衔接与配套</h2>
+<div class="cols2">
+  <div class="dcard">
+    <h5 style="font-size:13.5px;margin:0 0 6px;font-weight:600">上下游</h5>
+    <ul class="b">
+      <li>「接受样片」→ <b>HF-05 阶段⑤生成导出</b>（进入分段渲染与导出）</li>
+      <li>角色图 / 场景 / 同框图 → 资产库（HF-06）；图片 API 能力 → 服务设置（HF-07）</li>
+      <li>上一屏：<b>HF-03 阶段③试听配音</b>（真实音轨供轻量预览与样片）</li>
+      <li>样片标记 → TimelineBar 拖动调整</li>
+    </ul>
+  </div>
+  <div class="dcard">
+    <h5 style="font-size:13.5px;margin:0 0 6px;font-weight:600">验证状态</h5>
+    <ul class="b">
+      <li>已做：与 01 §6 元素逐项对齐；壳分区与 05 §4.1–4.2 一致；人物区域为几何标注（非占位图）；状态变体实况渲染</li>
+      <li>未做：真实图片渲染、矩形框拖拽标注、样片播放、键盘走查、200% 文本缩放</li>
+      <li>基线自身状态：implemented-prototype（沿用基线声明）</li>
+    </ul>
+  </div>
+</div>
+
+</div>
+
+<script>
+(function(){
+  var vp=document.getElementById('vp'),fr=document.getElementById('frame'),pct=document.getElementById('pct');
+  var bFit=document.getElementById('bFit'),bOne=document.getElementById('bOne'),mode='fit';
+  function fit(){
+    if(mode==='fit'){
+      var s=Math.min(1,vp.clientWidth/1440);
+      fr.style.transform='scale('+s+')';
+      vp.style.height=(fr.offsetHeight*s)+'px';
+      pct.textContent='显示 '+Math.round(s*100)+'%';
+    }else{
+      fr.style.transform='none';
+      vp.style.height=fr.offsetHeight+'px';
+      pct.textContent='1:1 · 横向滚动';
+    }
+  }
+  window.addEventListener('resize',fit);
+  bFit.onclick=function(){mode='fit';bFit.classList.add('on');bOne.classList.remove('on');fit()};
+  bOne.onclick=function(){mode='one';bOne.classList.add('on');bFit.classList.remove('on');fit()};
+  fit();
+})();
+</script>
+</body>
+</html>

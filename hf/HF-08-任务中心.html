@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HF-08 · 任务中心 · 高保真稿 v1.0</title>
+<link rel="stylesheet" href="vendor/workspace-ui/tokens.css">
+<link rel="stylesheet" href="vendor/workspace-ui/components.css">
+<link rel="stylesheet" href="vendor/duo-shell.css">
+<script defer src="vendor/workspace-ui/components.js"></script>
+<style>
+/* ============ 任务中心 屏内组合（全部取值 --wu-* 令牌） ============ */
+.hf-h{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:12px 20px 4px}
+.hf-h h2{font-size:18px;font-weight:700;margin:0 4px 0 0}
+.hf-body2{flex:1;min-height:0;overflow:auto;padding:10px 20px 20px}
+.hf-grp{margin-top:18px}
+.hf-grp:first-child{margin-top:6px}
+.hf-grp-t{display:flex;align-items:center;gap:8px;font-size:13.5px;font-weight:700;color:var(--wu-semantic-text);margin-bottom:8px}
+.hf-grp-t .wu-caption{font-weight:400}
+
+/* TaskCard（01 §10.1：阶段/版本/耗时/失败信息/可执行操作） */
+.hf-task{display:flex;align-items:flex-start;gap:12px;border:1px solid var(--wu-semantic-border);border-radius:var(--wu-global-radius-lg);background:var(--wu-semantic-surface);padding:11px 14px;margin-bottom:8px;cursor:pointer}
+.hf-task.selected{border-color:var(--wu-semantic-primary);box-shadow:0 0 0 1px var(--wu-semantic-primary)}
+.hf-task:hover{border-color:var(--wu-semantic-control-border)}
+.hf-task-ic{width:22px;height:22px;border-radius:50%;flex:none;margin-top:1px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700}
+.hf-task-ic.run{background:var(--wu-semantic-brand);color:var(--wu-semantic-on-brand);position:relative}
+.hf-task-ic.run::after{content:"";position:absolute;inset:-4px;border-radius:50%;border:2px solid var(--wu-semantic-brand);opacity:.4;animation:hfPulse 1.4s ease-out infinite}
+.hf-task-ic.que{background:var(--wu-semantic-muted);color:var(--wu-semantic-caption)}
+.hf-task-ic.ok{background:var(--wu-semantic-success-bg);color:var(--wu-semantic-success)}
+.hf-task-ic.fail{background:var(--wu-semantic-danger-bg);color:var(--wu-semantic-danger)}
+.hf-task-ic.unk{background:var(--wu-semantic-warning-bg);color:var(--wu-semantic-warning)}
+@keyframes hfPulse{0%{transform:scale(.9);opacity:.5}100%{transform:scale(1.25);opacity:0}}
+.hf-task-bd{flex:1;min-width:0}
+.hf-task-t{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.hf-task-t b{font-size:13.5px;font-weight:600;color:var(--wu-semantic-text)}
+.hf-tag{font-family:var(--wu-global-mono);font-size:10.5px;color:var(--wu-semantic-caption);border:1px solid var(--wu-semantic-border);background:var(--wu-semantic-muted);padding:1px 6px;border-radius:5px;font-weight:600}
+.hf-task-meta{display:flex;align-items:center;gap:12px;margin-top:5px;font-size:11.5px;color:var(--wu-semantic-caption);flex-wrap:wrap}
+.hf-task-meta .err{color:var(--wu-semantic-danger)}
+.hf-task-meta .warn{color:var(--wu-semantic-warning)}
+.hf-task-meta .rec{color:var(--wu-semantic-info)}
+/* 五阶段语义进度（01 §10.1：准备/推理/下载落盘/校验/后处理） */
+.hf-phases{display:grid;grid-template-columns:repeat(5,1fr);gap:4px;margin-top:8px;max-width:520px}
+.hf-phases .ph{height:6px;border-radius:3px;background:var(--wu-semantic-muted);overflow:hidden}
+.hf-phases .ph i{display:block;height:100%;background:var(--wu-semantic-info);border-radius:3px}
+.hf-phases .ph.run i{background:var(--wu-semantic-brand)}
+.hf-phases .ph.slow i{background:var(--wu-semantic-warning)}
+.hf-phases .ph.bad i{background:var(--wu-semantic-danger)}
+.hf-phases-lb{display:flex;gap:4px;margin-top:3px;max-width:520px;font-size:9.5px;color:var(--wu-semantic-caption)}
+.hf-phases-lb span{flex:1;text-align:center}
+.hf-task-ops{display:flex;gap:6px;align-items:center;margin-top:8px;flex-wrap:wrap}
+.hf-que-note{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;color:var(--wu-semantic-caption);margin-top:6px}
+.hf-que-note .ph-wait{width:52px;height:6px;border-radius:3px;background:repeating-linear-gradient(90deg,var(--wu-semantic-muted) 0 5px,transparent 5px 8px)}
+.hf-foot-note{display:flex;gap:8px;flex-wrap:wrap;margin-top:16px;padding-top:12px;border-top:1px solid var(--wu-semantic-border);font-size:11.5px;color:var(--wu-semantic-caption);line-height:1.6}
+.hf-ins-rows{font-size:12.4px;color:var(--wu-semantic-secondary);line-height:1.65}
+.hf-ins-rows b{color:var(--wu-semantic-text);font-weight:600}
+.hf-ph-row{display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--wu-semantic-border);font-size:12.3px;color:var(--wu-semantic-secondary)}
+.hf-ph-row:last-child{border-bottom:none}
+.hf-ph-row .st{flex:none;width:18px;height:18px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700}
+.hf-ph-row .st.d{background:var(--wu-semantic-success-bg);color:var(--wu-semantic-success)}
+.hf-ph-row .st.c{background:var(--wu-semantic-brand);color:var(--wu-semantic-on-brand)}
+.hf-ph-row .st.w{background:var(--wu-semantic-warning-bg);color:var(--wu-semantic-warning)}
+.hf-ph-row .st.p{background:var(--wu-semantic-muted);color:var(--wu-semantic-caption)}
+.hf-ph-row .nm{flex:1;min-width:0}
+.hf-ph-row .nm small{display:block;font-size:10.5px;color:var(--wu-semantic-caption)}
+.hf-ph-row .val{font-family:var(--wu-global-mono);font-size:11px;color:var(--wu-semantic-caption)}
+</style>
+</head>
+<body class="wu">
+<div class="doc">
+
+<div class="dhead">
+  <div class="kick">HIGH-FIDELITY SCREEN · HF-08 · v1.0</div>
+  <h1>任务中心</h1>
+  <p>独立入口（TopBar 任务入口 / Sidebar）。统一显示<b>本地与 API 任务</b>：运行中 / 排队 / 已结束（今日）三组列表 + 右侧所选任务详情。重连时从服务端读取完整状态，不依赖浏览器此前收到的进度消息；进度按五阶段语义呈现，不当作精确剩余时间。</p>
+  <div class="meta">
+    <span>布局与元素权威 01 §10</span>
+    <span>壳蓝图 05 §4.1–4.2（独立入口，有 Inspector）</span>
+    <span>视觉与组件 workspace-ui v0.2 基线 + duo-shell 组合扩展</span>
+    <span>画布 1440 逻辑宽</span>
+    <span>baseline · 已定稿</span>
+  </div>
+</div>
+
+<h2 class="sec"><span class="no">一</span>高保真稿 · 默认态（选中「整期配音 R9」）</h2>
+<p class="lead">左列三组任务列表（运行中 / 排队 / 已结束今日），右列 Inspector 显示所选任务详情：五阶段进度、节点映射、取消语义与断线重连说明。</p>
+
+<div class="vp-bar">
+  <span class="ttl">任务中心 · 1440 × 900</span>
+  <span class="sp"></span>
+  <span class="pct" id="pct">显示 100%</span>
+  <button id="bFit" class="on">适应窗口</button>
+  <button id="bOne">1:1</button>
+</div>
+<div class="vp" id="vp">
+  <div class="frame" id="frame">
+    <div class="hf-app">
+      <!-- TopBar（01 §1.2，任务入口带徽章） -->
+      <header class="hf-top">
+        <span class="hf-brand"><span class="hf-mark"><i></i><i></i></span>双声播客工坊</span>
+        <span class="hf-proj">EP004 · 推理成本观察</span>
+        <span class="wu-row" style="gap:8px">
+          <span class="wu-badge" data-tone="success">文本 API</span>
+          <span class="wu-badge" data-tone="success">图片 API</span>
+          <span class="wu-badge" data-tone="success">本地引擎</span>
+          <span class="wu-badge">MiniMax 未配置</span>
+        </span>
+        <span class="hf-spacer"></span>
+        <span class="hf-vram">显存<span class="bar"><i></i></span>2.8 / 16 GB</span>
+        <button type="button" class="wu-btn" data-variant="primary" data-size="sm" aria-current="page"><svg class="wu-icon sm" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg><span class="wu-btn-label">任务</span><span class="wu-badge" data-tone="brand">2</span></button>
+        <span class="wu-caption">已保存</span>
+        <button type="button" class="wu-btn" data-variant="secondary" data-size="sm" disabled><svg class="wu-icon sm" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V3m-5 5 5-5 5 5M4 15v6h16v-6"/></svg><span class="wu-btn-label">导出</span></button>
+      </header>
+      <div class="hf-mid">
+        <!-- 阶段轨（01 §1.3，独立入口高亮） -->
+        <aside class="hf-rail" aria-label="阶段导航">
+          <div class="hf-stg done"><span class="hf-stg-no">1</span><span class="hf-stg-tt"><b>创建本期</b><small>话题与参数</small></span></div>
+          <div class="hf-stg done"><span class="hf-stg-no">2</span><span class="hf-stg-tt"><b>编辑对话</b><small>话轮与读音</small></span></div>
+          <div class="hf-stg done"><span class="hf-stg-no">3</span><span class="hf-stg-tt"><b>试听配音</b><small>音色与时长</small></span></div>
+          <div class="hf-stg done"><span class="hf-stg-no">4</span><span class="hf-stg-tt"><b>预览画面</b><small>构图镜头样片</small></span></div>
+          <div class="hf-stg done"><span class="hf-stg-no">5</span><span class="hf-stg-tt"><b>生成导出</b><small>渲染与导出</small></span></div>
+          <div class="hf-sep"></div>
+          <div class="hf-entry"><span class="hf-entry-sq"></span>资产库</div>
+          <div class="hf-entry"><span class="hf-entry-sq"></span>服务设置</div>
+          <div class="hf-entry active"><span class="hf-entry-sq" style="background:var(--wu-semantic-brand)"></span>任务中心</div>
+          <p class="hf-note">数据边界：工程与成片本地；文本/图片经所选 API</p>
+        </aside>
+        <!-- 主视图（01 §10.1：运行中 / 排队 / 已结束 三组） -->
+        <main class="hf-main">
+          <div class="hf-h">
+            <h2>任务中心</h2>
+            <span class="wu-caption">本地与 API 任务统一视图</span>
+            <span class="hf-spacer"></span>
+            <button type="button" class="wu-btn" data-variant="secondary" data-size="sm"><svg class="wu-icon sm" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.34-5.66"/><path d="M20 3v5h-5"/></svg><span class="wu-btn-label">刷新</span></button>
+          </div>
+          <div class="hf-body2">
+
+            <!-- 运行中 -->
+            <section class="hf-grp">
+              <div class="hf-grp-t">运行中 <span class="wu-badge" data-tone="brand">2</span></div>
+
+              <div class="hf-task selected">
+                <span class="hf-task-ic run">●</span>
+                <div class="hf-task-bd">
+                  <div class="hf-task-t"><b>整期配音</b><span class="hf-tag">R9</span><span class="hf-tag">段 3/9</span><span class="hf-task-meta" style="margin:0;margin-left:auto"><span>已 40s</span><span class="rec">预计 +3:10（本机同规格实测）</span></span></div>
+                  <div class="hf-phases">
+                    <span class="ph done"><i style="width:100%"></i></span>
+                    <span class="ph run"><i style="width:33%"></i></span>
+                    <span class="ph"><i style="width:0"></i></span>
+                    <span class="ph"><i style="width:0"></i></span>
+                    <span class="ph"><i style="width:0"></i></span>
+                  </div>
+                  <div class="hf-phases-lb"><span>准备</span><span>推理</span><span>下载落盘</span><span>校验</span><span>后处理</span></div>
+                  <div class="hf-task-ops">
+                    <button type="button" class="wu-btn" data-variant="secondary" data-size="sm"><span class="wu-btn-label">当前段完成后暂停</span></button>
+                    <button type="button" class="wu-btn" data-variant="ghost" data-size="sm"><span class="wu-btn-label">取消</span></button>
+                  </div>
+                </div>
+              </div>
+
+              <div class="hf-task">
+                <span class="hf-task-ic run">●</span>
+                <div class="hf-task-bd">
+                  <div class="hf-task-t"><b>样片渲染</b><span class="hf-tag">V3</span><span class="hf-task-meta" style="margin:0;margin-left:auto"><span>推理中 62%</span><span class="rec">预计 +3:10（本机同规格实测）</span></span></div>
+                  <div class="hf-phases">
+                    <span class="ph done"><i style="width:100%"></i></span>
+                    <span class="ph run"><i style="width:62%"></i></span>
+                    <span class="ph"><i style="width:0"></i></span>
+                    <span class="ph"><i style="width:0"></i></span>
+                    <span class="ph"><i style="width:0"></i></span>
+                  </div>
+                  <div class="hf-phases-lb"><span>准备</span><span>推理</span><span>下载落盘</span><span>校验</span><span>后处理</span></div>
+                  <div class="hf-task-ops">
+                    <button type="button" class="wu-btn" data-variant="secondary" data-size="sm"><span class="wu-btn-label">暂停</span></button>
+                    <button type="button" class="wu-btn" data-variant="ghost" data-size="sm"><span class="wu-btn-label">取消</span></button>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <!-- 排队 -->
+            <section class="hf-grp">
+              <div class="hf-grp-t">排队 <span class="wu-badge">1</span></div>
+              <div class="hf-task">
+                <span class="hf-task-ic que">○</span>
+                <div class="hf-task-bd">
+                  <div class="hf-task-t"><b>渲染段 #04</b><span class="hf-tag">段 4/9</span></div>
+                  <div class="hf-que-note"><span class="ph-wait"></span>等待 GPU · 前置：段#03</div>
+                  <div class="hf-task-ops">
+                    <button type="button" class="wu-btn" data-variant="ghost" data-size="sm"><span class="wu-btn-label">取消排队</span></button>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <!-- 已结束（今日） -->
+            <section class="hf-grp">
+              <div class="hf-grp-t">已结束（今日） <span class="wu-badge">3</span></div>
+
+              <div class="hf-task">
+                <span class="hf-task-ic ok">✓</span>
+                <div class="hf-task-bd">
+                  <div class="hf-task-t"><b>底图生成</b><span class="hf-tag">V3</span><span class="hf-task-meta" style="margin:0;margin-left:auto"><span>51s · 10:05 完成</span></span></div>
+                  <div class="hf-task-ops">
+                    <button type="button" class="wu-btn" data-variant="ghost" data-size="sm"><span class="wu-btn-label">查看产物</span></button>
+                  </div>
+                </div>
+              </div>
+
+              <div class="hf-task">
+                <span class="hf-task-ic fail">✗</span>
+                <div class="hf-task-bd">
+                  <div class="hf-task-t"><b>图片生成</b><span class="hf-tag">V2</span><span class="hf-task-meta" style="margin:0;margin-left:auto"><span class="err">余额不足</span><span>09:58 失败</span></span></div>
+                  <div class="hf-task-ops">
+                    <button type="button" class="wu-btn" data-variant="secondary" data-size="sm"><span class="wu-btn-label">去服务设置</span></button>
+                    <button type="button" class="wu-btn" data-variant="ghost" data-size="sm"><span class="wu-btn-label">换上传</span></button>
+                  </div>
+                </div>
+              </div>
+
+              <div class="hf-task">
+                <span class="hf-task-ic unk">?</span>
+                <div class="hf-task-bd">
+                  <div class="hf-task-t"><b>文本生成</b><span class="hf-tag">R8</span><span class="hf-task-meta" style="margin:0;margin-left:auto"><span class="warn">结果待核实</span><span>04:12 提交 · 已超时 2:00</span></span></div>
+                  <div class="hf-task-ops">
+                    <button type="button" class="wu-btn" data-variant="secondary" data-size="sm"><span class="wu-btn-label">查询</span></button>
+                    <span class="wu-caption">超时且不知服务是否处理；再次生成可能重复计费</span>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <p class="hf-foot-note">
+              <span>重连：从服务端读取完整状态，不依赖浏览器此前收到的进度消息（事件带序号，断线补发或读快照）。</span>
+              <span>进度：准备 / 推理 / 下载落盘 / 校验 / 后处理；节点进度映射为阶段进度，不当作精确剩余时间；ETA 用同规格历史测量。</span>
+            </p>
+          </div>
+        </main>
+        <!-- 检查器（05 §4.3：所选任务详情） -->
+        <aside class="hf-inspector" aria-label="检查器">
+          <div class="hf-ins-sec">
+            <h4>所选任务 <span class="wu-caption" style="font-weight:400">整期配音 R9</span></h4>
+            <div class="hf-ins-rows">
+              <div class="hf-fld" style="grid-template-columns:64px 1fr"><label>类型</label><span>整期配音 · 9 段 · 38.6 万字符</span></div>
+              <div class="hf-fld" style="grid-template-columns:64px 1fr"><label>提交</label><span>09:32:10 · R9（文本 R8 + 读音词典 v5）</span></div>
+              <div class="hf-fld" style="grid-template-columns:64px 1fr"><label>进度</label><span>段 3/9 · 已 40s</span></div>
+              <div class="hf-fld" style="grid-template-columns:64px 1fr"><label>ETA</label><span>+3:10 · 同规格历史实测，非精确剩余时间</span></div>
+            </div>
+          </div>
+          <div class="hf-ins-sec">
+            <h4>五阶段进度 <span class="wu-caption" style="font-weight:400">节点映射为阶段</span></h4>
+            <div class="hf-ph-row"><span class="st d">✓</span><span class="nm">准备<small>段 1–2 已就绪</small></span><span class="val">100%</span></div>
+            <div class="hf-ph-row"><span class="st c">●</span><span class="nm">推理<small>段 3 · 引擎内 33%</small></span><span class="val">33%</span></div>
+            <div class="hf-ph-row"><span class="st p">—</span><span class="nm">下载落盘<small>本机引擎无下载</small></span><span class="val">—</span></div>
+            <div class="hf-ph-row"><span class="st p">—</span><span class="nm">校验<small>时长 / 读音一致性</small></span><span class="val">—</span></div>
+            <div class="hf-ph-row"><span class="st p">—</span><span class="nm">后处理<small>对齐 / 打包</small></span><span class="val">—</span></div>
+          </div>
+          <div class="hf-ins-sec">
+            <h4>取消语义</h4>
+            <div class="hf-task-ops" style="margin-top:0">
+              <button type="button" class="wu-btn" data-variant="secondary" data-size="sm"><span class="wu-btn-label">当前段完成后暂停</span></button>
+              <button type="button" class="wu-btn" data-variant="ghost" data-size="sm"><span class="wu-btn-label">取消</span></button>
+            </div>
+            <p class="wu-caption" style="margin-top:8px;line-height:1.65">「正在取消」与「已取消」分开呈现；没有可验证的定向取消能力时显示「取消待生效」。取消后当前段已落盘内容保留，可续跑。</p>
+          </div>
+          <div class="hf-ins-sec">
+            <h4>连接与一致性</h4>
+            <p class="wu-caption" style="line-height:1.7">事件带序号；断线后从服务端<b>读取完整状态</b>（补发或读快照），不依赖浏览器此前收到的进度。任务详情随列表状态实时刷新。</p>
+          </div>
+        </aside>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="vp-note">本屏为独立入口：TopBar 任务按钮带运行数徽章 · 三组列表（运行中/排队/已结束今日）· Inspector 显示所选任务详情 · 五阶段语义进度 · 刷新读取服务端完整状态</div>
+
+<h2 class="sec"><span class="no">二</span>状态变体</h2>
+<p class="lead">本屏关键状态的实况渲染（非示意），变体只呈现差异区域，其余与主稿一致。</p>
+<div class="var-grid">
+
+  <div class="var">
+    <div class="cap">V1 · 取消语义（正在取消 / 取消待生效）</div>
+    <div class="desc">「正在取消」与「已取消」分开；没有可验证的定向取消能力时显示「取消待生效」，说明原因与可替代操作（01 §10.1）。</div>
+    <div class="demo">
+      <div class="hf-task" style="margin-bottom:8px">
+        <span class="hf-task-ic run">●</span>
+        <div class="hf-task-bd">
+          <div class="hf-task-t"><b>整期配音</b><span class="hf-tag">R9</span><span class="hf-task-meta" style="margin:0;margin-left:auto"><span>正在取消 · 段 3/9</span></span></div>
+          <div class="hf-task-ops"><span class="wu-badge" data-tone="warning">正在取消</span><span class="wu-caption">完成后自动置为「已取消」</span></div>
+        </div>
+      </div>
+      <div class="hf-task">
+        <span class="hf-task-ic run">●</span>
+        <div class="hf-task-bd">
+          <div class="hf-task-t"><b>图片生成</b><span class="hf-tag">V2</span></div>
+          <div class="hf-task-ops"><span class="wu-badge" data-tone="warning">取消待生效</span><span class="wu-caption">该 API 无可验证的定向取消；可先完成当前请求再忽略结果</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="var">
+    <div class="cap">V2 · 待核实（unknown，可能重复计费）</div>
+    <div class="desc">提交后超时且不知服务是否处理时标 unknown；能查询就查询，不能则告知再次生成可能重复计费（01 §10.1）。</div>
+    <div class="demo">
+      <div class="hf-task">
+        <span class="hf-task-ic unk">?</span>
+        <div class="hf-task-bd">
+          <div class="hf-task-t"><b>文本生成</b><span class="hf-tag">R8</span><span class="hf-task-meta" style="margin:0;margin-left:auto"><span class="warn">结果待核实</span><span>04:12 提交 · 已超时 2:00</span></span></div>
+          <div class="hf-task-ops">
+            <button type="button" class="wu-btn" data-variant="secondary" data-size="sm"><span class="wu-btn-label">查询</span></button>
+            <button type="button" class="wu-btn" data-variant="ghost" data-size="sm"><span class="wu-btn-label">再次生成</span></button>
+          </div>
+        </div>
+      </div>
+      <p class="wu-caption" style="margin-top:8px">查询接口不可用时，再次生成<b>可能重复计费</b>；点击「再次生成」需在弹窗中二次确认。</p>
+    </div>
+  </div>
+
+  <div class="var">
+    <div class="cap">V3 · 断线重连（从服务端读取完整状态）</div>
+    <div class="desc">重连后不从浏览器历史进度推断；事件带序号，断线补发或读快照（01 §10.1）。</div>
+    <div class="demo">
+      <div class="hf-task">
+        <span class="hf-task-ic run">●</span>
+        <div class="hf-task-bd">
+          <div class="hf-task-t"><b>样片渲染</b><span class="hf-tag">V3</span><span class="hf-task-meta" style="margin:0;margin-left:auto"><span>推理中 62%</span></span></div>
+          <div class="hf-phases">
+            <span class="ph done"><i style="width:100%"></i></span>
+            <span class="ph run"><i style="width:62%"></i></span>
+            <span class="ph"><i style="width:0"></i></span>
+            <span class="ph"><i style="width:0"></i></span>
+            <span class="ph"><i style="width:0"></i></span>
+          </div>
+          <div class="hf-task-ops"><span class="wu-badge" data-tone="info">已重连 · 服务端快照 10:08:12</span></div>
+        </div>
+      </div>
+      <p class="wu-caption" style="margin-top:8px">断线期间漏掉的进度事件按序号补发；状态以服务端快照为准。</p>
+    </div>
+  </div>
+
+  <div class="var">
+    <div class="cap">V4 · 运行中进度阶段细分（慢速阶段警示）</div>
+    <div class="desc">下载落盘 / 校验等阶段单独着色；节点进度映射为阶段进度，不当作精确剩余时间（01 §10.1）。</div>
+    <div class="demo">
+      <div class="hf-phases" style="max-width:100%">
+        <span class="ph done"><i style="width:100%"></i></span>
+        <span class="ph done"><i style="width:100%"></i></span>
+        <span class="ph slow"><i style="width:70%"></i></span>
+        <span class="ph"><i style="width:0"></i></span>
+        <span class="ph"><i style="width:0"></i></span>
+      </div>
+      <div class="hf-phases-lb" style="max-width:100%"><span>准备</span><span>推理</span><span>下载落盘</span><span>校验</span><span>后处理</span></div>
+      <p class="wu-caption" style="margin-top:6px">下载落盘 70% · 网络慢不影响已推理结果；校验阶段出现「读音不一致」将标记对应段待复核。</p>
+    </div>
+  </div>
+
+</div>
+
+<h2 class="sec"><span class="no">三</span>状态矩阵</h2>
+<div class="dcard">
+  <table class="dt">
+    <thead><tr><th>对象</th><th>状态</th><th>呈现（基线组件与色调）</th><th>依据</th></tr></thead>
+    <tbody>
+      <tr><td rowspan="3"><b>任务分组</b></td><td>运行中</td><td>品牌色脉冲圆点 ● + 五阶段进度条 + 已耗时 / ETA</td><td>01 §10.1</td></tr>
+      <tr><td>排队</td><td>中性空心圆 ○ + 等待原因（等待 GPU）+ 前置依赖 + 取消排队</td><td>01 §10.1</td></tr>
+      <tr><td>已结束（今日）</td><td>✓ success / ✗ danger / ? warning 圆形状态标 + 耗时 + 失败信息 + 操作</td><td>01 §10.1</td></tr>
+      <tr><td><b>显示字段</b></td><td>统一</td><td>阶段、版本（R9 / V3 等）、耗时、失败信息、可执行操作（暂停 / 取消 / 重试 / 查询 / 查看产物）</td><td>01 §10.1</td></tr>
+      <tr><td rowspan="2"><b>进度语义</b></td><td>五阶段</td><td>准备 / 推理 / 下载落盘 / 校验 / 后处理；节点进度映射为阶段进度</td><td>01 §10.1</td></tr>
+      <tr><td>ETA</td><td>同规格历史实测；不当作精确剩余时间</td><td>01 §10.1</td></tr>
+      <tr><td rowspan="2"><b>取消语义</b></td><td>正在取消 / 已取消</td><td>两个状态分开呈现</td><td>01 §10.1</td></tr>
+      <tr><td>取消待生效</td><td>没有可验证的定向取消能力时显示「取消待生效」并说明替代操作</td><td>01 §10.1</td></tr>
+      <tr><td><b>待核实</b></td><td>unknown</td><td>标「结果待核实」；能查询就查询，不能则告知再次生成可能重复计费</td><td>01 §10.1</td></tr>
+      <tr><td><b>重连</b></td><td>断线恢复</td><td>从服务端读取完整状态，不依赖浏览器之前收到的进度消息（事件带序号，断线补发或读快照）</td><td>01 §10.1</td></tr>
+      <tr><td><b>入口</b></td><td>TopBar / Sidebar</td><td>TopBar 任务按钮带徽章（运行中数量）；点击打开任务中心</td><td>01 §1.2 / 01 §10</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<h2 class="sec"><span class="no">四</span>边界说明</h2>
+<div class="dcard">
+  <ul class="b">
+    <li><b>风格基准</b>：全部视觉来自 workspace-ui v0.2 基线 + <code>duo-shell.css</code> 组合扩展；状态用「圆点 + 文字 + 徽章」多通道，无纯色点。</li>
+    <li><b>统一视图</b>：本地与 API 任务同列表呈现，不按引擎分栏。</li>
+    <li><b>进度不撒谎</b>：节点进度映射为阶段进度，不当作精确剩余时间；ETA 一律标注「同规格历史实测」。</li>
+    <li><b>取消可验证</b>：「正在取消」与「已取消」分开；无定向取消能力时显示「取消待生效」。</li>
+    <li><b>费用诚实</b>：待核实任务不自动重试；再次生成需二次确认并提示可能重复计费。</li>
+    <li><b>重连权威</b>：状态以服务端快照为准，事件带序号补发，不依赖浏览器历史进度。</li>
+  </ul>
+</div>
+
+<h2 class="sec"><span class="no">五</span>衔接与配套</h2>
+<div class="cols2">
+  <div class="dcard">
+    <h5 style="font-size:13.5px;margin:0 0 6px;font-weight:600">上下游</h5>
+    <ul class="b">
+      <li>「去服务设置」→ 来自任务失败原因（余额不足、API 401 等）</li>
+      <li>「查看产物」→ 打开对应素材 / 成片（HF-04 样片、HF-05 分段、资产库底图）</li>
+      <li>任务失败通知（toast「查看详情」）→ 打开任务中心并选中该任务</li>
+      <li>工程首页工程卡「仍有后台任务」橙色徽章 → 直达任务中心</li>
+    </ul>
+  </div>
+  <div class="dcard">
+    <h5 style="font-size:13.5px;margin:0 0 6px;font-weight:600">验证状态</h5>
+    <ul class="b">
+      <li>已做：与 01 §10 元素逐项对齐；三组列表 + Inspector 布局与 05 §4.3 一致；状态变体实况渲染</li>
+      <li>未做：真实任务驱动、断线重连、键盘走查、200% 文本缩放</li>
+      <li>基线自身状态：implemented-prototype（沿用基线声明）</li>
+    </ul>
+  </div>
+</div>
+
+</div>
+
+<script>
+(function(){
+  var vp=document.getElementById('vp'),fr=document.getElementById('frame'),pct=document.getElementById('pct');
+  var bFit=document.getElementById('bFit'),bOne=document.getElementById('bOne'),mode='fit';
+  function fit(){
+    if(mode==='fit'){
+      var s=Math.min(1,vp.clientWidth/1440);
+      fr.style.transform='scale('+s+')';
+      vp.style.height=(fr.offsetHeight*s)+'px';
+      pct.textContent='显示 '+Math.round(s*100)+'%';
+    }else{
+      fr.style.transform='none';
+      vp.style.height=fr.offsetHeight+'px';
+      pct.textContent='1:1 · 横向滚动';
+    }
+  }
+  window.addEventListener('resize',fit);
+  bFit.onclick=function(){mode='fit';bFit.classList.add('on');bOne.classList.remove('on');fit()};
+  bOne.onclick=function(){mode='one';bOne.classList.add('on');bFit.classList.remove('on');fit()};
+  fit();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HF-01 · 阶段① 创建本期 · 高保真稿 v1.0</title>
+<link rel="stylesheet" href="vendor/workspace-ui/tokens.css">
+<link rel="stylesheet" href="vendor/workspace-ui/components.css">
+<script defer src="vendor/workspace-ui/components.js"></script>
+<style>
+/* ============ 文档外壳（说明页本身，使用基线令牌着色） ============ */
+body{margin:0;background:var(--wu-semantic-canvas)}
+.doc{max-width:1200px;margin:0 auto;padding:24px 28px 90px}
+.dhead{background:linear-gradient(135deg,var(--wu-global-dark),var(--wu-global-ink));color:var(--wu-semantic-on-primary);border-radius:var(--wu-global-radius-lg);padding:22px 26px;margin-bottom:20px}
+.dhead .kick{font-size:11px;letter-spacing:2px;color:var(--wu-semantic-brand-hover);font-weight:700}
+.dhead h1{font-size:24px;font-weight:700;line-height:1.35;margin:8px 0 4px}
+.dhead p{color:#C9C6C0;font-size:13px;max-width:880px;line-height:1.6;margin:0}
+.dhead .meta{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+.dhead .meta span{font-size:11px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);padding:3px 10px;border-radius:var(--wu-global-pill)}
+h2.sec{font-size:20px;font-weight:700;margin:36px 0 6px;padding-top:14px;border-top:1px solid var(--wu-semantic-border)}
+h2.sec .no{color:var(--wu-semantic-brand);font-family:var(--wu-global-mono);margin-right:8px;font-size:16px}
+p.lead{color:var(--wu-semantic-secondary);margin:0 0 10px;font-size:13.5px}
+.dcard{background:var(--wu-semantic-surface);border:1px solid var(--wu-semantic-border);border-radius:var(--wu-global-radius-md);padding:16px 18px;margin:12px 0}
+.dnote{border-left:3px solid var(--wu-semantic-brand);background:var(--wu-semantic-muted);border-radius:0 var(--wu-global-radius-sm) var(--wu-global-radius-sm) 0;padding:10px 14px;font-size:12.8px;color:var(--wu-semantic-secondary);margin:10px 0}
+ul.b{padding-left:22px;margin:6px 0}
+ul.b li{margin:4px 0;color:var(--wu-semantic-secondary);font-size:13.2px}
+table.dt{width:100%;border-collapse:collapse;font-size:12.6px;margin:10px 0;background:var(--wu-semantic-raised)}
+table.dt th{background:var(--wu-semantic-muted);text-align:left;padding:8px 11px;font-weight:600;color:var(--wu-semantic-text);border-bottom:1px solid var(--wu-semantic-control-border)}
+table.dt td{padding:8px 11px;border-bottom:1px solid var(--wu-semantic-border);vertical-align:top;color:var(--wu-semantic-secondary);line-height:1.55}
+table.dt tr:last-child td{border-bottom:none}
+table.dt td b{color:var(--wu-semantic-text)}
+code{font-family:var(--wu-global-mono);font-size:11.6px;background:var(--wu-semantic-muted);padding:1px 6px;border-radius:4px;color:var(--wu-semantic-text)}
+.cols2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+@media(max-width:1000px){.cols2{grid-template-columns:1fr}}
+/* 视口工具 */
+.vp-bar{display:flex;align-items:center;gap:12px;padding:10px 2px 8px;font-size:12.5px;color:var(--wu-semantic-secondary)}
+.vp-bar .ttl{font-weight:600;color:var(--wu-semantic-text)}
+.vp-bar .sp{flex:1}
+.vp-bar .pct{font-family:var(--wu-global-mono);font-size:11.5px;color:var(--wu-semantic-caption)}
+.vp-bar button{font:inherit;font-size:12px;font-weight:600;height:26px;padding:0 12px;border-radius:7px;border:1px solid var(--wu-semantic-control-border);background:var(--wu-semantic-raised);color:var(--wu-semantic-text);cursor:pointer}
+.vp-bar button.on{background:var(--wu-semantic-primary);border-color:var(--wu-semantic-primary);color:var(--wu-semantic-on-primary)}
+.vp{background:var(--wu-global-dark);border-radius:var(--wu-global-radius-md);padding:10px;overflow:auto}
+.frame{width:1440px;transform-origin:0 0;border-radius:var(--wu-global-radius-sm);overflow:hidden;box-shadow:0 16px 48px color-mix(in srgb,var(--wu-global-ink) 14%,transparent)}
+.vp-note{font-size:11.5px;color:var(--wu-semantic-caption);margin:7px 2px 0;text-align:center}
+/* 变体区 */
+.var-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+@media(max-width:1000px){.var-grid{grid-template-columns:1fr}}
+.var{border:1px solid var(--wu-semantic-border);border-radius:var(--wu-global-radius-md);background:var(--wu-semantic-surface);padding:14px 16px}
+.var .cap{font-size:12.5px;font-weight:700;color:var(--wu-semantic-text);margin-bottom:4px}
+.var .desc{font-size:12px;color:var(--wu-semantic-caption);margin-bottom:12px;line-height:1.6}
+.var .demo{border:1px solid var(--wu-semantic-border);border-radius:var(--wu-global-radius-sm);background:var(--wu-semantic-canvas);padding:14px}
+
+/* ============ 屏内组合样式（全部取值 --wu-* 令牌；不引入新色值） ============ */
+/* 产品级组合扩展（与 HF-00 同族，均已在边界说明登记）：紧凑图标、发言人 B 色调 */
+.wu .wu-icon.sm{width:16px;height:16px}
+.wu .wu-badge[data-tone="speaker-b"]{background:#FAEEF2;color:#A8405E} /* 变体：B 发言人，对比度 5.1:1 */
+
+/* 阶段① 创建本期（含应用壳，01 §1.2–1.4 + §3） */
+.hf-s1{height:900px;display:flex;flex-direction:column;background:var(--wu-semantic-canvas)}
+.hf-s1-top{flex:none;display:flex;align-items:center;gap:16px;height:56px;padding:0 20px;background:var(--wu-semantic-surface);border-bottom:1px solid var(--wu-semantic-border)}
+.hf-brand{display:inline-flex;align-items:center;gap:10px;font-weight:700;font-size:14px;color:var(--wu-semantic-text);cursor:pointer}
+.hf-mark{width:24px;height:24px;border-radius:var(--wu-global-radius-sm);background:var(--wu-semantic-brand);display:inline-flex;align-items:center;justify-content:center;gap:3px}
+.hf-mark i{width:5px;height:5px;border-radius:50%;background:var(--wu-semantic-on-brand);display:block}
+.hf-proj{font-size:13px;color:var(--wu-semantic-secondary);border-left:1px solid var(--wu-semantic-border);padding-left:16px;white-space:nowrap}
+.hf-svc{gap:8px}
+.hf-vram{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--wu-semantic-secondary);white-space:nowrap}
+.hf-vram .bar{width:72px;height:6px;border-radius:3px;background:var(--wu-semantic-muted);overflow:hidden}
+.hf-vram .bar i{display:block;height:100%;width:17%;background:var(--wu-semantic-info);border-radius:3px}
+.hf-spacer{flex:1}
+.hf-s1-body{flex:1;display:flex;min-height:0}
+.hf-rail{width:208px;flex:none;background:var(--wu-semantic-surface);border-right:1px solid var(--wu-semantic-border);padding:12px 10px;display:flex;flex-direction:column;gap:2px}
+.hf-stg{display:flex;align-items:center;gap:9px;padding:8px 10px;border-radius:var(--wu-global-radius-sm);cursor:pointer;position:relative;color:var(--wu-semantic-text)}
+.hf-stg:hover{background:var(--wu-semantic-muted)}
+.hf-stg.active{background:var(--wu-semantic-raised)}
+.hf-stg.active::before{content:"";position:absolute;left:0;top:8px;bottom:8px;width:3px;border-radius:2px;background:var(--wu-semantic-brand)}
+.hf-stg-no{width:22px;height:22px;border-radius:50%;background:var(--wu-semantic-muted);color:var(--wu-semantic-caption);font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex:none}
+.hf-stg.active .hf-stg-no{background:var(--wu-semantic-primary);color:var(--wu-semantic-on-primary)}
+.hf-stg.done .hf-stg-no{background:var(--wu-semantic-success-bg);color:var(--wu-semantic-success)}
+.hf-stg-tt{min-width:0}
+.hf-stg-tt b{display:block;font-size:13px;font-weight:600;line-height:1.3}
+.hf-stg-tt small{font-size:11px;font-weight:400;color:var(--wu-semantic-caption)}
+.hf-stg-st{margin-left:auto;flex:none}
+.hf-sep{height:1px;background:var(--wu-semantic-border);margin:10px 6px}
+.hf-entry{display:flex;align-items:center;gap:9px;padding:7px 10px;border-radius:var(--wu-global-radius-sm);font-size:13px;color:var(--wu-semantic-secondary);cursor:pointer}
+.hf-entry:hover{background:var(--wu-semantic-muted);color:var(--wu-semantic-text)}
+.hf-entry-sq{width:18px;height:18px;border-radius:5px;background:var(--wu-semantic-muted);flex:none}
+.hf-note{margin-top:auto;font-size:10.5px;color:var(--wu-semantic-caption);line-height:1.5;padding:8px 10px 0;border-top:1px solid var(--wu-semantic-border)}
+.hf-s1-main{flex:1;min-width:0;display:flex;flex-direction:column}
+.hf-s1-head{flex:none;display:flex;align-items:center;padding:14px 20px 2px}
+.hf-cols{flex:1;display:flex;gap:14px;padding:8px 20px 16px;min-height:0}
+.hf-panel{display:flex;flex-direction:column;min-height:0}
+.hf-panel.in{flex:0 0 calc(55% - 7px)}
+.hf-panel.req{flex:1;min-width:0}
+.hf-panel-t{display:flex;align-items:baseline;gap:8px;font-size:14px;font-weight:600;margin:0 0 12px;color:var(--wu-semantic-text)}
+.hf-panel-t .wu-caption{font-weight:400}
+.hf-ta{flex:1;min-height:220px;resize:none;line-height:1.85}
+.hf-ta-sm{min-height:120px;flex:none;resize:none;line-height:1.7}
+.hf-panel-foot{display:flex;align-items:center;gap:10px;margin-top:10px}
+.hf-mono{font-family:var(--wu-global-mono);font-size:12px}
+.hf-fld{display:grid;grid-template-columns:72px 1fr;align-items:center;gap:10px;padding:5px 0}
+.hf-fld>label{font-size:13px;color:var(--wu-semantic-secondary);font-weight:600}
+.hf-pair{display:flex;gap:8px}
+.hf-pcell{display:flex;align-items:center;gap:8px;flex:1;min-width:0}
+.hf-pcell .wu-input{flex:1;min-width:0}
+.hf-stack{display:grid;gap:8px;min-width:0}
+.hf-seg{display:inline-flex;border:1px solid var(--wu-semantic-control-border);border-radius:var(--wu-global-radius-sm);overflow:hidden;vertical-align:middle}
+.hf-seg button{width:32px;height:26px;background:var(--wu-semantic-raised);border:none;border-left:1px solid var(--wu-semantic-border);font-family:var(--wu-global-mono);font-size:11.5px;color:var(--wu-semantic-caption);cursor:pointer}
+.hf-seg button:first-child{border-left:none}
+.hf-seg button:hover{color:var(--wu-semantic-text)}
+.hf-vg summary{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;color:var(--wu-semantic-text);cursor:pointer;list-style:none}
+.hf-vg summary::-webkit-details-marker{display:none}
+.hf-vg summary .chev{transition:transform var(--wu-global-duration) var(--wu-global-ease);color:var(--wu-semantic-caption)}
+.hf-vg[open] summary .chev{transform:rotate(90deg)}
+.hf-vg-body{margin-top:12px}
+.hf-vg-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.hf-upload3{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.hf-upload{border:1.5px dashed var(--wu-semantic-control-border);border-radius:var(--wu-global-radius-lg);padding:16px 12px;text-align:center;cursor:pointer;transition:border-color var(--wu-global-duration) var(--wu-global-ease)}
+.hf-upload:hover{border-color:var(--wu-semantic-brand)}
+.hf-upload .t{font-size:13px;font-weight:600;color:var(--wu-semantic-text)}
+.hf-upload .s{font-size:11.5px;color:var(--wu-semantic-caption);margin-top:3px}
+.hf-prog{height:5px;border-radius:3px;background:var(--wu-semantic-muted);overflow:hidden}
+.hf-prog i{display:block;height:100%;width:46%;background:var(--wu-semantic-info);border-radius:3px}
+.hf-rail-mini{width:200px;flex:none;border:1px solid var(--wu-semantic-border);border-radius:var(--wu-global-radius-lg);padding:8px;background:var(--wu-semantic-raised)}
+.hf-link{font-weight:600;text-decoration:underline;cursor:pointer}
+.hf-s1-foot{flex:none;height:48px;display:flex;align-items:center;gap:12px;padding:0 20px;background:var(--wu-semantic-surface);border-top:1px solid var(--wu-semantic-border);font-size:12.5px;color:var(--wu-semantic-secondary)}
+.hf-pos{font-weight:600;color:var(--wu-semantic-text)}
+</style>
+</head>
+<body class="wu">
+<div class="doc">
+
+<div class="dhead">
+  <div class="kick">HIGH-FIDELITY SCREEN · HF-01 · v1.0</div>
+  <h1>阶段① · 创建本期</h1>
+  <p>五阶段第一屏：选择起步方式、输入内容、设定内容要求与时长 / 比例 / 角色；视觉准备可延后。本阶段无确认点，产物在阶段②收口。壳形态：无 Inspector（参数全部主视图直出）、无 TimelineBar（配音确认后才常驻）。</p>
+  <div class="meta">
+    <span>布局与元素权威 01 §3</span>
+    <span>壳蓝图 05 §4.1–4.2（本屏无 Inspector / TimelineBar）</span>
+    <span>视觉与组件 workspace-ui v0.2 基线（vendor/ 原样接入）</span>
+    <span>画布 1440 逻辑宽</span>
+    <span>baseline · 已定稿</span>
+  </div>
+</div>
+
+<h2 class="sec"><span class="no">一</span>高保真稿 · 默认态（粘贴文章 · 模板默认值已带入）</h2>
+<p class="lead">按 1440 逻辑宽度绘制，窗口不足时自动等比缩放。全部视觉取自基线令牌：暖白画布 <code>#FBF8F3</code>、primary 深灰白字（常规主操作）、brand 橙底深灰字（本视图「生成对话」一处）、卡片 16px 圆角 1px 浅边无阴影、控件 40px、Inter / Noto Sans SC 字栈、160ms 过渡、蓝色 2px 焦点环。图标为基线规格内联 SVG（24 视框 · 1.75 描边 · currentColor）；单选框与下拉为原生控件。</p>
+
+<div class="vp-bar">
+  <span class="ttl">阶段① 创建本期 · 1440 × 900</span>
+  <span class="sp"></span>
+  <span class="pct" id="pct">显示 100%</span>
+  <button id="bFit" class="on">适应窗口</button>
+  <button id="bOne">1:1</button>
+</div>
+<div class="vp" id="vp">
+  <div class="frame" id="frame">
+    <div class="hf-s1">
+      <!-- TopBar（01 §1.2） -->
+      <header class="hf-s1-top">
+        <span class="hf-brand"><span class="hf-mark"><i></i><i></i></span>双声播客工坊</span>
+        <span class="hf-proj">EP004 · 推理成本观察</span>
+        <span class="wu-row hf-svc">
+          <span class="wu-badge" data-tone="success">文本 API</span>
+          <span class="wu-badge" data-tone="success">图片 API</span>
+          <span class="wu-badge" data-tone="success">本地引擎</span>
+          <span class="wu-badge">MiniMax 未配置</span>
+        </span>
+        <span class="hf-spacer"></span>
+        <span class="hf-vram">显存<span class="bar"><i></i></span>2.8 / 16 GB</span>
+        <button type="button" class="wu-btn" data-variant="secondary" data-size="sm"><svg class="wu-icon sm" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg><span class="wu-btn-label">任务</span></button>
+        <span class="wu-caption">已保存</span>
+        <button type="button" class="wu-btn" data-variant="secondary" data-size="sm" disabled><svg class="wu-icon sm" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V3m-5 5 5-5 5 5M4 15v6h16v-6"/></svg><span class="wu-btn-label">导出</span></button>
+      </header>
+      <div class="hf-s1-body">
+        <!-- 阶段轨（01 §1.3） -->
+        <aside class="hf-rail" aria-label="阶段导航">
+          <div class="hf-stg active"><span class="hf-stg-no">1</span><span class="hf-stg-tt"><b>创建本期</b><small>话题与参数</small></span></div>
+          <div class="hf-stg"><span class="hf-stg-no">2</span><span class="hf-stg-tt"><b>编辑对话</b><small>话轮与读音</small></span><span class="hf-stg-st"><span class="wu-badge">未准备</span></span></div>
+          <div class="hf-stg"><span class="hf-stg-no">3</span><span class="hf-stg-tt"><b>试听配音</b><small>音色与时长</small></span><span class="hf-stg-st"><span class="wu-badge">未准备</span></span></div>
+          <div class="hf-stg"><span class="hf-stg-no">4</span><span class="hf-stg-tt"><b>预览画面</b><small>构图镜头样片</small></span><span class="hf-stg-st"><span class="wu-badge">未准备</span></span></div>
+          <div class="hf-stg"><span class="hf-stg-no">5</span><span class="hf-stg-tt"><b>生成导出</b><small>渲染与导出</small></span><span class="hf-stg-st"><span class="wu-badge">未准备</span></span></div>
+          <div class="hf-sep"></div>
+          <div class="hf-entry"><span class="hf-entry-sq"></span>资产库</div>
+          <div class="hf-entry"><span class="hf-entry-sq"></span>服务设置</div>
+          <div class="hf-entry"><span class="hf-entry-sq"></span>任务中心</div>
+          <p class="hf-note">数据边界：工程与成片本地；文本/图片经所选 API</p>
+        </aside>
+        <!-- 主视图（01 §3.1：左 内容输入 55% / 右 内容要求 45%） -->
+        <main class="hf-s1-main">
+          <div class="hf-s1-head"><h2 class="wu-heading">① 创建本期</h2></div>
+          <div class="hf-cols">
+            <!-- 左：内容输入 -->
+            <section class="wu-card hf-panel in">
+              <h3 class="hf-panel-t">内容输入</h3>
+              <div class="wu-stack" style="gap:6px;margin-bottom:10px">
+                <label class="wu-choice"><input type="radio" name="start"><span>从话题开始</span></label>
+                <label class="wu-choice"><input type="radio" name="start" checked><span>粘贴文章</span></label>
+                <label class="wu-choice"><input type="radio" name="start"><span>使用已有脚本</span></label>
+              </div>
+              <textarea class="wu-input hf-ta" aria-label="文章内容">大模型推理成本正在以每年数倍的速度下降。过去跑一次百万 token 的推理要花十几美元，如今主流模型的价格已经降到零点几美元，部分开源方案在消费级显卡上就能跑出可用的吞吐。
+
+但有意思的是，多数团队的成本焦虑并没有随之缓解。原因在于用量结构变了：单价下降之后，大家开始把模型塞进更多环节——摘要、检索、代码补全、客服，推理请求总量反而呈指数级增长。
+
+业内最近讨论比较多的一个方向是「推理侧优化」：KV 缓存压缩、批处理调度、投机解码、量化蒸馏……这些手段叠起来，同样算力预算下的有效吞吐可以差出一个数量级。相比之下，训练侧的优化空间反而更依赖大额资本开支。
+
+另一个值得关注的信号是端侧。手机和 PC 厂商开始押注本地小模型，把常用的摘要、改写任务留在设备上完成，只在必要时调用云端。如果这个趋势成立，推理成本的竞争会从数据中心延伸到设备端。</textarea>
+              <div class="hf-panel-foot">
+                <span class="wu-caption hf-mono">字数：1,842</span>
+                <span class="hf-spacer"></span>
+                <button type="button" class="wu-btn" data-variant="brand"><svg class="wu-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9L12 3z"/><path d="M18.5 15l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7.7-1.8z"/></svg><span class="wu-btn-label">生成对话</span></button>
+              </div>
+            </section>
+            <!-- 右：内容要求 -->
+            <section class="wu-card hf-panel req">
+              <h3 class="hf-panel-t">内容要求 <span class="wu-caption">模板「科技周报」提供默认值</span></h3>
+              <div class="hf-fld"><label>目标听众</label><input class="wu-input" value="关注 AI 基础设施的科技从业者" readonly></div>
+              <div class="hf-fld"><label>讨论重点</label><input class="wu-input" value="推理成本下降的节奏与端侧机会" readonly></div>
+              <div class="hf-fld"><label>双方职责</label>
+                <div class="hf-pair">
+                  <span class="hf-pcell"><span class="wu-badge" data-tone="info">A</span><input class="wu-input" value="主持：引入话题、追问" readonly></span>
+                  <span class="hf-pcell"><span class="wu-badge" data-tone="speaker-b">B</span><input class="wu-input" value="嘉宾：输出观点、举例" readonly></span>
+                </div>
+              </div>
+              <div class="hf-fld"><label>风格</label>
+                <select class="wu-input" aria-label="对话风格"><option>轻松对谈</option><option>深度问答</option></select>
+              </div>
+              <div class="hf-sep"></div>
+              <div class="hf-fld" style="align-items:flex-start"><label style="padding-top:8px">时长</label>
+                <div class="hf-stack">
+                  <label class="wu-choice"><input type="radio" name="dur" checked><span>根据内容，最多 5 分钟</span><span class="wu-caption hf-mono" style="margin-left:6px">≤ 300 秒</span></label>
+                  <label class="wu-choice"><input type="radio" name="dur"><span>大约</span>
+                    <span class="hf-seg"><button type="button">1</button><button type="button">2</button><button type="button">3</button><button type="button">4</button></span><span>分钟</span>
+                  </label>
+                </div>
+              </div>
+              <div class="hf-fld"><label>比例</label>
+                <div class="wu-row" style="gap:18px">
+                  <label class="wu-choice"><input type="radio" name="ratio" checked><span>横屏 16:9</span></label>
+                  <label class="wu-choice"><input type="radio" name="ratio"><span>竖屏</span></label>
+                </div>
+              </div>
+              <div class="hf-fld" style="align-items:flex-start"><label style="padding-top:8px">角色</label>
+                <div class="hf-stack">
+                  <div class="hf-pair">
+                    <span class="hf-pcell"><span class="wu-badge" data-tone="info">A</span><select class="wu-input" aria-label="角色 A"><option>李雷 · 主持</option><option>新角色…</option></select></span>
+                    <span class="hf-pcell"><span class="wu-badge" data-tone="speaker-b">B</span><select class="wu-input" aria-label="角色 B"><option>韩梅梅 · 嘉宾</option><option>新角色…</option></select></span>
+                  </div>
+                  <p class="wu-caption">从资产库选择或新建 · 可换，模板可锁定 · 未就绪不阻塞写稿</p>
+                </div>
+              </div>
+              <div class="hf-sep"></div>
+              <!-- 视觉准备（可延后，01 §3.2） -->
+              <details class="hf-vg">
+                <summary>
+                  <svg class="chev wu-icon sm" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+                  <span>视觉准备（可延后）</span>
+                  <span class="wu-caption" style="font-weight:400">与内容工作独立保存，可随时回来</span>
+                </summary>
+                <div class="hf-vg-body">
+                  <div class="hf-vg-row">
+                    <button type="button" class="wu-btn" data-variant="secondary" data-size="sm"><svg class="wu-icon sm" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.6"/><path d="M21 15l-5-5L5 21"/></svg><span class="wu-btn-label">资产抽屉</span></button>
+                    <span class="wu-caption">角色图 · 场景 · 上传同框底图</span>
+                  </div>
+                </div>
+              </details>
+            </section>
+          </div>
+        </main>
+      </div>
+      <!-- FootBar（01 §1.4） -->
+      <footer class="hf-s1-foot">
+        <span class="hf-pos">阶段 1 / 5 · 创建本期</span>
+        <button type="button" class="wu-btn" data-variant="secondary" data-size="sm" disabled><span class="wu-btn-label">← 上一步</span></button>
+        <span class="wu-badge">本阶段无确认点</span>
+        <span class="hf-spacer"></span>
+        <button type="button" class="wu-btn" data-size="sm"><span class="wu-btn-label">下一步 →</span></button>
+      </footer>
+    </div>
+  </div>
+</div>
+<div class="vp-note">本屏壳形态：无 Inspector（参数全部主视图直出，05 §4.3）· 无 TimelineBar（配音确认后常驻）· 「下一步」仅导航，不写入完成状态 · 面板高度由较高一侧内容决定 · 顶部显存读数与工程名为示例数据</div>
+
+<h2 class="sec"><span class="no">二</span>状态变体</h2>
+<p class="lead">本屏关键状态的实况渲染（非示意），变体只呈现差异区域，其余与主稿一致。</p>
+<div class="var-grid">
+
+  <div class="var">
+    <div class="cap">V1 · 使用已有脚本模式</div>
+    <div class="desc">切到第三种起步方式：主按钮变为「解析脚本」；只做结构解析与校验，<b>不默认改写</b>。切换时保留已输入内容。</div>
+    <div class="demo">
+      <div class="wu-stack" style="gap:6px;margin-bottom:10px">
+        <label class="wu-choice"><input type="radio" name="v1"><span>从话题开始</span></label>
+        <label class="wu-choice"><input type="radio" name="v1"><span>粘贴文章</span></label>
+        <label class="wu-choice"><input type="radio" name="v1" checked><span>使用已有脚本</span></label>
+      </div>
+      <textarea class="wu-input hf-ta-sm" aria-label="已有脚本内容">A：欢迎回到 AI 算力周报，我是李雷。今天请到了韩梅梅，聊聊推理成本这件事。
+B：这周最值得聊的就是推理侧优化的几个进展……
+A：先解释一下，为什么单价降了，大家的账单反而更贵了？
+B：核心是用量结构变了……</textarea>
+      <div class="hf-panel-foot">
+        <span class="wu-caption hf-mono">字数：736</span>
+        <span class="hf-spacer"></span>
+        <button type="button" class="wu-btn" data-variant="brand"><svg class="wu-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9l-6-6z"/><path d="M14 3v6h6"/></svg><span class="wu-btn-label">解析脚本</span></button>
+      </div>
+    </div>
+  </div>
+
+  <div class="var">
+    <div class="cap">V2 · 文本 API 异常</div>
+    <div class="desc">TopBar「文本 API」转 danger 徽章（悬停显示错误与「去设置」）；「生成对话」置灰并附去设置入口。编辑与已有内容不受影响（只禁用依赖该服务的操作）。</div>
+    <div class="demo">
+      <span class="wu-row hf-svc">
+        <span class="wu-badge" data-tone="danger">文本 API 异常</span>
+        <span class="wu-badge" data-tone="success">图片 API</span>
+        <span class="wu-badge" data-tone="success">本地引擎</span>
+        <span class="wu-badge">MiniMax 未配置</span>
+      </span>
+      <div class="hf-panel-foot" style="margin-top:12px">
+        <span class="wu-caption hf-mono">字数：1,842</span>
+        <span class="hf-spacer"></span>
+        <button type="button" class="wu-btn" data-variant="brand" disabled><span class="wu-btn-label">生成对话</span></button>
+      </div>
+      <div class="wu-alert" data-tone="warning">文本 API 不可用，无法生成对话。<a class="hf-link" href="#">去服务设置</a></div>
+    </div>
+  </div>
+
+  <div class="var">
+    <div class="cap">V3 · 比例选择竖屏</div>
+    <div class="desc">选竖屏时显示双人构图建议与「构图需独立检查」提示；不承诺横屏素材无损裁成竖屏。</div>
+    <div class="demo">
+      <div class="hf-fld"><label>比例</label>
+        <div class="wu-row" style="gap:18px">
+          <label class="wu-choice"><input type="radio" name="v3"><span>横屏 16:9</span></label>
+          <label class="wu-choice"><input type="radio" name="v3" checked><span>竖屏</span></label>
+        </div>
+      </div>
+      <div class="wu-alert" data-tone="warning">竖屏建议采用上下分栏双人构图；构图需独立检查，不承诺横屏素材无损裁成竖屏。</div>
+    </div>
+  </div>
+
+  <div class="var">
+    <div class="cap">V4 · 文章超过 8,000 字</div>
+    <div class="desc">字数计数转 warning 徽章并给出提示；可调优先——只提示不硬拦，仍可继续（01 §13.3）。</div>
+    <div class="demo">
+      <div class="hf-panel-foot">
+        <span class="wu-badge" data-tone="warning">字数：9,342 / 8,000</span>
+        <span class="hf-spacer"></span>
+        <button type="button" class="wu-btn" data-variant="brand"><svg class="wu-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9L12 3z"/><path d="M18.5 15l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7.7-1.8z"/></svg><span class="wu-btn-label">生成对话</span></button>
+      </div>
+      <div class="wu-alert" data-tone="warning">文章超过 8,000 字，生成质量可能下降；建议拆分为多期，或截取核心段落。</div>
+    </div>
+  </div>
+
+  <div class="var">
+    <div class="cap">V5 · 角色被模板锁定</div>
+    <div class="desc">模板锁定态：选择器置灰 + 锁图标 + 解锁入口（解锁后可换）。</div>
+    <div class="demo">
+      <div class="hf-fld" style="align-items:flex-start"><label style="padding-top:8px">角色</label>
+        <div class="hf-stack">
+          <div class="hf-pair">
+            <span class="hf-pcell"><span class="wu-badge" data-tone="info">A</span><input class="wu-input" value="李雷 · 主持" disabled></span>
+            <span class="hf-pcell"><span class="wu-badge" data-tone="speaker-b">B</span><input class="wu-input" value="韩梅梅 · 嘉宾" disabled></span>
+          </div>
+          <p class="wu-caption">模板「科技周报」已锁定角色 · <svg class="wu-icon sm" viewBox="0 0 24 24" aria-hidden="true" style="vertical-align:-3px;display:inline-block"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg><a class="hf-link">解锁</a></p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="var">
+    <div class="cap">V6 · 视觉准备展开</div>
+    <div class="desc">展开后提供三个快捷上传槽；完整素材走「资产抽屉」。与内容工作独立保存，不做强制顺序。</div>
+    <div class="demo">
+      <details class="hf-vg" open>
+        <summary>
+          <svg class="chev wu-icon sm" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+          <span>视觉准备（可延后）</span>
+          <span class="wu-caption" style="font-weight:400">与内容工作独立保存，可随时回来</span>
+        </summary>
+        <div class="hf-vg-body">
+          <div class="hf-upload3">
+            <div class="hf-upload"><div class="t">角色图</div><div class="s">资产库选择或 API 生成</div></div>
+            <div class="hf-upload"><div class="t">场景</div><div class="s">PNG · 16:9</div></div>
+            <div class="hf-upload"><div class="t">同框底图</div><div class="s">双人同框 · 16:9</div></div>
+          </div>
+          <div class="hf-vg-row" style="margin-top:12px">
+            <button type="button" class="wu-btn" data-variant="secondary" data-size="sm"><svg class="wu-icon sm" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.6"/><path d="M21 15l-5-5L5 21"/></svg><span class="wu-btn-label">资产抽屉</span></button>
+            <span class="wu-caption">全部素材 · 引用不复制</span>
+          </div>
+        </div>
+      </details>
+    </div>
+  </div>
+
+  <div class="var" style="grid-column:1 / -1">
+    <div class="cap">V7 · 生成执行中（两次生成）</div>
+    <div class="desc">点击「生成对话」后：主按钮区域转为两步进度（内容结构 → 结构化话轮），阶段轨①徽章转 running；完成后结果进入阶段②为<b>候选脚本</b>，不自动覆盖已用版本。</div>
+    <div class="demo" style="display:flex;gap:24px;align-items:flex-start;flex-wrap:wrap">
+      <div style="flex:1;min-width:320px">
+        <div class="hf-panel-foot" style="margin-top:0">
+          <span class="wu-badge" data-tone="success">内容结构已生成</span>
+          <span class="wu-badge" data-tone="info">结构化话轮 12/26</span>
+          <span class="hf-spacer"></span>
+          <button type="button" class="wu-btn" data-variant="ghost" data-size="sm"><span class="wu-btn-label">取消</span></button>
+        </div>
+        <div class="hf-prog" style="margin-top:8px;max-width:420px"><i></i></div>
+      </div>
+      <div class="hf-rail-mini">
+        <div class="hf-stg active" style="pointer-events:none"><span class="hf-stg-no">1</span><span class="hf-stg-tt"><b>创建本期</b><small>话题与参数</small></span><span class="hf-stg-st"><span class="wu-badge" data-tone="info">生成中</span></span></div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<h2 class="sec"><span class="no">三</span>状态矩阵</h2>
+<div class="dcard">
+  <table class="dt">
+    <thead><tr><th>对象</th><th>状态</th><th>呈现（基线组件与色调）</th><th>依据</th></tr></thead>
+    <tbody>
+      <tr><td rowspan="4"><b>本阶段整体（七态）</b></td><td>未准备</td><td>阶段①为流程起点，不出现未准备态（无前置产物要求）</td><td>01 §13.1</td></tr>
+      <tr><td>可执行 <span class="wu-caption">（默认）</span></td><td>阶段轨①高亮无徽章（raised 底 + brand 左条 + 深灰数字）；「生成对话」brand 按钮可点（有输入且文本 API 可用）</td><td>01 §13.1</td></tr>
+      <tr><td>执行中</td><td>①徽章 info「生成中」；按钮区转两步进度（success / info 徽章 + 进度条），可取消（ghost）</td><td>01 §13.1</td></tr>
+      <tr><td>失败</td><td>danger 徽章「失败」+ 重试入口；已生成部分（如内容结构）保留不丢</td><td>01 §13.1</td></tr>
+      <tr><td rowspan="3"><b>起步方式</b></td><td>从话题开始</td><td>话题建议 ≤200 字；简单输入时第一次内容结构生成<b>自动通过</b>，不增加必点页面</td><td>01 §3.2 / §3.3</td></tr>
+      <tr><td>粘贴文章 <span class="wu-caption">（默认，按入口带入）</span></td><td>主按钮「生成对话」；文章 ≤8,000 字</td><td>01 §3.2</td></tr>
+      <tr><td>使用已有脚本</td><td>主按钮变「解析脚本」；只解析校验，不默认改写</td><td>01 §3.2</td></tr>
+      <tr><td rowspan="2"><b>内容输入框</b></td><td>有效</td><td>字数计数常显（等宽 caption）；输入保留在切换起步方式时</td><td>01 §3.2</td></tr>
+      <tr><td>文章 &gt;8,000 字</td><td>计数转 warning 徽章 + 提示；<b>不硬拦</b>（可调优先）</td><td>01 §3.2 / §13.3</td></tr>
+      <tr><td rowspan="4"><b>生成对话按钮</b></td><td>可用</td><td>有有效输入 + 文本 API 可用</td><td>01 §3.2</td></tr>
+      <tr><td>置灰 · 无输入</td><td>仅提示，不阻断其他编辑</td><td>01 §13.3</td></tr>
+      <tr><td>置灰 · API 不可用</td><td>附「去服务设置」入口；编辑不受影响</td><td>01 §3.2 / §13.3</td></tr>
+      <tr><td>执行中</td><td>两步进度（内容结构 → 结构化话轮）+ 取消</td><td>01 §3.3</td></tr>
+      <tr><td rowspan="2"><b>时长</b></td><td>根据内容，最多 5 分钟 <span class="wu-caption">（默认）</span></td><td>上限 300 秒（含片头片尾与首尾停顿）</td><td>01 §3.2</td></tr>
+      <tr><td>大约 N 分钟（1–4）</td><td>分段数字选择；<b>偏好不是承诺</b>，不用字符数承诺精确时长</td><td>01 §3.2</td></tr>
+      <tr><td rowspan="2"><b>比例</b></td><td>横屏 16:9 <span class="wu-caption">（默认）</span></td><td>主路径</td><td>01 §3.2</td></tr>
+      <tr><td>竖屏</td><td>显示双人构图建议 +「构图需独立检查」提示（wu-alert warning）</td><td>01 §3.2</td></tr>
+      <tr><td rowspan="3"><b>角色选择</b></td><td>可换</td><td>原生下拉从资产库 / 新建；A 不永久固定为主持人</td><td>01 §3.2</td></tr>
+      <tr><td>模板锁定</td><td>置灰 + 锁图标 + 解锁入口</td><td>01 §3.2</td></tr>
+      <tr><td>角色未就绪</td><td>提示但不阻塞写稿（形象与声音未就绪不阻塞生成对话）</td><td>01 §3.2</td></tr>
+      <tr><td rowspan="2"><b>视觉准备</b></td><td>折叠 <span class="wu-caption">（默认）</span></td><td>一行入口：资产抽屉（角色图 / 场景 / 上传同框底图）</td><td>01 §3.2</td></tr>
+      <tr><td>展开</td><td>三个快捷上传槽 + 资产抽屉；与内容独立保存、无强制顺序</td><td>01 §3.2</td></tr>
+      <tr><td><b>FootBar</b></td><td>本阶段</td><td>「本阶段无确认点」中性徽章；上一步禁用（第 1 阶段）；下一步<b>仅导航</b></td><td>01 §1.4 / §3.4</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<h2 class="sec"><span class="no">四</span>边界说明</h2>
+<div class="dcard">
+  <ul class="b">
+    <li><b>风格基准</b>：本屏全部视觉来自 workspace-ui v0.2 基线（<code>vendor/workspace-ui/</code> 原样引入 tokens.css + components.css + components.js），页面仅做布局组合，不复制色值；与 HF-00 共用同一套组件与令牌。</li>
+    <li><b>按钮语义</b>：primary 深灰 = 产品常规主操作（下一步）；brand 橙 = 每视图仅一处品牌动作（本视图为「生成对话 / 解析脚本」）；secondary = 次操作（导出 / 资产抽屉）；ghost = 生成中取消等轻操作。</li>
+    <li><b>状态双通道</b>：所有徽章均「色调 + 文字」，无纯色点（基线 SPEC）；服务状态用 wu-badge 文字呈现（正常 / 异常 / 未配置），不用颜色圆点。</li>
+    <li><b>切换保留</b>：切换起步方式时保留已输入内容（话题 ↔ 文章 ↔ 脚本互切不丢字）。</li>
+    <li><b>校验口径</b>：文章 ≤8,000 字，超出 warning 提示不硬拦；话题建议 ≤200 字；「大约 N 分钟」是偏好不是承诺。</li>
+    <li><b>两次生成</b>：第一次内容结构（核心问题 / 主要观点 / 必要事实 / 段落目的 / 双方职责），第二次结构化话轮（稳定 ID / 说话人 / 显示与朗读文本 / 意图 / 语气 / 来源引用）；简单输入（纯话题）第一次自动通过。</li>
+    <li><b>引用核对</b>：文章中的事实与模型补充的例子分开标识；来源锚点由程序按原文位置核对，不接受不存在的引用。</li>
+    <li><b>已有脚本</b>：只做结构解析与校验，不默认改写；也不强制再生成（首版低成本能力）。</li>
+    <li><b>角色边界</b>：A / B 都可替换，不把 A 永久固定为主持人；角色意图覆盖解释 / 追问 / 举例 / 质疑 / 总结——不把所有 B 台词写成「对，你说得对」。</li>
+    <li><b>视觉准备</b>：与内容工作独立保存，可随时回来；不做强制顺序。</li>
+    <li><b>失效规则</b>：改起步输入 → 生成<b>新候选脚本</b>，不影响已确认版本直到重新采用。</li>
+    <li><b>完成条件</b>：本阶段无确认点；脚本在阶段②「生成 → 编辑 → 确认」收口；视觉准备产物直接流向阶段④。</li>
+    <li><b>导航与保存</b>：下一步仅导航，缺失前置时目标页顶部 warning 提示；2s 防抖自动保存；<code>Ctrl+Z</code> 撤销；<code>1–5</code> 切阶段。</li>
+    <li><b>服务断开</b>：只禁用依赖该服务的操作（生成对话 / 解析脚本），编辑、播放已有素材不受影响。</li>
+    <li><b>长文本</b>：输入框高度自适应内容（最小 220px，可纵向拉伸），不设固定高度、不截断。</li>
+  </ul>
+</div>
+
+<h2 class="sec"><span class="no">五</span>衔接与配套</h2>
+<div class="cols2">
+  <div class="dcard">
+    <h5 style="font-size:13.5px;margin:0 0 6px;font-weight:600">上下游</h5>
+    <ul class="b">
+      <li>「生成对话 / 解析脚本」结果 → <b>HF-02 阶段②编辑对话</b>（候选脚本，不覆盖已用）</li>
+      <li>视觉准备产物 → <b>HF-04 阶段④预览画面</b></li>
+      <li>角色下拉 → 资产库（HF-06，待设计）；「去服务设置」→ 服务设置（HF-07，待设计）</li>
+      <li>上一屏：<b>HF-00 工程首页</b>（新建本期 / 继续制作）</li>
+    </ul>
+  </div>
+  <div class="dcard">
+    <h5 style="font-size:13.5px;margin:0 0 6px;font-weight:600">验证状态</h5>
+    <ul class="b">
+      <li>已做：与 01 §3 元素逐项对齐；壳分区与 05 §4.1–4.2 一致（本屏无 Inspector / TimelineBar）；与 HF-00 共用同一 workspace-ui 基线（<code>vendor/</code> 原样接入，不复制色值）；状态变体实况渲染；真实弹窗 / 折叠区可交互</li>
+      <li>未做：真实数据渲染、键盘走查（Tab 顺序 / radio 组）、200% 文本缩放、超长文章实测滚动</li>
+      <li>基线自身状态：implemented-prototype（未完成真实浏览器与辅助技术验收，沿用基线声明）</li>
+    </ul>
+  </div>
+</div>
+
+</div>
+
+<script>
+(function(){
+  var vp=document.getElementById('vp'),fr=document.getElementById('frame'),pct=document.getElementById('pct');
+  var bFit=document.getElementById('bFit'),bOne=document.getElementById('bOne'),mode='fit';
+  function fit(){
+    if(mode==='fit'){
+      var s=Math.min(1,vp.clientWidth/1440);
+      fr.style.transform='scale('+s+')';
+      vp.style.height=(fr.offsetHeight*s)+'px';
+      pct.textContent='显示 '+Math.round(s*100)+'%';
+    }else{
+      fr.style.transform='none';
+      vp.style.height=fr.offsetHeight+'px';
+      pct.textContent='1:1 · 横向滚动';
+    }
+  }
+  window.addEventListener('resize',fit);
+  bFit.onclick=function(){mode='fit';bFit.classList.add('on');bOne.classList.remove('on');fit()};
+  bOne.onclick=function(){mode='one';bOne.classList.add('on');bFit.classList.remove('on');fit()};
+  fit();
+})();
+</script>
+</body>
+</html>

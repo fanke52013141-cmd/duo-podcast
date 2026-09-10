@@ -1,0 +1,1058 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>双声播客工坊 DuoCast · UI 设计系统与页面规划 v1.0</title>
+<style>
+/* ============================================================
+   文档外壳样式（与 03-方案总览.html 同族）
+   ============================================================ */
+:root{
+  --paper:#f4f6f9;--card:#fff;--ink:#1f2430;--ink2:#4d5666;--ink3:#858f9f;
+  --line:#e3e7ee;--line2:#d3d9e3;
+  --brand:#a96a2c;--brand-d:#8a5420;--brand-soft:#f7ede2;
+  --a:#0e7490;--a-soft:#e2f2f6;--b:#be4d6e;--b-soft:#fbe9ef;
+  --ok:#2f9e6e;--ok-soft:#e4f5ed;--warn:#b97e16;--warn-soft:#fbf1dc;--bad:#c75052;--bad-soft:#fcebeb;
+  --mono:"Cascadia Code",Consolas,"Courier New",monospace;
+  --sans:"Segoe UI","Microsoft YaHei UI","Microsoft YaHei",system-ui,sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{font-family:var(--sans);background:var(--paper);color:var(--ink);font-size:14.5px;line-height:1.75}
+.wrap{display:flex;align-items:flex-start;max-width:1400px;margin:0 auto}
+
+.toc{width:262px;flex:none;position:sticky;top:0;height:100vh;overflow:auto;padding:24px 14px;border-right:1px solid var(--line);background:#fbfcfd}
+.toc h1{font-size:15px;line-height:1.4;margin-bottom:3px}
+.toc .sub{font-size:11.5px;color:var(--ink3);margin-bottom:14px}
+.toc .grp{font-size:10.5px;font-weight:700;letter-spacing:.6px;color:var(--ink3);margin:14px 0 5px;padding-left:10px;text-transform:uppercase}
+.toc a{display:block;padding:4.5px 10px;font-size:12.5px;color:var(--ink2);text-decoration:none;border-radius:7px;line-height:1.45}
+.toc a:hover{background:var(--brand-soft);color:var(--brand-d)}
+.toc a.lv2{padding-left:22px;font-size:12px;color:var(--ink3)}
+.content{flex:1;min-width:0;padding:28px 40px 100px;max-width:1010px}
+
+.cover{background:linear-gradient(135deg,#232833,#2e3340);color:#fff;border-radius:18px;padding:30px 32px;margin-bottom:24px}
+.cover .kicker{font-size:11.5px;letter-spacing:2px;color:#cdb795;font-weight:700}
+.cover h2{font-size:26px;margin:8px 0 6px}
+.cover p{color:#c6ccd8;font-size:13px;max-width:740px}
+.cover .meta{display:flex;flex-wrap:wrap;gap:9px;margin-top:18px}
+.cover .meta span{font-size:11.5px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);padding:4px 11px;border-radius:20px}
+
+h3.sec{font-size:20px;margin:42px 0 8px;padding-top:12px;border-top:2px solid var(--line2)}
+h3.sec .no{color:var(--brand);font-family:var(--mono);margin-right:9px;font-size:17px}
+h4{font-size:16px;margin:26px 0 8px}
+h5{font-size:14px;margin:18px 0 6px}
+p.lead{color:var(--ink2);margin-bottom:10px}
+
+.card{background:var(--card);border:1px solid var(--line);border-radius:13px;padding:18px 20px;margin:14px 0;box-shadow:0 1px 3px rgba(31,36,48,.05)}
+.goal{background:var(--brand-soft);border:1px solid #ecd9c2;border-radius:11px;padding:12px 16px;font-size:13.5px;margin:12px 0}
+.note{border-left:3px solid var(--brand);background:#faf6f1;border-radius:0 9px 9px 0;padding:10px 15px;font-size:12.8px;color:var(--ink2);margin:12px 0}
+.note.warn{border-left-color:var(--warn);background:var(--warn-soft)}
+.note.bad{border-left-color:var(--bad);background:var(--bad-soft)}
+.note.ok{border-left-color:var(--ok);background:var(--ok-soft)}
+ul.b{padding-left:22px;margin:8px 0}
+ul.b li{margin:5px 0;color:var(--ink2)}
+
+table{width:100%;border-collapse:collapse;font-size:12.8px;margin:10px 0;background:#fff;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+th{background:#f3f5f9;text-align:left;padding:9px 11px;font-weight:700;color:var(--ink);border-bottom:1px solid var(--line2);white-space:nowrap}
+td{padding:9px 11px;border-bottom:1px solid var(--line);vertical-align:top;color:var(--ink2);line-height:1.55}
+tr:last-child td{border-bottom:none}
+td:first-child{color:var(--ink);font-weight:600}
+table.fixed td:first-child{white-space:nowrap}
+code{font-family:var(--mono);font-size:11.8px;background:#eef1f5;padding:1.5px 6px;border-radius:5px;color:#3a4150}
+pre{background:#232833;color:#dde3ec;border-radius:11px;padding:14px 16px;overflow:auto;margin:10px 0;font-family:var(--mono);font-size:12px;line-height:1.6}
+pre code{background:none;color:inherit;padding:0}
+
+.cols2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.cols3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px}
+@media(max-width:1100px){.cols2,.cols3{grid-template-columns:1fr}}
+
+/* ============================================================
+   DuoCast 产品令牌（--dc- 前缀）——本节即 tokens.css 草案，
+   与 §1 令牌表逐项对应；文档内所有样例与蓝图共用这一套值
+   ============================================================ */
+:root{
+  /* 中性 */
+  --dc-paper:#f4f6f9; --dc-surface:#ffffff; --dc-surface-2:#fbfcfd;
+  --dc-line:#e3e7ee; --dc-line-strong:#d3d9e3;
+  --dc-ink-1:#1f2430; --dc-ink-2:#4d5666; --dc-ink-3:#858f9f;
+  --dc-fill-disabled:#eef1f5; --dc-ink-disabled:#a6aebc;
+  /* 品牌（焦糖）*/
+  --dc-brand:#a96a2c; --dc-brand-strong:#8a5420; --dc-brand-deep:#714520; --dc-brand-soft:#f7ede2;
+  /* 角色 A（青蓝）*/
+  --dc-a:#0e7490; --dc-a-strong:#0c6579; --dc-a-soft:#e2f2f6;
+  /* 角色 B（珊瑚粉）*/
+  --dc-b:#be4d6e; --dc-b-text:#a84360; --dc-b-soft:#fbe9ef;
+  /* 语义 */
+  --dc-success:#2f9e6e; --dc-success-text:#1e7a52; --dc-success-soft:#e4f5ed;
+  --dc-warning:#b97e16; --dc-warning-text:#8a5f0e; --dc-warning-soft:#fbf1dc;
+  --dc-danger:#c75052; --dc-danger-text:#b23e40; --dc-danger-soft:#fcebeb;
+  /* 字体 */
+  --dc-font-ui:"Segoe UI","Microsoft YaHei UI","Microsoft YaHei",system-ui,sans-serif;
+  --dc-font-mono:"Cascadia Code","Consolas","Courier New",monospace;
+  --dc-text-xs:12px; --dc-text-sm:13px; --dc-text-md:14px; --dc-text-lg:16px; --dc-text-xl:20px; --dc-text-2xl:24px;
+  --dc-lh-dense:1.45; --dc-lh-body:1.6; --dc-lh-reading:1.75;
+  /* 间距（4px 栅格）*/
+  --dc-s1:4px; --dc-s2:8px; --dc-s3:12px; --dc-s4:16px; --dc-s5:20px; --dc-s6:24px; --dc-s8:32px; --dc-s10:40px;
+  /* 圆角 */
+  --dc-r-sm:6px; --dc-r-md:8px; --dc-r-lg:12px; --dc-r-xl:16px;
+  /* 阴影 */
+  --dc-e1:0 1px 2px rgba(31,36,48,.06);
+  --dc-e2:0 2px 8px rgba(31,36,48,.09);
+  --dc-e3:0 12px 32px rgba(31,36,48,.16);
+  --dc-ring:0 0 0 3px rgba(169,106,44,.28);
+  /* 控件尺寸 */
+  --dc-ctl-sm:28px; --dc-ctl-md:32px; --dc-ctl-lg:36px;
+  /* 动效 */
+  --dc-dur-fast:120ms; --dc-dur-base:180ms; --dc-dur-slow:240ms;
+  --dc-ease:cubic-bezier(.2,.8,.2,1);
+}
+@media(prefers-reduced-motion:reduce){:root{--dc-dur-fast:0ms;--dc-dur-base:0ms;--dc-dur-slow:0ms}}
+
+/* ============================================================
+   样例展示区通用（.demo 内使用 dc- 产品令牌）
+   ============================================================ */
+.demo{border:1px solid var(--dc-line);border-radius:var(--dc-r-lg);background:var(--dc-surface-2);padding:16px;margin:10px 0}
+.demo-label{font-size:11px;font-weight:700;letter-spacing:.5px;color:var(--dc-ink-3);text-transform:uppercase;margin-bottom:10px}
+.row{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+
+/* 按钮（产品规格） */
+.dc-btn{display:inline-flex;align-items:center;gap:6px;font-family:var(--dc-font-ui);font-size:var(--dc-text-md);
+  height:var(--dc-ctl-md);padding:0 14px;border-radius:var(--dc-r-md);border:1px solid transparent;
+  cursor:pointer;font-weight:600;white-space:nowrap;transition:background var(--dc-dur-fast) var(--dc-ease),border-color var(--dc-dur-fast)}
+.dc-btn:focus-visible{outline:none;box-shadow:var(--dc-ring)}
+.dc-btn.primary{background:var(--dc-brand-strong);color:#fff}
+.dc-btn.primary:hover{background:var(--dc-brand-deep)}
+.dc-btn.secondary{background:var(--dc-surface);color:var(--dc-ink-1);border-color:var(--dc-line-strong)}
+.dc-btn.secondary:hover{border-color:var(--dc-brand);color:var(--dc-brand-strong)}
+.dc-btn.ghost{background:transparent;color:var(--dc-ink-2)}
+.dc-btn.ghost:hover{background:var(--dc-fill-disabled);color:var(--dc-ink-1)}
+.dc-btn.danger{background:var(--dc-danger-strong,#b23e40);background:#b23e40;color:#fff}
+.dc-btn.danger:hover{background:#983334}
+.dc-btn.sm{height:var(--dc-ctl-sm);font-size:var(--dc-text-sm);padding:0 10px}
+.dc-btn[disabled]{background:var(--dc-fill-disabled);color:var(--dc-ink-disabled);cursor:not-allowed;border-color:transparent}
+.dc-btn .ic{width:14px;height:14px;flex:none}
+
+/* 徽章 */
+.dc-badge{display:inline-flex;align-items:center;gap:5px;height:22px;padding:0 8px;border-radius:var(--dc-r-sm);
+  font-size:var(--dc-text-xs);font-weight:600;line-height:1;white-space:nowrap}
+.dc-badge .dot{width:6px;height:6px;border-radius:50%;flex:none}
+.dc-badge.unready{background:#eef1f5;color:var(--dc-ink-3)}
+.dc-badge.ready{background:var(--dc-surface);color:var(--dc-brand-strong);border:1px solid var(--dc-brand)}
+.dc-badge.running{background:var(--dc-a-soft);color:var(--dc-a)}
+.dc-badge.confirm{background:var(--dc-warning-soft);color:var(--dc-warning-text)}
+.dc-badge.stale{background:var(--dc-surface);color:var(--dc-warning-text);border:1px dashed var(--dc-warning)}
+.dc-badge.done{background:var(--dc-success-soft);color:var(--dc-success-text)}
+.dc-badge.failed{background:var(--dc-danger-soft);color:var(--dc-danger-text)}
+.dc-badge .spin{width:10px;height:10px;border:2px solid var(--dc-a-soft);border-top-color:var(--dc-a);border-radius:50%;animation:dcspin 1s linear infinite}
+@keyframes dcspin{to{transform:rotate(360deg)}}
+.dc-badge.ver-draft{background:#eef1f5;color:var(--dc-ink-2)}
+.dc-badge.ver-cand{background:var(--dc-brand-soft);color:var(--dc-brand-strong)}
+.dc-badge.ver-used{background:var(--dc-success-soft);color:var(--dc-success-text)}
+
+/* 发言卡片 TurnCard */
+.dc-turn{background:var(--dc-surface);border:1px solid var(--dc-line);border-radius:var(--dc-r-lg);padding:12px 14px;width:100%}
+.dc-turn .head{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.dc-spk{display:inline-flex;align-items:center;gap:5px;font-size:var(--dc-text-xs);font-weight:700;height:20px;padding:0 8px;border-radius:var(--dc-r-sm)}
+.dc-spk.A{background:var(--dc-a-soft);color:var(--dc-a)}
+.dc-spk.B{background:var(--dc-b-soft);color:var(--dc-b-text)}
+.dc-turn .tid{font-family:var(--dc-font-mono);font-size:11.5px;color:var(--dc-ink-3)}
+.dc-turn .text{font-size:var(--dc-text-md);color:var(--dc-ink-1);line-height:var(--dc-lh-body)}
+.dc-turn .meta{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;align-items:center}
+.dc-chip{display:inline-flex;align-items:center;height:20px;padding:0 7px;border-radius:var(--dc-r-sm);background:var(--dc-fill-disabled);
+  color:var(--dc-ink-2);font-size:11.5px;font-weight:500}
+.dc-chip.mono{font-family:var(--dc-font-mono)}
+.dc-chip.warn{background:var(--dc-warning-soft);color:var(--dc-warning-text)}
+.dc-chip.ok{background:var(--dc-success-soft);color:var(--dc-success-text)}
+
+/* 确认面板 ApprovalPanel */
+.dc-appr{background:var(--dc-surface);border:1px solid var(--dc-line);border-radius:var(--dc-r-lg);box-shadow:var(--dc-e2);max-width:420px;overflow:hidden}
+.dc-appr .h{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--dc-line)}
+.dc-appr .h b{font-size:var(--dc-text-md);color:var(--dc-ink-1)}
+.dc-appr .sub{padding:10px 16px 0;font-size:var(--dc-text-sm);color:var(--dc-ink-2)}
+.dc-appr .list{padding:8px 16px}
+.dc-appr .f{display:flex;justify-content:space-between;gap:8px;padding:12px 16px;border-top:1px solid var(--dc-line);background:var(--dc-surface-2)}
+.dc-check{display:flex;align-items:flex-start;gap:8px;padding:6px 0;font-size:var(--dc-text-sm);color:var(--dc-ink-1)}
+.dc-check input{width:15px;height:15px;margin-top:2px;accent-color:var(--dc-success-text)}
+
+/* 服务状态组 */
+.dc-svc{display:inline-flex;align-items:center;gap:14px;padding:6px 12px;background:var(--dc-surface);border:1px solid var(--dc-line);border-radius:var(--dc-r-md)}
+.dc-svc .item{display:inline-flex;align-items:center;gap:5px;font-size:var(--dc-text-xs);color:var(--dc-ink-2)}
+.dc-svc .dot{width:7px;height:7px;border-radius:50%}
+.dc-svc .dot.ok{background:var(--dc-success)}
+.dc-svc .dot.err{background:var(--dc-danger)}
+.dc-svc .dot.off{background:var(--dc-ink-3)}
+
+/* 上传槽 */
+.dc-upload{border:1.5px dashed var(--dc-line-strong);border-radius:var(--dc-r-lg);padding:22px 16px;text-align:center;cursor:pointer;transition:border-color var(--dc-dur-fast)}
+.dc-upload:hover{border-color:var(--dc-brand)}
+.dc-upload .t{font-size:var(--dc-text-sm);font-weight:600;color:var(--dc-ink-1)}
+.dc-upload .s{font-size:var(--dc-text-xs);color:var(--dc-ink-3);margin-top:3px}
+
+/* 参数控件 */
+.dc-param{display:grid;grid-template-columns:76px 1fr 64px 18px;align-items:center;gap:10px;padding:6px 0}
+.dc-param label{font-size:var(--dc-text-sm);color:var(--dc-ink-2);font-weight:600}
+.dc-param .val{font-family:var(--dc-font-mono);font-size:12px;color:var(--dc-ink-1);text-align:right}
+.dc-param .q{width:16px;height:16px;border-radius:50%;border:1px solid var(--dc-line-strong);color:var(--dc-ink-3);
+  font-size:10px;display:inline-flex;align-items:center;justify-content:center;cursor:help}
+input[type=range].dc-range{appearance:none;height:4px;border-radius:2px;background:var(--dc-line-strong);outline:none}
+input[type=range].dc-range::-webkit-slider-thumb{appearance:none;width:14px;height:14px;border-radius:50%;background:var(--dc-surface);border:2px solid var(--dc-brand);cursor:pointer}
+input[type=range].dc-range:focus-visible{box-shadow:var(--dc-ring)}
+
+/* 色板 */
+.sw{display:grid;grid-template-columns:repeat(auto-fill,minmax(148px,1fr));gap:10px}
+.sw .item{border:1px solid var(--dc-line);border-radius:var(--dc-r-md);overflow:hidden;background:var(--dc-surface)}
+.sw .c{height:44px}
+.sw .i{padding:7px 9px}
+.sw .n{font-size:11.5px;font-weight:700;color:var(--dc-ink-1)}
+.sw .v{font-family:var(--dc-font-mono);font-size:10.5px;color:var(--dc-ink-3)}
+
+/* 字阶样例 */
+.ts .r{display:flex;align-items:baseline;gap:14px;padding:7px 0;border-bottom:1px dashed var(--dc-line)}
+.ts .r:last-child{border-bottom:none}
+.ts .spec{font-family:var(--dc-font-mono);font-size:10.5px;color:var(--dc-ink-3);width:170px;flex:none}
+.ts .t1{font-size:24px;font-weight:700}
+.ts .t2{font-size:20px;font-weight:700}
+.ts .t3{font-size:16px;font-weight:600}
+.ts .t4{font-size:14px}
+.ts .t5{font-size:13px;color:var(--dc-ink-2)}
+.ts .t6{font-size:12px;color:var(--dc-ink-2)}
+.ts .tm{font-family:var(--dc-font-mono);font-size:12px;color:var(--dc-a)}
+
+/* 键帽 */
+.kbd{display:inline-block;font-family:var(--dc-font-mono);font-size:11px;padding:1px 6px;border:1px solid var(--dc-line-strong);
+  border-bottom-width:2px;border-radius:5px;background:var(--dc-surface);color:var(--dc-ink-2)}
+
+/* ============================================================
+   应用壳蓝图（按 1440 逻辑宽度绘制，容器内缩放展示）
+   ============================================================ */
+.bp-wrap{border:1px solid var(--line2);border-radius:13px;background:#2b303b;padding:10px;margin:14px 0;overflow:hidden}
+.bp-note{font-size:11.5px;color:var(--ink3);margin:6px 2px 0;text-align:center}
+.bp-scale{width:1400px;transform:scale(.66);transform-origin:0 0}
+.bp-inner{height:760px}
+.mu{display:flex;flex-direction:column;width:1400px;height:760px;background:var(--dc-paper);border-radius:8px;overflow:hidden;font-size:13px;color:var(--dc-ink-1);box-shadow:0 20px 60px rgba(0,0,0,.35)}
+/* 顶栏 */
+.mu-top{height:56px;flex:none;display:flex;align-items:center;gap:16px;padding:0 20px;background:var(--dc-surface);border-bottom:1px solid var(--dc-line)}
+.mu-logo{display:flex;align-items:center;gap:8px;font-weight:700;font-size:14px;cursor:pointer}
+.mu-mark{width:24px;height:24px;border-radius:7px;background:linear-gradient(135deg,#a96a2c,#714520);display:inline-flex;align-items:center;justify-content:center}
+.mu-mark i{width:10px;height:10px;border-radius:2px;background:#f7ede2;display:block}
+.mu-proj{font-size:13px;color:var(--dc-ink-2);border-left:1px solid var(--dc-line);padding-left:16px}
+.mu-spacer{flex:1}
+.mu-vram{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--dc-ink-2)}
+.mu-vram .bar{width:72px;height:6px;border-radius:3px;background:var(--dc-fill-disabled);overflow:hidden}
+.mu-vram .bar i{display:block;height:100%;width:58%;background:var(--dc-a);border-radius:3px}
+.mu-save{font-size:12px;color:var(--dc-ink-3)}
+/* 主体三区 */
+.mu-body{flex:1;display:flex;min-height:0}
+/* 左阶段轨 */
+.mu-rail{width:208px;flex:none;background:var(--dc-surface);border-right:1px solid var(--dc-line);padding:12px 10px;display:flex;flex-direction:column;gap:2px}
+.mu-stg{display:flex;align-items:center;gap:9px;padding:8px 10px;border-radius:var(--dc-r-md);cursor:pointer;position:relative}
+.mu-stg:hover{background:var(--dc-fill-disabled)}
+.mu-stg.active{background:var(--dc-brand-soft)}
+.mu-stg.active::before{content:"";position:absolute;left:0;top:8px;bottom:8px;width:3px;border-radius:2px;background:var(--dc-brand)}
+.mu-stg .no{width:22px;height:22px;border-radius:50%;background:var(--dc-fill-disabled);color:var(--dc-ink-3);
+  font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex:none}
+.mu-stg.done .no{background:var(--dc-success-soft);color:var(--dc-success-text)}
+.mu-stg.active .no{background:var(--dc-brand-strong);color:#fff}
+.mu-stg .tt{min-width:0}
+.mu-stg .tt b{display:block;font-size:13px;font-weight:600;line-height:1.3}
+.mu-stg .tt small{font-size:11px;color:var(--dc-ink-3)}
+.mu-stg .st{margin-left:auto;flex:none}
+.mu-sep{height:1px;background:var(--dc-line);margin:10px 6px}
+.mu-entry{display:flex;align-items:center;gap:9px;padding:7px 10px;border-radius:var(--dc-r-md);font-size:13px;color:var(--dc-ink-2);cursor:pointer}
+.mu-entry:hover{background:var(--dc-fill-disabled);color:var(--dc-ink-1)}
+.mu-entry .sq{width:18px;height:18px;border-radius:5px;background:var(--dc-fill-disabled);flex:none}
+.mu-note{margin-top:auto;font-size:10.5px;color:var(--dc-ink-3);line-height:1.5;padding:8px 10px 0;border-top:1px solid var(--dc-line)}
+/* 主视图 */
+.mu-main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--dc-paper)}
+.mu-head{flex:none;display:flex;align-items:center;gap:12px;padding:14px 20px 10px}
+.mu-head h6{font-size:16px;font-weight:700;margin:0}
+.mu-head .ver{font-family:var(--dc-font-mono);font-size:12px;color:var(--dc-ink-3)}
+.mu-cols{flex:1;display:flex;gap:14px;padding:4px 20px 12px;min-height:0}
+.mu-panel{background:var(--dc-surface);border:1px solid var(--dc-line);border-radius:var(--dc-r-lg);padding:14px 16px;box-shadow:var(--dc-e1)}
+.mu-panel.eng{width:300px;flex:none;display:flex;flex-direction:column;gap:10px}
+.mu-panel.list{flex:1;min-width:0;display:flex;flex-direction:column}
+.mu-panel h6{font-size:13px;font-weight:700;margin:0 0 10px;color:var(--dc-ink-1)}
+.mu-radio{display:flex;gap:14px;font-size:13px;color:var(--dc-ink-2)}
+.mu-radio label{display:inline-flex;gap:5px;align-items:center;cursor:pointer}
+.mu-radio input{accent-color:var(--dc-brand-strong)}
+.mu-voice{display:flex;align-items:center;gap:8px;font-size:13px}
+.mu-voice .who{width:20px;height:20px;border-radius:6px;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center}
+.mu-voice .who.A{background:var(--dc-a-soft);color:var(--dc-a)}
+.mu-voice .who.B{background:var(--dc-b-soft);color:var(--dc-b-text)}
+.mu-sel{flex:1;height:30px;border:1px solid var(--dc-line-strong);border-radius:var(--dc-r-md);display:flex;align-items:center;justify-content:space-between;padding:0 9px;font-size:12.5px;color:var(--dc-ink-1);background:var(--dc-surface)}
+.mu-sel small{color:var(--dc-ink-3);font-size:10px}
+.mu-item{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:var(--dc-r-md);font-size:13px}
+.mu-item:hover{background:var(--dc-surface-2)}
+.mu-item .txt{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--dc-ink-1)}
+.mu-item .dur{font-family:var(--dc-font-mono);font-size:12px;color:var(--dc-ink-3)}
+.mu-prog{height:5px;border-radius:3px;background:var(--dc-fill-disabled);overflow:hidden;margin:2px 10px 8px}
+.mu-prog i{display:block;height:100%;width:33%;background:var(--dc-a);border-radius:3px}
+.mu-list-foot{display:flex;gap:8px;padding:10px 4px 0;border-top:1px solid var(--dc-line);margin-top:auto}
+.mu-durbar{flex:none;margin:0 20px 14px;padding:9px 14px;border-radius:var(--dc-r-md);background:var(--dc-success-soft);color:var(--dc-success-text);font-size:12.5px;display:flex;align-items:center;gap:8px}
+/* 右检查器 */
+.mu-insp{width:320px;flex:none;background:var(--dc-surface);border-left:1px solid var(--dc-line);padding:14px 16px;overflow:auto}
+.mu-insp h6{font-size:13px;font-weight:700;margin:0 0 4px}
+.mu-insp .sub{font-size:11.5px;color:var(--dc-ink-3);margin-bottom:12px}
+.mu-insp .grp{font-size:11px;font-weight:700;color:var(--dc-ink-3);letter-spacing:.4px;margin:14px 0 6px}
+.mu-insp .kv{display:flex;justify-content:space-between;font-size:12.5px;padding:4px 0;color:var(--dc-ink-2)}
+.mu-insp .kv b{color:var(--dc-ink-1);font-weight:600}
+.mu-insp .acts{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+/* 时间轨 */
+.mu-tl{flex:none;background:#20242d;color:#c6ccd8;border-top:1px solid #171a20;padding:8px 20px 10px}
+.mu-tl-top{display:flex;align-items:center;gap:14px;font-family:var(--dc-font-mono);font-size:12px;margin-bottom:8px}
+.mu-tl-top .tc{color:#fff}
+.mu-tl-top .tc em{font-style:normal;color:#7d8698}
+.mu-tc-btns{display:flex;gap:4px}
+.mu-tc-btns span{width:26px;height:22px;border-radius:5px;background:#2b303b;display:flex;align-items:center;justify-content:center;color:#c6ccd8;font-size:10px;cursor:pointer}
+.mu-tc-btns span.play{background:var(--dc-brand);color:#fff}
+.mu-zoom{flex:1;height:4px;border-radius:2px;background:#3a404d;position:relative;max-width:220px}
+.mu-zoom i{position:absolute;left:30%;right:45%;top:-4px;bottom:-4px;background:var(--dc-brand);border-radius:3px}
+.mu-track{display:flex;align-items:center;gap:10px;height:26px;margin-bottom:2px}
+.mu-track label{width:14px;font-size:11px;font-weight:700;flex:none}
+.mu-track .lane{flex:1;height:20px;border-radius:4px;background:#2b303b;position:relative;overflow:hidden}
+.mu-blk{position:absolute;top:2px;bottom:2px;border-radius:3px}
+.mu-blk.a{background:repeating-linear-gradient(90deg,#0e7490 0 2px,#1a8aa8 2px 4px)}
+.mu-blk.b{background:repeating-linear-gradient(90deg,#be4d6e 0 2px,#cf6a88 2px 4px)}
+.mu-play{position:absolute;top:-3px;bottom:-3px;width:2px;background:#fff;box-shadow:0 0 6px rgba(255,255,255,.8)}
+.mu-turns{display:flex;gap:3px;align-items:center;height:22px;margin-top:4px}
+.mu-turns .tk{height:18px;border-radius:4px;font-size:9.5px;font-family:var(--dc-font-mono);display:flex;align-items:center;justify-content:center;flex:none;cursor:pointer}
+.mu-turns .tk.A{background:var(--dc-a-soft);color:var(--dc-a)}
+.mu-turns .tk.B{background:var(--dc-b-soft);color:var(--dc-b-text)}
+.mu-turns .mk{height:18px;border:1.5px solid var(--dc-brand);border-radius:4px;flex:none;position:relative}
+.mu-turns .mk::after{content:"样片 01:12–01:28";position:absolute;top:-16px;left:0;font-size:9px;color:#cdb795;white-space:nowrap}
+.mu-tl .spec{margin-left:auto;font-size:10.5px;color:#7d8698}
+/* 底栏 */
+.mu-foot{height:48px;flex:none;display:flex;align-items:center;gap:12px;padding:0 20px;background:var(--dc-surface);border-top:1px solid var(--dc-line);font-size:12.5px;color:var(--dc-ink-2)}
+.mu-foot .pos{font-weight:600;color:var(--dc-ink-1)}
+
+/* 断点示意 */
+.bp-mini{border:1px solid var(--line2);border-radius:11px;background:#fff;padding:12px}
+.bp-mini .cap{font-size:11.5px;font-weight:700;color:var(--ink2);margin-bottom:8px}
+.bp-mini .zone{border-radius:5px;font-size:10px;display:flex;align-items:center;justify-content:center;color:var(--ink3);background:#eef1f5;border:1px solid var(--line)}
+.bp-mini .grid{display:grid;gap:4px}
+
+@media(max-width:920px){.toc{display:none}.content{padding:20px 16px 70px}.bp-scale{transform:scale(.42)}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<nav class="toc">
+  <h1>双声播客工坊</h1>
+  <div class="sub">DuoCast · UI 设计系统与页面规划 v1.0</div>
+
+  <div class="grp">总纲</div>
+  <a href="#s0">0 · 设计定位与原则</a>
+
+  <div class="grp">设计令牌</div>
+  <a href="#s1">1 · 令牌体系</a>
+  <a href="#s1-1" class="lv2">1.1 色彩</a>
+  <a href="#s1-2" class="lv2">1.2 字体</a>
+  <a href="#s1-3" class="lv2">1.3 间距·圆角·阴影</a>
+  <a href="#s1-4" class="lv2">1.4 尺寸与密度</a>
+  <a href="#s1-5" class="lv2">1.5 动效与层级</a>
+
+  <div class="grp">组件</div>
+  <a href="#s2">2 · 组件体系</a>
+  <a href="#s2-1" class="lv2">2.1 清单总览</a>
+  <a href="#s2-2" class="lv2">2.2 基础控件样例</a>
+  <a href="#s2-3" class="lv2">2.3 领域组件样例</a>
+
+  <div class="grp">图标</div>
+  <a href="#s3">3 · 图标体系</a>
+
+  <div class="grp">页面设计</div>
+  <a href="#s4">4 · 整体页面设计</a>
+  <a href="#s4-1" class="lv2">4.1 应用壳蓝图</a>
+  <a href="#s4-2" class="lv2">4.2 分区规格</a>
+  <a href="#s4-3" class="lv2">4.3 各视图布局模式</a>
+  <a href="#s4-4" class="lv2">4.4 响应式行为</a>
+
+  <div class="grp">落地</div>
+  <a href="#s5">5 · 落地映射</a>
+  <a href="#s6">6 · 验证状态与下一步</a>
+</nav>
+
+<main class="content">
+
+<div class="cover">
+  <div class="kicker">DESIGN SYSTEM &amp; PAGE PLAN</div>
+  <h2>双声播客工坊 · UI 设计系统与页面规划</h2>
+  <p>本文档把 01 §0.5 的全局设计语言扩展为完整的设计令牌与组件体系，给出五阶段工作台的整体页面设计（应用壳蓝图、分区规格、布局模式、响应式行为），并规定其到 Tailwind / Radix 的落地映射。色彩基调继承 01 §0.5 权威定义：焦糖品牌色、A 青蓝 / B 珊瑚粉双角色功能色；本档在其上补充满足对比度 ≥4.5:1 的文字深色阶。</p>
+  <div class="meta">
+    <span>版本 v1.0</span><span>2026-09-10</span><span>依据：01 §0.5 / §1 / §13</span><span>目标栈：React 18 + Tailwind + Radix</span>
+    <span>令牌前缀 --dc-</span><span>状态：方向稿（待逐屏高保真）</span>
+  </div>
+  <div class="note" style="margin-top:16px;border-left-color:#cdb795;background:rgba(255,255,255,.06);color:#c6ccd8"><b style="color:#fff">权威关系：</b>基础色相以 <b style="color:#fff">01 §0.5</b> 为权威，本档仅做「派生色阶 + 使用规则」的扩展，不改变既定色相；组件行为规则以 <b style="color:#fff">01 §1 / §13</b> 为权威，本档负责视觉规格与状态呈现。本文档内所有样例均使用同一套 --dc- 令牌渲染，即 tokens.css 的可视化草案。</div>
+</div>
+
+<!-- ================= 0 ================= -->
+<h3 class="sec" id="s0"><span class="no">0</span>设计定位与原则</h3>
+
+<div class="card">
+  <table class="fixed">
+    <tbody>
+      <tr><td>产品性质</td><td>本地专业创作工作台（不是消费级内容 App）：高信息密度、可逆操作、版本可见</td></tr>
+      <tr><td>视觉基调</td><td>安静的中性底 + 焦糖品牌点缀；色彩主要用于「说话人身份与状态」而非装饰</td></tr>
+      <tr><td>参照系</td><td>专业工具（DAW / 剪辑软件）的信息组织 + 消费级产品的可读性与温度</td></tr>
+      <tr><td>首版主题</td><td>亮色单主题；暗色主题列为后续候选（不在首版承诺）</td></tr>
+    </tbody>
+  </table>
+
+  <h5>六条设计原则（评审 UI 时的裁决依据）</h5>
+  <table>
+    <thead><tr><th>#</th><th>原则</th><th>落地规则</th><th>反例（禁止）</th></tr></thead>
+    <tbody>
+      <tr><td>P1</td><td>状态由产物推导</td><td>完成态永远来自版本与任务状态（01 §13.1 七态），UI 不手写完成标记</td><td>用「下一步」点击次数推断进度</td></tr>
+      <tr><td>P2</td><td>色彩即语义</td><td>A 青蓝 / B 珊瑚粉只表示说话人；橙=待确认/已过期；绿=已就绪；红=失败。颜色永远伴随文字标签（01 §0.5 无障碍要求）</td><td>用品牌色标注说话人；仅用色点不带文字</td></tr>
+      <tr><td>P3</td><td>高密度但不局促</td><td>清单/表格用紧凑行高，表单/卡片用舒适留白；同级元素间距一致</td><td>大面积空白装饰；卡片固定高度致内容滚动</td></tr>
+      <tr><td>P4</td><td>图标 + 文字的一致操作</td><td>同类操作按钮统一「图标 + 文字」样式；纯图标按钮仅限播放控制等高频紧凑位</td><td>同类操作一处带字一处只有图标</td></tr>
+      <tr><td>P5</td><td>可调优先</td><td>校验只提示不硬拦（空数据与确认点除外，01 §13.3）；破坏性操作需确认</td><td>弹窗打断每一步编辑</td></tr>
+      <tr><td>P6</td><td>所见即可信</td><td>能力门控（01 §1.6.4）：不支持的参数不显示；无测速数据不显示编造预估</td><td>显示无效参数选项；假进度条</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ================= 1 ================= -->
+<h3 class="sec" id="s1"><span class="no">1</span>令牌体系</h3>
+
+<h4 id="s1-1">1.1 色彩</h4>
+<div class="goal"><b>结构：</b>基础色相（01 §0.5 权威）→ 语义令牌（本档派生）→ 组件用法。派生规则：<code>-strong / -text</code> 为满足 ≥4.5:1 的文字深色阶；<code>-soft</code> 为浅底；填充类用基础色（≥3:1 UI 组件对比）。</div>
+
+<div class="card">
+  <h5>中性色（界面骨架）</h5>
+  <div class="sw">
+    <div class="item"><div class="c" style="background:#f4f6f9;border-bottom:1px solid #e3e7ee"></div><div class="i"><div class="n">paper</div><div class="v">#f4f6f9 应用底</div></div></div>
+    <div class="item"><div class="c" style="background:#fbfcfd;border-bottom:1px solid #e3e7ee"></div><div class="i"><div class="n">surface-2</div><div class="v">#fbfcfd 次级面</div></div></div>
+    <div class="item"><div class="c" style="background:#ffffff;border-bottom:1px solid #e3e7ee"></div><div class="i"><div class="n">surface</div><div class="v">#ffffff 卡片/面板</div></div></div>
+    <div class="item"><div class="c" style="background:#e3e7ee"></div><div class="i"><div class="n">line</div><div class="v">#e3e7ee 常规描边</div></div></div>
+    <div class="item"><div class="c" style="background:#d3d9e3"></div><div class="i"><div class="n">line-strong</div><div class="v">#d3d9e3 控件描边</div></div></div>
+    <div class="item"><div class="c" style="background:#1f2430"></div><div class="i"><div class="n">ink-1</div><div class="v">#1f2430 主文字 15.9:1</div></div></div>
+    <div class="item"><div class="c" style="background:#4d5666"></div><div class="i"><div class="n">ink-2</div><div class="v">#4d5666 次文字 7.4:1</div></div></div>
+    <div class="item"><div class="c" style="background:#858f9f"></div><div class="i"><div class="n">ink-3</div><div class="v">#858f9f 仅占位/装饰</div></div></div>
+  </div>
+  <div class="note warn"><b>ink-3 使用约束：</b>对白底 3.3:1，<b>不满足正文对比度</b>——仅用于占位符、辅助装饰信息；必读的辅助说明一律用 ink-2。</div>
+
+  <h5>品牌与角色功能色（01 §0.5 权威色相）</h5>
+  <div class="sw">
+    <div class="item"><div class="c" style="background:#a96a2c"></div><div class="i"><div class="n">brand</div><div class="v">#a96a2c 指示/图标 4.4:1</div></div></div>
+    <div class="item"><div class="c" style="background:#8a5420"></div><div class="i"><div class="n">brand-strong</div><div class="v">#8a5420 主按钮/文字 6.3:1</div></div></div>
+    <div class="item"><div class="c" style="background:#714520"></div><div class="i"><div class="n">brand-deep</div><div class="v">#714520 主按钮 hover</div></div></div>
+    <div class="item"><div class="c" style="background:#f7ede2"></div><div class="i"><div class="n">brand-soft</div><div class="v">#f7ede2 选中底/提示底</div></div></div>
+    <div class="item"><div class="c" style="background:#0e7490"></div><div class="i"><div class="n">a（角色A）</div><div class="v">#0e7490 文字/波形 5.4:1</div></div></div>
+    <div class="item"><div class="c" style="background:#e2f2f6"></div><div class="i"><div class="n">a-soft</div><div class="v">#e2f2f6 A 徽章底</div></div></div>
+    <div class="item"><div class="c" style="background:#be4d6e"></div><div class="i"><div class="n">b（角色B）</div><div class="v">#be4d6e 填充/波形 4.7:1</div></div></div>
+    <div class="item"><div class="c" style="background:#a84360"></div><div class="i"><div class="n">b-text</div><div class="v">#a84360 B 文字 5.8:1</div></div></div>
+    <div class="item"><div class="c" style="background:#fbe9ef"></div><div class="i"><div class="n">b-soft</div><div class="v">#fbe9ef B 徽章底</div></div></div>
+  </div>
+
+  <h5>语义状态色</h5>
+  <div class="sw">
+    <div class="item"><div class="c" style="background:#2f9e6e"></div><div class="i"><div class="n">success</div><div class="v">#2f9e6e 填充/图标 3.4:1</div></div></div>
+    <div class="item"><div class="c" style="background:#1e7a52"></div><div class="i"><div class="n">success-text</div><div class="v">#1e7a52 文字 5.3:1</div></div></div>
+    <div class="item"><div class="c" style="background:#b97e16"></div><div class="i"><div class="n">warning</div><div class="v">#b97e16 填充 3.5:1</div></div></div>
+    <div class="item"><div class="c" style="background:#8a5f0e"></div><div class="i"><div class="n">warning-text</div><div class="v">#8a5f0e 文字 5.7:1</div></div></div>
+    <div class="item"><div class="c" style="background:#c75052"></div><div class="i"><div class="n">danger</div><div class="v">#c75052 填充 4.5:1</div></div></div>
+    <div class="item"><div class="c" style="background:#b23e40"></div><div class="i"><div class="n">danger-text</div><div class="v">#b23e40 文字/危险按钮 5.7:1</div></div></div>
+  </div>
+
+  <h5>用法矩阵</h5>
+  <table>
+    <thead><tr><th>场景</th><th>填充</th><th>文字</th><th>浅底</th></tr></thead>
+    <tbody>
+      <tr><td>主操作按钮</td><td><code>brand-strong</code>（白字 6.3:1）</td><td>白</td><td>—</td></tr>
+      <tr><td>次操作按钮</td><td><code>surface</code> + <code>line-strong</code> 描边</td><td><code>ink-1</code></td><td>—</td></tr>
+      <tr><td>当前阶段指示 / 选中态</td><td><code>brand</code>（竖条/描边）</td><td><code>brand-strong</code></td><td><code>brand-soft</code></td></tr>
+      <tr><td>A 说话人（徽章/波形/轨道）</td><td><code>a</code></td><td><code>a</code>（白底 5.4:1）</td><td><code>a-soft</code></td></tr>
+      <tr><td>B 说话人</td><td><code>b</code></td><td><code>b-text</code>（浅底上需 4.5:1 时用深阶）</td><td><code>b-soft</code></td></tr>
+      <tr><td>待确认 / 已过期</td><td><code>warning</code>（点/图标）</td><td><code>warning-text</code></td><td><code>warning-soft</code></td></tr>
+      <tr><td>已就绪 / 已采用</td><td><code>success</code></td><td><code>success-text</code></td><td><code>success-soft</code></td></tr>
+      <tr><td>失败 / 删除 / 打回</td><td><code>danger</code>；危险按钮底 <code>danger-text</code></td><td><code>danger-text</code></td><td><code>danger-soft</code></td></tr>
+      <tr><td>焦点环（全局）</td><td colspan="3"><code>0 0 0 3px rgba(169,106,44,.28)</code>，配合 <code>:focus-visible</code> 仅键盘触发</td></tr>
+    </tbody>
+  </table>
+  <div class="note"><b>派生规则说明：</b>基础色相不变（01 §0.5 权威）；文字场景统一使用 <code>-text / -strong</code> 深阶以满足 01 §13.3「对比度 ≥4.5:1」；<code>brand #a96a2c</code> 与 <code>b #be4d6e</code> 对白底分别为 4.4:1 / 4.7:1，故浅底小字改用深阶，波形等大面积填充不受限。禁用态：底 <code>#eef1f5</code>、字 <code>#a6aebc</code>、不透明度不变（避免叠层歧义）。</div>
+</div>
+
+<h4 id="s1-2">1.2 字体</h4>
+<div class="card">
+  <div class="ts">
+    <div class="r"><span class="spec">display · 24px/700 · 工程首页标题</span><span class="t1">双声播客工坊</span></div>
+    <div class="r"><span class="spec">section · 20px/700 · 阶段标题</span><span class="t2">③ 试听配音</span></div>
+    <div class="r"><span class="spec">subtitle · 16px/600 · 卡片标题</span><span class="t3">配音清单</span></div>
+    <div class="r"><span class="spec">body · 14px/400 · 正文（默认，01 权威）</span><span class="t4">先内容结构、再直接生成双人对话；自动时长为默认，5 分钟是上限。</span></div>
+    <div class="r"><span class="spec">body-sm · 13px/400 · 面板与清单行</span><span class="t5">T07 · 嘉宾 · 「我倒觉得关键在于成本结构……」</span></div>
+    <div class="r"><span class="spec">caption · 12px/400 · 徽章/辅助说明</span><span class="t6">数据边界：工程与成片本地；文本/图片经所选 API</span></div>
+    <div class="r"><span class="spec">mono · 12px · 时间码/ID/参数值</span><span class="tm">00:12.480 / 02:48.120 · U12 · 48000Hz</span></div>
+  </div>
+  <table>
+    <tbody>
+      <tr><td>字体栈</td><td>UI：<code>"Segoe UI","Microsoft YaHei UI",system-ui,sans-serif</code>；等宽：<code>"Cascadia Code","Consolas",monospace</code>（Windows 原生，不下载字体）</td></tr>
+      <tr><td>行高</td><td>紧凑区 1.45（清单/表格）；正文 1.6（01 权威）；阅读区 1.75（长文输入、说明）</td></tr>
+      <tr><td>中文规则</td><td>取消负字距；加粗档位仅 400 / 600 / 700</td></tr>
+      <tr><td>等宽使用范围</td><td>时间码、样本数、版本号（R9/V3/U12/T07）、参数当前值、路径——保证数字宽度对齐</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<h4 id="s1-3">1.3 间距 · 圆角 · 阴影</h4>
+<div class="cols2">
+  <div class="card">
+    <h5>间距（4px 栅格）</h5>
+    <table>
+      <thead><tr><th>令牌</th><th>值</th><th>典型用途</th></tr></thead>
+      <tbody>
+        <tr><td>s1</td><td>4px</td><td>图标与文字间隙、紧凑元素内距</td></tr>
+        <tr><td>s2</td><td>8px</td><td>相关元素组内间距</td></tr>
+        <tr><td>s3</td><td>12px</td><td>卡片内距、清单行内距</td></tr>
+        <tr><td>s4</td><td>16px</td><td>面板内距、组间间距</td></tr>
+        <tr><td>s5</td><td>20px</td><td>主视图左右边距</td></tr>
+        <tr><td>s6 / s8 / s10</td><td>24/32/40px</td><td>区块间距、封面留白</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="card">
+    <h5>圆角与阴影</h5>
+    <table>
+      <tbody>
+        <tr><td>圆角</td><td>徽章/输入内元素 <code>6px</code>；按钮/输入 <code>8px</code>（01 权威）；卡片/面板 <code>12px</code>；弹窗 <code>16px</code></td></tr>
+        <tr><td>阴影 e1</td><td><code>0 1px 2px rgba(31,36,48,.06)</code> 卡片静置</td></tr>
+        <tr><td>阴影 e2</td><td><code>0 2px 8px rgba(31,36,48,.09)</code> 悬浮面板/抽屉</td></tr>
+        <tr><td>阴影 e3</td><td><code>0 12px 32px rgba(31,36,48,.16)</code> 弹窗/菜单</td></tr>
+        <tr><td>描边优先</td><td>同级层次优先用 1px 描边而非阴影；时间轨区域（深底）内阴影与描边规则独立定义</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<h4 id="s1-4">1.4 尺寸与密度</h4>
+<div class="card">
+  <table>
+    <thead><tr><th>项</th><th>值</th><th>说明</th></tr></thead>
+    <tbody>
+      <tr><td>控件高度</td><td>sm 28 / md 32 / lg 36</td><td>面板内默认 md；表格行内 sm；工程首页主操作 lg</td></tr>
+      <tr><td>清单行高</td><td>紧凑 32 / 舒适 40</td><td>配音清单、任务列表用紧凑；工程卡片用舒适</td></tr>
+      <tr><td>图标显示尺寸</td><td>16 / 20 / 24</td><td>16 行内、20 按钮/面板、24 空态与封面（坐标系 24×24，见 §3）</td></tr>
+      <tr><td>壳尺寸</td><td>TopBar 56 · Sidebar 208 · Inspector 320 · FootBar 48 · TimelineBar 56（折叠 28）</td><td>01 §1 权威值</td></tr>
+      <tr><td>密度策略</td><td>局部密度，不做全局切换</td><td>清单/表格紧凑、表单/卡片舒适——避免大面积空旷，也避免全文小字</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<h4 id="s1-5">1.5 动效与层级</h4>
+<div class="cols2">
+  <div class="card">
+    <h5>动效</h5>
+    <table>
+      <tbody>
+        <tr><td>fast 120ms</td><td>hover / active / 选中反馈</td></tr>
+        <tr><td>base 180ms</td><td>面板展开、抽屉、下拉</td></tr>
+        <tr><td>slow 240ms</td><td>弹窗、视图切换、时间轨展开</td></tr>
+        <tr><td>缓动</td><td><code>cubic-bezier(.2,.8,.2,1)</code>（快速起步、柔和收尾）</td></tr>
+        <tr><td>降级</td><td><code>prefers-reduced-motion</code> → 全部时长归零，仅保留状态切换</td></tr>
+        <tr><td>禁用项</td><td>无循环装饰动画；运行中 spinner 与进度条除外（语义性）</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="card">
+    <h5>层级（z-index）</h5>
+    <table>
+      <tbody>
+        <tr><td>0</td><td>内容基准</td></tr>
+        <tr><td>100</td><td>吸顶/吸底元素（TopBar、FootBar）</td></tr>
+        <tr><td>800</td><td>Inspector 抽屉化（1024–1439 断点）</td></tr>
+        <tr><td>1000</td><td>Popover / 下拉</td></tr>
+        <tr><td>1100</td><td>ContextMenu</td></tr>
+        <tr><td>1200</td><td>Dialog（确认面板等）</td></tr>
+        <tr><td>1300</td><td>Toast</td></tr>
+        <tr><td>1400</td><td>Tooltip（永不遮挡）</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ================= 2 ================= -->
+<h3 class="sec" id="s2"><span class="no">2</span>组件体系</h3>
+
+<h4 id="s2-1">2.1 清单总览</h4>
+<div class="goal"><b>映射原则：</b>基础控件走 Radix 原语 + shadcn 封装（无障碍与键盘行为内置）；领域组件为本项目自研（承载 01 §1.6 与各阶段规则）。所有组件只有一套实现，预览页与实际页面同源。</div>
+
+<div class="card">
+  <table>
+    <thead><tr><th>分组</th><th>组件</th><th>来源</th><th>01 出处</th></tr></thead>
+    <tbody>
+      <tr><td rowspan="4">布局壳</td><td>AppShell（四区 + 断点行为）</td><td>自研</td><td>§1.1</td></tr>
+      <tr><td>TopBar / StageRail / FootBar</td><td>自研</td><td>§1.2–1.4</td></tr>
+      <tr><td>InspectorPanel（含抽屉形态）</td><td>自研（基于 Radix Dialog 变体）</td><td>§1.1</td></tr>
+      <tr><td>TimelineBar（A/B 轨 + 发言轨 + 样片标记）</td><td>自研（WaveSurfer.js + Konva）</td><td>§1.5</td></tr>
+      <tr><td rowspan="6">基础控件</td><td>Button（primary / secondary / ghost / danger，图标+文字）</td><td>shadcn button 扩展</td><td>§1.6.4</td></tr>
+      <tr><td>Input · TextArea · Select · Checkbox · Radio · Switch</td><td>shadcn / Radix</td><td>—</td></tr>
+      <tr><td>Slider（语速/情绪强度）· NumberField</td><td>Radix Slider</td><td>§1.6.4</td></tr>
+      <tr><td>Tooltip · Popover · Dialog · ContextMenu · Toast</td><td>Radix</td><td>§1.6.6</td></tr>
+      <tr><td>Badge（七态/版本/A-B）· Tag · Kbd · Progress · Spinner · EmptyState</td><td>自研展示组件</td><td>§13.1</td></tr>
+      <tr><td>ScrollArea · Tabs（无下划线分隔，用底色区分）</td><td>Radix</td><td>§6 镜头/构图/样片</td></tr>
+      <tr><td rowspan="6">领域组件</td><td>TurnCard（发言卡）· UnitChip（合成单元）</td><td>自研</td><td>§4 / §5.2</td></tr>
+      <tr><td>VersionPicker（版本/采用/对比）</td><td>自研（Popover 组合）</td><td>§1.6.3</td></tr>
+      <tr><td>ParameterField（标签+控件+等宽值+?）</td><td>自研（组合基础控件）</td><td>§1.6.4</td></tr>
+      <tr><td>UploadSlot（空态/有图/替换）</td><td>自研</td><td>§1.6.2</td></tr>
+      <tr><td>ApprovalPanel（确认面板）</td><td>自研（Dialog）</td><td>§1.6.5</td></tr>
+      <tr><td>ServiceStatusGroup · VramGauge · TaskCard · AssetCard · TemplateCard · ProjectCard · CandidatePanel · RerunImpactHint</td><td>自研</td><td>§1.2 / §8–10</td></tr>
+    </tbody>
+  </table>
+  <div class="note"><b>组件契约：</b>每个领域组件交付「规格 + 状态矩阵 + 事件 + 边界」四项；动态插入（清单项、任务卡）必须定义销毁与更新行为，不以静态预览代替。本档 §2.2–2.3 的样例即规格的视觉基准。</div>
+</div>
+
+<h4 id="s2-2">2.2 基础控件样例</h4>
+
+<div class="demo">
+  <div class="demo-label">Button · 图标+文字为标准形态（P4）</div>
+  <div class="row">
+    <button class="dc-btn primary"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg><span>生成整期配音</span></button>
+    <button class="dc-btn secondary"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-3-6.7M21 3v6h-6"/></svg><span>重新生成</span></button>
+    <button class="dc-btn ghost"><span>新旧对比</span></button>
+    <button class="dc-btn danger"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2m-9 0 1 14h8l1-14"/></svg><span>删除发言</span></button>
+    <button class="dc-btn" disabled><span>生成样片</span></button>
+    <button class="dc-btn sm secondary"><span>试听</span></button>
+  </div>
+  <div class="note" style="margin:10px 0 0">主按钮底用 <code>brand-strong</code>（白字 6.3:1）；禁用态不降低透明度，用固定灰阶，避免在彩色底上产生歧义。</div>
+</div>
+
+<div class="demo">
+  <div class="demo-label">Badge · 七态 + 版本 + 说话人（P2：颜色必配文字）</div>
+  <div class="row">
+    <span class="dc-badge unready"><span class="dot" style="background:currentColor"></span>未准备</span>
+    <span class="dc-badge ready"><span class="dot" style="background:var(--dc-brand)"></span>可执行</span>
+    <span class="dc-badge running"><span class="spin"></span>执行中 3/9</span>
+    <span class="dc-badge confirm"><span class="dot" style="background:var(--dc-warning)"></span>待确认</span>
+    <span class="dc-badge done"><span class="dot" style="background:var(--dc-success)"></span>已就绪</span>
+    <span class="dc-badge stale"><span class="dot" style="background:currentColor"></span>已过期</span>
+    <span class="dc-badge failed"><span class="dot" style="background:var(--dc-danger)"></span>失败</span>
+  </div>
+  <div class="row" style="margin-top:8px">
+    <span class="dc-badge ver-draft">草稿</span>
+    <span class="dc-badge ver-cand">候选 2</span>
+    <span class="dc-badge ver-used">已用 v3</span>
+    <span class="dc-badge" style="background:var(--dc-a-soft);color:var(--dc-a)">A · 主持人</span>
+    <span class="dc-badge" style="background:var(--dc-b-soft);color:var(--dc-b-text)">B · 嘉宾</span>
+    <span class="dc-badge confirm">结果待核实</span>
+    <span class="dc-badge stale">取消待生效</span>
+  </div>
+</div>
+
+<div class="demo">
+  <div class="demo-label">ParameterField · 标签 + 控件 + 等宽值 + ?（01 §1.6.4）</div>
+  <div style="max-width:420px">
+    <div class="dc-param">
+      <label>语速</label>
+      <input type="range" class="dc-range" style="width:100%" value="55">
+      <span class="val">1.10×</span>
+      <span class="q">?</span>
+    </div>
+    <div class="dc-param">
+      <label>间隔</label>
+      <input type="range" class="dc-range" style="width:100%" value="40">
+      <span class="val">480ms</span>
+      <span class="q">?</span>
+    </div>
+  </div>
+  <div class="note" style="margin:10px 0 0">当前值一律等宽字体右对齐；<code>?</code> 悬停显示含义、范围与影响（能力门控：引擎不支持的项直接隐藏，有降级解释的显示降级说明）。</div>
+</div>
+
+<div class="demo">
+  <div class="demo-label">Kbd · 键盘约定（01 §13.3）</div>
+  <div class="row" style="font-size:13px;color:var(--dc-ink-2)">
+    <span><span class="kbd">Space</span> 播放/暂停</span>
+    <span><span class="kbd">←</span><span class="kbd">→</span> 句级跳转</span>
+    <span><span class="kbd">1</span>–<span class="kbd">5</span> 切换阶段</span>
+    <span><span class="kbd">Ctrl</span>+<span class="kbd">Z</span> 撤销</span>
+  </div>
+</div>
+
+<h4 id="s2-3">2.3 领域组件样例</h4>
+
+<div class="demo">
+  <div class="demo-label">TurnCard · 发言卡（阶段②/③ 通用，点击选中进入检查器）</div>
+  <div style="max-width:560px" class="dc-turn">
+    <div class="head">
+      <span class="dc-spk B">B · 嘉宾</span>
+      <span class="tid">#T07</span>
+      <span style="margin-left:auto;display:flex;gap:6px">
+        <span class="dc-chip mono">U12</span>
+        <span class="dc-badge ver-used" style="height:20px">已用</span>
+      </span>
+    </div>
+    <div class="text">「我倒觉得关键在于成本结构——同样的算力预算，推理侧的优化空间比训练侧大得多。」</div>
+    <div class="meta">
+      <span class="dc-chip">语气 · 质疑</span>
+      <span class="dc-chip mono">语速 1.0×</span>
+      <span class="dc-chip mono">12.4s</span>
+      <span class="dc-chip warn">读音 3 处</span>
+      <span class="dc-chip ok">✓ 试听通过</span>
+    </div>
+  </div>
+  <div class="note" style="margin:10px 0 0">「读音 3 处」为警示 chip，点击展开读音词典定位；候选版本时右上徽章变为「候选 n」+「采用 / 对比」操作（不自动覆盖已用，01 §13.2）。</div>
+</div>
+
+<div class="demo">
+  <div class="demo-label">ApprovalPanel · 确认面板（01 §1.6.5 视觉规格）</div>
+  <div class="dc-appr">
+    <div class="h"><b>✓ 确认 · 配音</b><span style="color:var(--dc-ink-3);cursor:pointer">×</span></div>
+    <div class="sub">将确认音轨版本 <b style="font-family:var(--dc-font-mono)">R9</b>（总时长 <span style="font-family:var(--dc-font-mono)">02:48.120</span> ≤ <span style="font-family:var(--dc-font-mono)">05:00</span>）</div>
+    <div class="list">
+      <label class="dc-check"><input type="checkbox" checked><span>所有使用中的音频有效</span></label>
+      <label class="dc-check"><input type="checkbox" checked><span>必要读音校正已处理（2 处）</span></label>
+      <label class="dc-check"><input type="checkbox" checked><span>试听通过</span></label>
+    </div>
+    <div class="f">
+      <button class="dc-btn ghost sm"><span>打回并说明原因…</span></button>
+      <button class="dc-btn primary sm"><span>确认通过 →</span></button>
+    </div>
+  </div>
+  <div class="note" style="margin:10px 0 0">全部勾选才可用「确认通过」；打回需选择原因指向（脚本 / 配音 / 构图），写入 Approval 对象并导航到对应阶段。</div>
+</div>
+
+<div class="demo">
+  <div class="demo-label">ServiceStatusGroup · 四项服务三档状态（01 §1.2）</div>
+  <div class="row">
+    <div class="dc-svc">
+      <span class="item"><span class="dot ok"></span>文本 API</span>
+      <span class="item"><span class="dot ok"></span>图片 API</span>
+      <span class="item"><span class="dot ok"></span>本地引擎</span>
+      <span class="item"><span class="dot off"></span>MiniMax</span>
+    </div>
+    <div class="dc-svc"><span class="item"><span class="dot err"></span>图片 API · 连接失败</span><button class="dc-btn sm ghost"><span>去设置</span></button></div>
+  </div>
+  <div class="note" style="margin:10px 0 0">灰=未配置、绿=已连接、红=异常（悬停显示错误与「去设置」）；<b>某一服务离线只禁用依赖它的操作</b>，编辑与播放不受影响（01 §13.3）。</div>
+</div>
+
+<div class="demo">
+  <div class="demo-label">UploadSlot · 空态（虚线框 + 主提示 + 规格副提示，01 §1.6.2）</div>
+  <div class="cols2">
+    <div class="dc-upload">
+      <div class="t">上传同框底图</div>
+      <div class="s">JPG / PNG · 建议横屏 16:9 · 两张人脸清晰无遮挡</div>
+    </div>
+    <div class="dc-upload" style="border-style:solid;border-color:var(--dc-line)">
+      <div class="t" style="color:var(--dc-ink-3)">⬆ 拖拽文件到此处，或点击选择</div>
+      <div class="s">上传后复制进工程目录，返回相对路径引用</div>
+    </div>
+  </div>
+</div>
+
+<div class="demo">
+  <div class="demo-label">Toast · 底部居中 2.2s（01 §1.6.6）</div>
+  <div class="row">
+    <span class="dc-badge done" style="height:32px;padding:0 14px;border-radius:8px"><span class="dot" style="background:var(--dc-success)"></span>已采用候选 v3，下游 2 项标为已过期</span>
+    <span class="dc-badge confirm" style="height:32px;padding:0 14px;border-radius:8px"><span class="dot" style="background:var(--dc-warning)"></span>图片 API 余额不足</span>
+    <span class="dc-badge failed" style="height:32px;padding:0 14px;border-radius:8px"><span class="dot" style="background:var(--dc-danger)"></span>段 #04 渲染失败 · 查看详情</span>
+  </div>
+</div>
+
+<!-- ================= 3 ================= -->
+<h3 class="sec" id="s3"><span class="no">3</span>图标体系</h3>
+<div class="card">
+  <table class="fixed">
+    <tbody>
+      <tr><td>坐标系</td><td>24×24 viewBox，1.75 描边，圆头圆角；显示尺寸 16/20/24 与坐标系分离</td></tr>
+      <tr><td>着色</td><td>内联 SVG 继承 <code>currentColor</code>；不使用栅格图与多彩图标</td></tr>
+      <tr><td>语义</td><td>操作图标一律配文字（P4）；状态优先用文字徽章而非图标（P2）</td></tr>
+      <tr><td>基线复用</td><td>workspace-ui 基线包 32 枚（draft 状态）可移植复用，重绘纳入本项目图标库后统一验收</td></tr>
+    </tbody>
+  </table>
+
+  <h5>图标清单（按用途分组）</h5>
+  <table>
+    <thead><tr><th>组</th><th>复用基线</th><th>新绘</th></tr></thead>
+    <tbody>
+      <tr><td>通用操作</td><td>add · close · search · edit · trash · copy · check · more · refresh · upload · download · filter · sort</td><td>—</td></tr>
+      <tr><td>导航</td><td>arrow-left · arrow-right · chevron-down · chevron-right · home · external-link</td><td>—</td></tr>
+      <tr><td>播放控制</td><td>—</td><td><b>play · pause · stop · skip-back · skip-forward · volume · volume-off</b>（时间轨与试听）</td></tr>
+      <tr><td>音频领域</td><td>—</td><td><b>mic · mic-off · waveform · headset</b>（阶段③、试听、语音引擎）</td></tr>
+      <tr><td>阶段图标</td><td>—</td><td><b>sparkle-topic（话题）· message（对话）· mic-stage（配音）· layout-frame（画面）· export-film（导出）</b>——阶段轨与 FootBar 用</td></tr>
+      <tr><td>视觉领域</td><td>—</td><td><b>image · film · subtitles · layers（构图）· target（人物区域）· scissors（裁切）· zoom-in · zoom-out · compare</b></td></tr>
+      <tr><td>系统状态</td><td>warning · info · error · clock · star · bell · settings · user · users · lock · calendar · folder · document</td><td><b>chip（GPU/显存）· cloud-api（API 服务）· history（版本）· gauge（时长检查）· template · project-folder</b></td></tr>
+    </tbody>
+  </table>
+  <div class="note"><b>数量：</b>复用 27 + 新绘 24 ≈ 51 枚。新绘图标为 <b>待绘制资产</b>（本档仅登记规格与用途，见 §6 下一步）；绘制后逐枚做 16/20/24 三档显示与 currentColor 验证。</div>
+</div>
+
+<!-- ================= 4 ================= -->
+<h3 class="sec" id="s4"><span class="no">4</span>整体页面设计</h3>
+
+<h4 id="s4-1">4.1 应用壳蓝图</h4>
+<div class="goal"><b>读图说明：</b>按 1440 逻辑宽度绘制（01 §1.1 四区布局权威），以阶段③「试听配音」为代表性状态——该阶段同时出现五阶段轨、七态徽章、服务状态、时间轨与确认点，覆盖最全的壳元素。实现时按本蓝图 1:1 还原，不擅自增删元素。</div>
+
+<div class="bp-wrap">
+  <div class="bp-scale">
+    <div class="bp-inner">
+      <div class="mu">
+        <!-- 顶栏 -->
+        <div class="mu-top">
+          <span class="mu-logo"><span class="mu-mark"><i></i></span>双声播客工坊</span>
+          <span class="mu-proj">EP003 · AI 算力周报</span>
+          <span class="dc-svc" style="padding:4px 10px;gap:10px">
+            <span class="item"><span class="dot ok"></span>文本 API</span>
+            <span class="item"><span class="dot ok"></span>图片 API</span>
+            <span class="item"><span class="dot ok"></span>本地引擎</span>
+            <span class="item"><span class="dot off"></span>MiniMax</span>
+          </span>
+          <span class="mu-spacer"></span>
+          <span class="mu-vram"><span>显存</span><span class="bar"><i></i></span><span>9.2 / 16 GB</span></span>
+          <span style="display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--dc-ink-2)"><span class="dc-badge running" style="height:20px"><span class="spin"></span>2</span>任务</span>
+          <span class="mu-save">已保存</span>
+          <button class="dc-btn sm secondary"><span>导出</span></button>
+        </div>
+        <!-- 主体 -->
+        <div class="mu-body">
+          <!-- 阶段轨 -->
+          <aside class="mu-rail">
+            <div class="mu-stg done"><span class="no">1</span><span class="tt"><b>创建本期</b><small>话题与参数</small></span><span class="st"><span class="dc-badge done" style="height:18px;padding:0 6px;font-size:10px"><span class="dot" style="background:var(--dc-success)"></span>✓</span></span></div>
+            <div class="mu-stg done"><span class="no">2</span><span class="tt"><b>编辑对话</b><small>话轮与读音</small></span><span class="st"><span class="dc-badge done" style="height:18px;padding:0 6px;font-size:10px">脚本 ✓</span></span></div>
+            <div class="mu-stg active"><span class="no">3</span><span class="tt"><b>试听配音</b><small>音色与时长</small></span><span class="st"><span class="dc-badge running" style="height:18px;padding:0 6px;font-size:10px"><span class="spin"></span>3/9</span></span></div>
+            <div class="mu-stg"><span class="no">4</span><span class="tt"><b>预览画面</b><small>构图镜头样片</small></span><span class="st"><span class="dc-badge unready" style="height:18px;padding:0 6px;font-size:10px">未准备</span></span></div>
+            <div class="mu-stg"><span class="no">5</span><span class="tt"><b>生成导出</b><small>渲染与导出</small></span><span class="st"><span class="dc-badge unready" style="height:18px;padding:0 6px;font-size:10px">未准备</span></span></div>
+            <div class="mu-sep"></div>
+            <div class="mu-entry"><span class="sq"></span>资产库</div>
+            <div class="mu-entry"><span class="sq"></span>服务设置</div>
+            <div class="mu-entry"><span class="sq"></span>任务中心</div>
+            <div class="mu-note">数据边界：工程与成片本地；文本/图片经所选 API</div>
+          </aside>
+          <!-- 主视图：阶段③ -->
+          <main class="mu-main">
+            <div class="mu-head">
+              <h6>③ 试听配音</h6>
+              <span class="ver">音轨版本 R9 · 02:48.120</span>
+              <span style="margin-left:auto;display:flex;gap:8px">
+                <button class="dc-btn sm secondary"><span>版本 v3 ▾</span></button>
+                <button class="dc-btn sm primary"><span>✓ 确认配音</span></button>
+              </span>
+            </div>
+            <div class="mu-cols">
+              <div class="mu-panel eng">
+                <h6>语音引擎</h6>
+                <div class="mu-radio">
+                  <label><input type="radio" name="e" checked>本地引擎（默认）</label>
+                  <label><input type="radio" name="e">MiniMax</label>
+                </div>
+                <div class="mu-voice"><span class="who A">A</span><span class="mu-sel"><span>voice_A · 沉稳男声</span><small>▾</small></span><button class="dc-btn sm ghost"><span>试听</span></button></div>
+                <div class="mu-voice"><span class="who B">B</span><span class="mu-sel"><span>voice_B · 明亮女声</span><small>▾</small></span><button class="dc-btn sm ghost"><span>试听</span></button></div>
+                <button class="dc-btn primary" style="justify-content:center"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3zM5 10v1a7 7 0 0 0 14 0v-1M12 18v4"/></svg><span>生成整期配音</span></button>
+              </div>
+              <div class="mu-panel list">
+                <h6>配音清单 <span style="font-weight:400;color:var(--dc-ink-3);font-size:11px">按自然发言 · 9 组</span></h6>
+                <div class="mu-item"><span class="dc-spk B" style="height:18px;font-size:10px">B</span><span class="tid" style="font-family:var(--dc-font-mono);font-size:11px;color:var(--dc-ink-3)">T07</span><span class="txt">「我倒觉得关键在于成本结构……」</span><span class="dc-chip warn" style="height:18px;font-size:10px">读音 3 处</span><span class="dur">12.4s</span></div>
+                <div class="mu-item"><span class="dc-spk A" style="height:18px;font-size:10px">A</span><span style="font-family:var(--dc-font-mono);font-size:11px;color:var(--dc-ink-3)">T08</span><span class="txt">「所以你的意思是，推理侧的边际收益更高？」</span><span class="dur">6.1s</span></div>
+                <div class="mu-item"><span class="dc-spk B" style="height:18px;font-size:10px">B</span><span style="font-family:var(--dc-font-mono);font-size:11px;color:var(--dc-ink-3)">T09</span><span class="txt" style="color:var(--dc-ink-3)">「对，而且能耗账算下来更直观——」</span><span class="dc-badge running" style="height:18px;padding:0 6px;font-size:10px"><span class="spin"></span>3/9</span></div>
+                <div class="mu-prog"><i></i></div>
+                <div class="mu-list-foot">
+                  <button class="dc-btn sm secondary"><span>▶ 连续试听</span></button>
+                  <button class="dc-btn sm ghost"><span>独听 A</span></button>
+                  <button class="dc-btn sm ghost"><span>独听 B</span></button>
+                  <span style="margin-left:auto;font-size:11.5px;color:var(--dc-ink-3)">对齐来源：本地对齐（提供方无时间戳）</span>
+                </div>
+              </div>
+            </div>
+            <div class="mu-durbar">✓ 时长检查：<span style="font-family:var(--dc-font-mono)">02:48.120 / 05:00.000</span>（N = 8,096,976 样本 @ 48kHz）</div>
+          </main>
+          <!-- 检查器 -->
+          <aside class="mu-insp">
+            <h6>发言 T07 · 属性</h6>
+            <div class="sub">单元 <span style="font-family:var(--dc-font-mono)">U12</span> · 本地引擎 · IndexTTS-2.5</div>
+            <div class="kv"><span>情绪</span><b>质疑 · 强度 60%</b></div>
+            <div class="kv"><span>语速</span><b style="font-family:var(--dc-font-mono)">1.0×</b></div>
+            <div class="kv"><span>读音词典</span><b style="font-family:var(--dc-font-mono)">rev.5（3 处校正）</b></div>
+            <div class="acts">
+              <button class="dc-btn sm secondary"><span>重新生成</span></button>
+              <button class="dc-btn sm ghost"><span>拆出一句</span></button>
+              <button class="dc-btn sm ghost"><span>新旧对比</span></button>
+            </div>
+            <div class="grp">间隔调整（transitionGapMs）</div>
+            <div class="dc-param" style="grid-template-columns:56px 1fr 56px">
+              <label style="font-size:12px">T07⟷T08</label>
+              <input type="range" class="dc-range" style="width:100%" value="40">
+              <span class="val">480ms</span>
+            </div>
+            <div class="note" style="margin:8px 0 0;font-size:11.5px">拖动只重排时间轨，不重新合成声音（02 §5.9）</div>
+            <div class="grp">高级（折叠）</div>
+            <div style="font-size:12px;color:var(--dc-ink-3);padding:2px 0 8px">▸ 引擎参数 · 对齐设置 · 混用语音引擎</div>
+          </aside>
+        </div>
+        <!-- 时间轨 -->
+        <div class="mu-tl">
+          <div class="mu-tl-top">
+            <span class="mu-tc-btns"><span>⏮</span><span class="play">▶</span><span>⏭</span></span>
+            <span class="tc">00:12.480 <em>/ 02:48.120</em></span>
+            <span class="mu-zoom"><i></i></span>
+            <span style="margin-left:auto;font-size:10.5px;color:#7d8698">缩放</span>
+            <span class="spec">48kHz · PCM · N=8,096,976</span>
+          </div>
+          <div class="mu-track"><label style="color:#3aa6c4">A</label><div class="lane"><span class="mu-blk a" style="left:0;width:9%"></span><span class="mu-blk a" style="left:22%;width:14%"></span><span class="mu-blk a" style="left:58%;width:11%"></span><span class="mu-play" style="left:7.5%"></span></div></div>
+          <div class="mu-track"><label style="color:#e08098">B</label><div class="lane"><span class="mu-blk b" style="left:10.5%;width:11%"></span><span class="mu-blk b" style="left:37%;width:19%"></span><span class="mu-blk b" style="left:70%;width:16%"></span></div></div>
+          <div class="mu-turns">
+            <span class="tk A" style="width:8%">T01</span><span class="tk B" style="width:10%">T02</span><span class="tk A" style="width:7%">T03</span><span class="tk B" style="width:12%">T04</span><span class="tk A" style="width:9%">T05</span><span class="tk B" style="width:10%">T06</span><span class="tk B" style="width:12%">T07</span><span class="mk" style="left:0;width:14%"></span><span class="tk A" style="width:6%">T08</span><span class="tk B" style="width:11%">T09</span>
+          </div>
+        </div>
+        <!-- 底栏 -->
+        <div class="mu-foot">
+          <span class="pos">阶段 3 / 5 · 试听配音</span>
+          <button class="dc-btn sm secondary"><span>← 上一步</span></button>
+          <span class="dc-badge confirm"><span class="dot" style="background:var(--dc-warning)"></span>配音待确认</span>
+          <span style="margin-left:auto"></span>
+          <button class="dc-btn sm primary"><span>下一步 →</span></button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="bp-note">蓝图按 1440 逻辑宽度绘制，此处等比缩放展示 · 所有色值/字号/间距取自 §1 令牌 · 时间轨为深底独立区域（--dc-paper 之外的唯一深色面）</div>
+</div>
+
+<h4 id="s4-2">4.2 分区规格</h4>
+<div class="card">
+  <table>
+    <thead><tr><th>分区</th><th>尺寸</th><th>内容与行为</th></tr></thead>
+    <tbody>
+      <tr><td>TopBar</td><td>高 56 · 吸顶</td><td>产品标识（点击回工程首页，未保存弹确认）· 工程名 · 服务状态组 · 任务入口（徽章数）· 显存条（≥90% 转橙）· 保存状态 · 导出</td></tr>
+      <tr><td>StageRail</td><td>宽 208 · 吸左 · 独立滚动</td><td>五阶段项（当前=焦糖左竖条 + brand-soft 底；副标题固定）+ 分隔 + 三独立入口 + 数据边界底注</td></tr>
+      <tr><td>Stage 主视图</td><td>弹性 · 左右边距 20</td><td>阶段头部（标题 + 版本等宽徽记 + 主操作）+ 阶段内容（见 4.3 布局模式）</td></tr>
+      <tr><td>Inspector</td><td>宽 320 · 吸右 · 独立滚动</td><td>上下文参数：基础区直出 + 高级折叠区（默认收起）；1024–1439 折叠为右侧抽屉</td></tr>
+      <tr><td>TimelineBar</td><td>高 56（折叠 28）· 深底</td><td>配音确认后常驻可展开，状态存工程；A/B 轨色块 = 实际波形区间；发言轨双击跳编辑；样片标记可拖动</td></tr>
+      <tr><td>FootBar</td><td>高 48 · 吸底</td><td>位置提示 · 上一步 · 确认点徽章（点击弹确认面板）· 下一步（<b>仅导航</b>）</td></tr>
+    </tbody>
+  </table>
+  <div class="note"><b>深底时间轨的令牌例外：</b>TimelineBar 使用独立深色面板（底 <code>#20242d</code>，轨道槽 <code>#2b303b</code>），A/B 波形色沿用 <code>a / b</code> 基础色（深底对比充足）。这是全应用唯一的深色面——为长时间试听提供视觉聚焦，暗色主题扩展时以其为起点。</div>
+</div>
+
+<h4 id="s4-3">4.3 各视图布局模式</h4>
+<div class="card">
+  <table>
+    <thead><tr><th>视图</th><th>主视图布局</th><th>检查器内容</th><th>关键组件</th></tr></thead>
+    <tbody>
+      <tr><td>工程首页</td><td>无壳独立页：最近工程网格 + 节目模板区</td><td>—</td><td>ProjectCard · TemplateCard · EmptyState</td></tr>
+      <tr><td>① 创建本期</td><td>双栏：内容输入（左 55%）/ 内容要求（右 45%）+ 底部视觉准备资产行</td><td>无（参数全部主视图直出）</td><td>起步方式 Radio · UploadSlot · 时长/比例 ParameterField</td></tr>
+      <tr><td>② 编辑对话</td><td>单列话轮流（居中 max 760）+ 底部统计条</td><td>所选发言属性 + 内容结构 + 质量提示</td><td>TurnCard · 选区改写工具条 · 读音词典入口</td></tr>
+      <tr><td>③ 试听配音</td><td>双栏：语音引擎（固定 300）/ 配音清单（弹性）+ 底部时长检查条</td><td>发言属性 · 间隔调整 · 高级</td><td>TurnCard 精简态 · UnitChip · TimelineBar</td></tr>
+      <tr><td>④ 预览画面</td><td>纵向三区：构图（画布 + 底图来源）/ 镜头（预设 + 轻量预览）/ 样片（区间 + 检查清单）</td><td>底图来源 · 人物区域 · 坐标信息</td><td>ImageCanvas（Konva 矩形标注）· 镜头 Tabs · 样片核对清单</td></tr>
+      <tr><td>⑤ 生成导出</td><td>摘要卡（复用/待生成/预估/磁盘）+ 分段进度网格 + 导出区</td><td>导出规格</td><td>StageSummary · 分段卡片（含暂停/取消/重试）· 导出清单</td></tr>
+      <tr><td>资产库</td><td>独立全屏：角色网格 + 场景/底图/素材网格</td><td>所选资产详情</td><td>AssetCard · 引擎绑定组（本地参考音 / MiniMax voice_id 并存）</td></tr>
+      <tr><td>服务设置</td><td>独立全屏：四块分组表单（文本 API / 图片 API / 本地引擎 / MiniMax）+ 能力状态面板</td><td>—</td><td>能力状态行（分开登记）· 连接测试（区分付费）</td></tr>
+      <tr><td>任务中心</td><td>独立全屏：运行中 / 排队 / 已结束 三组列表</td><td>所选任务详情</td><td>TaskCard · Progress（五阶段语义）· 重试/查询</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<h4 id="s4-4">4.4 响应式行为</h4>
+<div class="cols3">
+  <div class="bp-mini">
+    <div class="cap">≥1440 · 完整四区</div>
+    <div class="grid" style="grid-template-columns:1fr">
+      <div class="zone" style="height:22px">TopBar 56</div>
+      <div class="grid" style="grid-template-columns:56px 1fr 84px;flex:1">
+        <div class="zone">轨 208</div><div class="zone" style="background:var(--brand-soft);border-color:var(--brand)">Stage 弹性</div><div class="zone">检 320</div>
+      </div>
+      <div class="zone" style="height:26px;background:#2b303b;color:#9aa3b2">TimelineBar 56</div>
+      <div class="zone" style="height:20px">FootBar 48</div>
+    </div>
+  </div>
+  <div class="bp-mini">
+    <div class="cap">1024–1439 · 检查器折叠</div>
+    <div class="grid" style="grid-template-columns:1fr">
+      <div class="zone" style="height:22px">TopBar 56</div>
+      <div class="grid" style="grid-template-columns:56px 1fr;flex:1">
+        <div class="zone">轨 208</div><div class="zone" style="background:var(--brand-soft);border-color:var(--brand)">Stage 弹性 + 检查器入口 ↗</div>
+      </div>
+      <div class="zone" style="height:26px;background:#2b303b;color:#9aa3b2">TimelineBar 56</div>
+      <div class="zone" style="height:20px">FootBar 48</div>
+    </div>
+  </div>
+  <div class="bp-mini">
+    <div class="cap">&lt;1024 · 单栏（仅保证可查看）</div>
+    <div class="grid" style="grid-template-columns:1fr">
+      <div class="zone" style="height:22px">TopBar 56（服务组收纳为图标）</div>
+      <div class="zone" style="flex:1;background:var(--brand-soft);border-color:var(--brand)">Stage 单栏 · 阶段轨收纳为顶部横向条</div>
+      <div class="zone" style="height:26px;background:#2b303b;color:#9aa3b2">TimelineBar（可折叠为 28）</div>
+      <div class="zone" style="height:20px">FootBar 48</div>
+    </div>
+  </div>
+</div>
+<div class="note"><b>设计目标宽度 ≥1024（01 §0.5）；&lt;768 仅保证可查看</b>——不承诺编辑效率，窄窗口允许换行与重排；嵌套容器按容器宽度（非窗口宽度）判断折叠，不以 overflow:hidden 掩盖内容丢失。</div>
+
+<!-- ================= 5 ================= -->
+<h3 class="sec" id="s5"><span class="no">5</span>落地映射</h3>
+<div class="card">
+  <h5>令牌 → Tailwind / CSS 变量</h5>
+  <pre><code>/* tokens.css（本文档 :root 中 --dc-* 段即此文件草案，单一来源）*/
+
+/* tailwind.config.ts */
+extend: {
+  colors: {
+    paper: 'var(--dc-paper)', surface: 'var(--dc-surface)',
+    ink: { 1: 'var(--dc-ink-1)', 2: 'var(--dc-ink-2)', 3: 'var(--dc-ink-3)' },
+    brand: { DEFAULT: 'var(--dc-brand)', strong: 'var(--dc-brand-strong)',
+             deep: 'var(--dc-brand-deep)', soft: 'var(--dc-brand-soft)' },
+    a: { DEFAULT: 'var(--dc-a)', soft: 'var(--dc-a-soft)' },
+    b: { DEFAULT: 'var(--dc-b)', text: 'var(--dc-b-text)', soft: 'var(--dc-b-soft)' },
+    /* success / warning / danger 同构 */
+  },
+  borderRadius: { sm: '6px', md: '8px', lg: '12px', xl: '16px' },
+  spacing: { s1: '4px', s2: '8px', s3: '12px', s4: '16px', s5: '20px' },
+}</code></pre>
+  <table>
+    <thead><tr><th>关注点</th><th>约定</th></tr></thead>
+    <tbody>
+      <tr><td>单一来源</td><td>令牌值只存在于 tokens.css；Tailwind / 组件 / 预览一律引用变量，不维护第二套颜色</td></tr>
+      <tr><td>组件底座</td><td>shadcn（Radix）承载交互与无障碍；领域组件在其上组合，命名沿用本档清单</td></tr>
+      <tr><td>状态管理</td><td>Zustand：<code>projectStore</code>（工程/版本）· <code>jobStore</code>（任务/事件序号）· <code>serviceStore</code>（能力/就绪）；服务端推导，前端不自算（02 选型）</td></tr>
+      <tr><td>请求层</td><td>TanStack Query：<code>['project', id]</code> · <code>['jobs']</code> · <code>['capabilities']</code>；PATCH 携带 <code>expectedRevision</code></td></tr>
+      <tr><td>事件流</td><td>SSE 订阅 <code>/api/events</code>，按 <code>seq</code> 去重与补发；重连先读 <code>GET /api/jobs</code> 快照</td></tr>
+      <tr><td>可视化</td><td>WaveSurfer.js（时间轨波形）· Konva（人物区域矩形标注）· dnd-kit（发言排序）</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ================= 6 ================= -->
+<h3 class="sec" id="s6"><span class="no">6</span>验证状态与下一步</h3>
+<div class="cols2">
+  <div class="card">
+    <h5>已验证</h5>
+    <ul class="b">
+      <li>文字/浅底组合对比度全部 ≥4.5:1（§1.1 用法矩阵逐项计算）</li>
+      <li>令牌与 01 §0.5 权威色相一致（焦糖 / A 青蓝 / B 珊瑚粉 / 三级灰）；本档仅新增派生深阶</li>
+      <li>壳尺寸、七态、公共组件行为与 01 §1 / §13 逐项对齐</li>
+      <li>蓝图与样例全部使用 --dc- 令牌渲染（与 tokens.css 草案同源）</li>
+    </ul>
+    <h5>草案（未验证）</h5>
+    <ul class="b">
+      <li>应用壳蓝图为静态方向稿：未做真实数据、键盘走查、200% 文本缩放与长文本溢出测试</li>
+      <li>24 枚新绘图标未绘制（仅登记规格）</li>
+      <li>暗色主题不在首版范围</li>
+    </ul>
+  </div>
+  <div class="card">
+    <h5>下一步（逐屏高保真顺序）</h5>
+    <ol class="b" style="padding-left:22px">
+      <li><b>工程首页</b> + <b>阶段①</b>（表单密度与空态基准）</li>
+      <li><b>阶段②</b>（TurnCard 全状态 + 选区改写交互）</li>
+      <li><b>阶段③</b>（时间轨真实波形 + 检查器）</li>
+      <li><b>阶段④</b>（画布标注 + 三区布局）</li>
+      <li><b>阶段⑤</b> + 任务中心（长任务状态呈现）</li>
+      <li>资产库 / 服务设置；同步绘制 24 枚新图标</li>
+    </ol>
+    <div class="note" style="margin-top:10px">逐屏设计沿用本档令牌与组件，<b>1:1 落到蓝图</b>；每屏交付「高保真稿 + 状态矩阵 + 边界说明」，经确认后再进入前端实现。</div>
+  </div>
+</div>
+
+<div class="card" style="margin-top:36px">
+  <h5>配套文档</h5>
+  <ul class="b">
+    <li><code>01-页面详细设计文档.md</code> — 页面与交互规则权威（本档的 §0.5 / §1 / §13 为直接输入）</li>
+    <li><code>04-详细优化方案.md</code> — 产品需求权威</li>
+    <li><code>06-后端设计规划.md</code> — 后端模块与接口设计（与本档共同构成开工蓝图）</li>
+    <li><code>03-方案总览.html</code> — 全方案速览</li>
+  </ul>
+</div>
+
+</main>
+</div>
+</body>
+</html>

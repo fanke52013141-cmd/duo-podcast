@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HF-03 · 阶段③ 试听配音 · 高保真稿 v1.0</title>
+<link rel="stylesheet" href="vendor/workspace-ui/tokens.css">
+<link rel="stylesheet" href="vendor/workspace-ui/components.css">
+<link rel="stylesheet" href="vendor/duo-shell.css">
+<script defer src="vendor/workspace-ui/components.js"></script>
+<style>
+/* ============ 阶段③ 屏内组合（全部取值 --wu-* 令牌） ============ */
+.hf-s3{flex:1;display:flex;gap:14px;min-height:0}
+.hf-eng{flex:0 0 300px;display:flex;flex-direction:column}
+.hf-eng h3{font-size:14px;font-weight:700;margin:0 0 12px}
+.hf-list2{flex:1;min-width:0;display:flex;flex-direction:column}
+.hf-dur{flex:none;display:flex;align-items:center;gap:12px;padding:8px 20px;background:var(--wu-semantic-surface);border-top:1px solid var(--wu-semantic-border);font-size:12.5px;color:var(--wu-semantic-secondary);flex-wrap:wrap}
+.hf-engine{display:grid;gap:8px;margin-bottom:12px}
+.hf-voice{display:grid;grid-template-columns:22px 1fr auto;align-items:center;gap:8px;padding:6px 0}
+.hf-playrow{display:flex;gap:8px;flex-wrap:wrap;padding-top:10px;border-top:1px solid var(--wu-semantic-border)}
+.hf-gap{display:flex;align-items:center;gap:10px;padding:8px 0}
+.hf-gap .track{flex:1;height:6px;border-radius:3px;background:var(--wu-semantic-muted);position:relative}
+.hf-gap .track i{position:absolute;left:0;top:0;bottom:0;width:52%;background:var(--wu-semantic-primary);border-radius:3px}
+.hf-gap .knob{position:absolute;left:52%;top:50%;transform:translate(-50%,-50%);width:16px;height:16px;border-radius:50%;background:var(--wu-semantic-raised);border:2px solid var(--wu-semantic-primary);box-shadow:0 1px 4px color-mix(in srgb,var(--wu-global-ink) 20%,transparent)}
+.hf-adv summary{display:flex;align-items:center;gap:8px;font-size:12.5px;font-weight:600;color:var(--wu-semantic-text);cursor:pointer;list-style:none}
+.hf-adv summary::-webkit-details-marker{display:none}
+.hf-adv summary .chev{transition:transform var(--wu-global-duration) var(--wu-global-ease);color:var(--wu-semantic-caption)}
+.hf-adv[open] summary .chev{transform:rotate(90deg)}
+.hf-adv-body{margin-top:10px;display:grid;gap:8px}
+.hf-cand{border:1px dashed var(--wu-semantic-brand);border-radius:var(--wu-global-radius-sm);background:var(--wu-semantic-muted);padding:10px 12px}
+.hf-cand .t{font-size:11.5px;font-weight:600;color:var(--wu-semantic-brand-hover);margin-bottom:4px}
+.hf-unit{display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px dashed var(--wu-semantic-border);font-size:12.4px;color:var(--wu-semantic-secondary)}
+.hf-unit:last-child{border-bottom:none}
+.hf-unit b{color:var(--wu-semantic-text);font-weight:600;font-family:var(--wu-global-mono);font-size:11.5px}
+</style>
+</head>
+<body class="wu">
+<div class="doc">
+
+<div class="dhead">
+  <div class="kick">HIGH-FIDELITY SCREEN · HF-03 · v1.0</div>
+  <h1>阶段③ · 试听配音</h1>
+  <p>五阶段第三屏：选择语音引擎并绑定双方音色，按自然发言生成配音、连续试听，调整发言间隔（transitionGapMs）与句内停顿；本阶段确认点为「配音确认」。壳形态：有 Inspector（发言属性 / 间隔调整 / 高级）、有 TimelineBar（配音确认后常驻，本屏显示生成中的音轨）。</p>
+  <div class="meta">
+    <span>布局与元素权威 01 §5</span>
+    <span>壳蓝图 05 §4.1–4.2（含 TimelineBar）</span>
+    <span>视觉与组件 workspace-ui v0.2 基线 + duo-shell 组合扩展</span>
+    <span>画布 1440 逻辑宽</span>
+    <span>baseline · 已定稿</span>
+  </div>
+</div>
+
+<h2 class="sec"><span class="no">一</span>高保真稿 · 默认态（本地引擎 · 生成中 · T05 选中）</h2>
+<p class="lead">主视图双栏：左 语音引擎面板（固定 300）/ 右 配音清单（弹性）+ 底部时长检查条；TimelineBar 为全应用唯一深色面（05 §1.5 令牌例外），A/B 波形用深底派生色。确认配音需全部音频有效、必要校正已处理、总时长未超上限。</p>
+
+<div class="vp-bar">
+  <span class="ttl">阶段③ 试听配音 · 1440 × 900</span>
+  <span class="sp"></span>
+  <span class="pct" id="pct">显示 100%</span>
+  <button id="bFit" class="on">适应窗口</button>
+  <button id="bOne">1:1</button>
+</div>
+<div class="vp" id="vp">
+  <div class="frame" id="frame">
+    <div class="hf-app">
+      <!-- TopBar（01 §1.2） -->
+      <header class="hf-top">
+        <span class="hf-brand"><span class="hf-mark"><i></i><i></i></span>双声播客工坊</span>
+        <span class="hf-proj">EP004 · 推理成本观察</span>
+        <span class="wu-row" style="gap:8px">
+          <span class="wu-badge" data-tone="success">文本 API</span>
+          <span class="wu-badge" data-tone="success">图片 API</span>
+          <span class="wu-badge" data-tone="success">本地引擎</span>
+          <span class="wu-badge">MiniMax 未配置</span>
+        </span>
+        <span class="hf-spacer"></span>
+        <span class="hf-vram">显存<span class="bar"><i></i></span>2.8 / 16 GB</span>
+        <button type="button" class="wu-btn" data-variant="secondary" data-size="sm"><svg class="wu-icon sm" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg><span class="wu-btn-label">任务</span></button>
+        <span class="wu-caption">已保存</span>
+        <button type="button" class="wu-btn" data-variant="secondary" data-size="sm" disabled><svg class="wu-icon sm" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V3m-5 5 5-5 5 5M4 15v6h16v-6"/></svg><span class="wu-btn-label">导出</span></button>
+      </header>
+      <div class="hf-mid">
+        <!-- 阶段轨（01 §1.3） -->
+        <aside class="hf-rail" aria-label="阶段导航">
+          <div class="hf-stg done"><span class="hf-stg-no">1</span><span class="hf-stg-tt"><b>创建本期</b><small>话题与参数</small></span></div>
+          <div class="hf-stg done"><span class="hf-stg-no">2</span><span class="hf-stg-tt"><b>编辑对话</b><small>话轮与读音</small></span></div>
+          <div class="hf-stg active"><span class="hf-stg-no">3</span><span class="hf-stg-tt"><b>试听配音</b><small>音色与时长</small></span><span class="hf-stg-st"><span class="wu-badge" data-tone="info">生成中</span></span></div>
+          <div class="hf-stg"><span class="hf-stg-no">4</span><span class="hf-stg-tt"><b>预览画面</b><small>构图镜头样片</small></span><span class="hf-stg-st"><span class="wu-badge">未准备</span></span></div>
+          <div class="hf-stg"><span class="hf-stg-no">5</span><span class="hf-stg-tt"><b>生成导出</b><small>渲染与导出</small></span><span class="hf-stg-st"><span class="wu-badge">未准备</span></span></div>
+          <div class="hf-sep"></div>
+          <div class="hf-entry"><span class="hf-entry-sq"></span>资产库</div>
+          <div class="hf-entry"><span class="hf-entry-sq"></span>服务设置</div>
+          <div class="hf-entry"><span class="hf-entry-sq"></span>任务中心</div>
+          <p class="hf-note">数据边界：工程与成片本地；文本/图片经所选 API</p>
+        </aside>
+        <!-- 主视图（01 §5.1：左引擎 300 / 右清单弹性 + 底部时长检查） -->
+        <main class="hf-main">
+          <div class="hf-stage-head">
+            <h2>③ 试听配音</h2>
+            <span class="wu-badge" data-tone="info">音轨 R9 · 生成中</span>
+            <span class="wu-caption hf-mono">02:33.410 / 05:00</span>
+            <span class="hf-spacer"></span>
+            <button type="button" class="wu-btn" data-variant="brand" data-size="sm" disabled><svg class="wu-icon sm" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 13l4 4L19 7"/></svg><span class="wu-btn-label">确认配音</span></button>
+            <span class="wu-caption">3 段未就绪</span>
+          </div>
+          <div class="hf-body">
+            <div class="hf-s3">
+              <!-- 左：语音引擎（01 §5.3） -->
+              <section class="wu-card hf-eng">
+                <h3>语音引擎</h3>
+                <div class="hf-engine">
+                  <label class="wu-choice"><input type="radio" name="engine" checked><span>本地引擎（默认）</span></label>
+                  <label class="wu-choice"><input type="radio" name="engine"><span>MiniMax</span></label>
+                </div>
+                <div class="hf-voice"><span class="wu-badge" data-tone="info">A</span><div><div style="font-size:12.5px;font-weight:600">李雷 · 主持</div><select class="wu-input" aria-label="A 音色" style="margin-top:4px"><option>voice_A · 参考音</option><option>voice_A2</option></select></div><button type="button" class="wu-btn" data-variant="secondary" data-size="sm"><svg class="wu-icon sm" viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4V5z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/></svg><span class="wu-btn-label">试听</span></button></div>
+                <div class="hf-voice"><span class="wu-badge" data-tone="speaker-b">B</span><div><div style="font-size:12.5px;font-weight:600">韩梅梅 · 嘉宾</div><select class="wu-input" aria-label="B 音色" style="margin-top:4px"><option>voice_B · 参考音</option></select></div><button type="button" class="wu-btn" data-variant="secondary" data-size="sm"><svg class="wu-icon sm" viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4V5z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/></svg><span class="wu-btn-label">试听</span></button></div>
+                <div class="hf-playrow">
+                  <button type="button" class="wu-btn" data-size="sm"><svg class="wu-icon sm" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 5l12 7-12 7V5z"/></svg><span class="wu-btn-label">生成整期配音</span></button>
+                </div>
+                <p class="wu-caption" style="margin-top:8px;line-height:1.6">先生成整期配音需先为双方绑定音色并做短试听；本地引擎默认，可切 MiniMax，切换后要求重新试听。</p>
+              </section>
+              <!-- 右：配音清单（01 §5.3） -->
+              <section class="hf-list2">
+                <div class="hf-turn sm">
+                  <div class="hf-turn-head"><span class="hf-turn-id">#T01</span><span class="wu-badge" data-tone="info">A</span><span class="hf-turn-text">欢迎回到 AI 算力周报，我是李雷……</span><span class="wu-badge" data-tone="success">✓ 6.1s</span></div>
+                </div>
+                <div class="hf-turn sm">
+                  <div class="hf-turn-head"><span class="hf-turn-id">#T02</span><span class="wu-badge" data-tone="speaker-b">B</span><span class="hf-turn-text">这周最值得聊的就是推理侧优化的几个进展……</span><span class="wu-badge" data-tone="success">✓ 12.4s</span></div>
+                  <div class="hf-turn-meta"><span class="hf-meta-warn"><svg class="wu-icon xs" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 22c5.5 0 10-4.5 10-10S17.5 2 12 2 2 6.5 2 12s4.5 10 10 10zm0-18c4.4 0 8 3.6 8 8s-3.6 8-8 8-8-3.6-8-8 3.6-8 8-8zm-1 13h2v-6h-2v6zm0-8h2V7h-2v2z"/></svg>读音：1 处（KV 缓存）</span></div>
+                </div>
+                <div class="hf-turn sm">
+                  <div class="hf-turn-head"><span class="hf-turn-id">#T03</span><span class="wu-badge" data-tone="info">A</span><span class="hf-turn-text">先解释一下，为什么单价降了，账单反而更贵了？</span><span class="wu-badge" data-tone="success">✓ 5.8s</span></div>
+                </div>
+                <div class="hf-turn sm">
+                  <div class="hf-turn-head"><span class="hf-turn-id">#T04</span><span class="wu-badge" data-tone="speaker-b">B</span><span class="hf-turn-text">核心是用量结构变了。单价下降之后……</span><span class="wu-badge" data-tone="success">✓ 9.2s</span></div>
+                </div>
+                <div class="hf-turn sm selected">
+                  <div class="hf-turn-head"><span class="hf-turn-id">#T05</span><span class="wu-badge" data-tone="speaker-b">B</span><span class="hf-turn-text">比如一家客服公司，过去只在转接时用一次模型……</span><span class="wu-badge" data-tone="info">生成中 3/9</span></div>
+                  <div class="hf-prog" style="margin-top:6px"><i style="width:62%"></i></div>
+                </div>
+                <div class="hf-turn sm">
+                  <div class="hf-turn-head"><span class="hf-turn-id">#T06</span><span class="wu-badge" data-tone="info">A</span><span class="hf-turn-text">所以你的意思是，降价的收益被用量增长吃掉了？</span><span class="wu-badge" data-tone="success">✓ 4.7s</span></div>
+                </div>
+                <div class="hf-playrow">
+                  <button type="button" class="wu-btn" data-variant="secondary" data-size="sm"><svg class="wu-icon sm" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 5l12 7-12 7V5z"/></svg><span class="wu-btn-label">连续试听</span></button>
+                  <button type="button" class="wu-btn" data-variant="ghost" data-size="sm"><span class="wu-btn-label">独听 A</span></button>
+                  <button type="button" class="wu-btn" data-variant="ghost" data-size="sm"><span class="wu-btn-label">独听 B</span></button>
+                  <span class="wu-caption">点击台词跳到对应位置</span>
+                </div>
+              </section>
+            </div>
+          </div>
+          <!-- 底部时长检查条（01 §5.1） -->
+          <div class="hf-dur">
+            <span>时长检查：<b class="hf-mono" style="color:var(--wu-semantic-text)">02:33.410</b> / 05:00</span>
+            <span class="wu-badge" data-tone="info">生成中</span>
+            <span class="hf-spacer"></span>
+            <span class="wu-caption">配音时长含片头片尾发言及显式首尾停顿；后续新增片尾需重新检查总时长</span>
+          </div>
+        </main>
+        <!-- 检查器（01 §5.1：发言属性 / 间隔调整 / 高级） -->
+        <aside class="hf-inspector" aria-label="检查器">
+          <div class="hf-ins-sec">
+            <h4>所选发言 <span class="wu-caption" style="font-weight:400">#T05</span></h4>
+            <div class="hf-unit"><b>U12</b><span>合成单元 · 本地 TTS</span><span class="hf-spacer"></span><span class="wu-caption">时长 待定</span></div>
+            <div class="hf-unit"><b>T05</b><span>自然发言 · B · 举例</span><span class="hf-spacer"></span><span class="wu-caption">3 个句子</span></div>
+            <div class="hf-playrow" style="border-top:none;padding-top:4px">
+              <button type="button" class="wu-btn" data-variant="secondary" data-size="sm"><span class="wu-btn-label">重新生成</span></button>
+              <button type="button" class="wu-btn" data-variant="secondary" data-size="sm"><span class="wu-btn-label">拆出一句</span></button>
+              <button type="button" class="wu-btn" data-variant="secondary" data-size="sm"><span class="wu-btn-label">新旧对比</span></button>
+            </div>
+            <p class="wu-caption" style="margin-top:8px;line-height:1.6">重新生成<b>默认只重生成对应单元</b>；相邻句受影响时直接显示范围。<a class="hf-link" href="#">拆出一句</a>不承诺与原段完全一致的音色表现。</p>
+          </div>
+          <div class="hf-ins-sec">
+            <h4>间隔调整</h4>
+            <div class="hf-gap">
+              <span class="hf-mono">T04</span>
+              <span class="track"><i></i><span class="knob"></span></span>
+              <span class="hf-mono">T05</span>
+              <span class="hf-mono" style="color:var(--wu-semantic-text)">480ms</span>
+            </div>
+            <p class="wu-caption" style="line-height:1.6">拖动改变 <code>transitionGapMs</code> → 重排时间轴，<b>通常不重新合成声音</b>；显式间隔是额外静音，与模型自然停顿的关系见说明。</p>
+            <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+              <button type="button" class="wu-btn" data-variant="secondary" data-size="sm"><span class="wu-btn-label">插入句内停顿</span></button>
+              <span class="wu-caption">引擎支持时用已验证语法；否则拆分单元后本地插入静音</span>
+            </div>
+          </div>
+          <div class="hf-ins-sec">
+            <details class="hf-adv">
+              <summary><svg class="chev wu-icon sm" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>高级（折叠）</summary>
+              <div class="hf-adv-body">
+                <label class="wu-choice"><input type="checkbox" checked><span>引擎参数（本地采样率 / 增强）</span></label>
+                <label class="wu-choice"><input type="checkbox"><span>对齐设置（按句子边界切分）</span></label>
+                <a class="hf-link" style="font-size:12.5px" href="#">混用语音引擎入口 →</a>
+              </div>
+            </details>
+          </div>
+        </aside>
+      </div>
+      <!-- TimelineBar（05 §1.5 深色面板，配音确认后常驻） -->
+      <div class="hf-timeline" aria-label="时间轨">
+        <span class="hf-tl-time"><svg class="wu-icon sm" viewBox="0 0 24 24" aria-hidden="true" style="color:var(--wu-semantic-brand)"><path d="M6 5l12 7-12 7V5z"/></svg>01:23.4 / 02:48.120</span>
+        <div class="hf-tl-tracks">
+          <div class="hf-tl-track"><span class="hf-tl-seg a" style="left:1%;width:34%"></span><span class="hf-tl-seg a" style="left:52%;width:20%"></span><span class="hf-tl-seg b" style="left:38%;width:12%"></span><span class="hf-tl-seg b" style="left:74%;width:22%"></span><span class="hf-tl-play" style="left:41%"></span></div>
+          <div class="hf-tl-track" style="height:8px"><span class="hf-tl-mark" style="left:6%"></span><span class="hf-tl-mark" style="left:20%"></span><span class="hf-tl-mark" style="left:38%"></span><span class="hf-tl-mark" style="left:52%"></span><span class="hf-tl-mark" style="left:74%"></span><span class="hf-tl-mark" style="left:88%"></span></div>
+        </div>
+        <span class="hf-tl-label">A 轨（李雷）</span>
+        <span class="hf-tl-label">B 轨（韩梅梅）</span>
+        <span class="hf-tl-label">样片 ▎01:12–01:28</span>
+      </div>
+      <!-- FootBar（01 §1.4） -->
+      <footer class="hf-foot">
+        <span class="hf-pos">阶段 3 / 5 · 试听配音</span>
+        <button type="button" class="wu-btn" data-variant="secondary" data-size="sm"><span class="wu-btn-label">← 上一步</span></button>
+        <span class="wu-badge" data-tone="warning">确认点 · 配音确认</span>
+        <span class="wu-caption">确认后生成新的音轨版本 R9 并常驻时间轨</span>
+        <span class="hf-spacer"></span>
+        <button type="button" class="wu-btn" data-size="sm"><span class="wu-btn-label">下一步 →</span></button>
+      </footer>
+    </div>
+  </div>
+</div>
+<div class="vp-note">本屏壳形态：有 Inspector（发言属性 / 间隔调整 / 高级折叠）· 有 TimelineBar（深色 56，A/B 波形为深底派生色）· 「确认配音」需 3 段未就绪完成后可用 · 左引擎面板固定 300</div>
+
+<h2 class="sec"><span class="no">二</span>状态变体</h2>
+<p class="lead">本屏关键状态的实况渲染（非示意），变体只呈现差异区域，其余与主稿一致。</p>
+<div class="var-grid">
+
+  <div class="var">
+    <div class="cap">V1 · 全部就绪，可确认配音</div>
+    <div class="desc">全部使用中音频有效、必要校正已处理、总时长未超上限；「确认配音」brand 可用，确认后生成新的音轨版本 R9（01 §5.3）。</div>
+    <div class="demo">
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <span class="wu-badge" data-tone="success">音轨 R9 · 02:48.120</span>
+        <span class="hf-spacer"></span>
+        <button type="button" class="wu-btn" data-variant="brand" data-size="sm"><svg class="wu-icon sm" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 13l4 4L19 7"/></svg><span class="wu-btn-label">确认配音</span></button>
+      </div>
+      <div class="hf-dur" style="border:1px solid var(--wu-semantic-border);border-radius:8px;margin-top:10px">
+        <span>时长检查：<b class="hf-mono" style="color:var(--wu-semantic-text)">02:48.120</b> / 05:00</span><span class="wu-badge" data-tone="success">✓</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="var">
+    <div class="cap">V2 · 切换 MiniMax 引擎</div>
+    <div class="desc">切换引擎要求重新试听；已有本地绑定保留不删；语音来源变为 MiniMax（01 §5.3 / 02 §4.4）。</div>
+    <div class="demo">
+      <div class="hf-engine">
+        <label class="wu-choice"><input type="radio" name="v2e"><span>本地引擎（默认）</span></label>
+        <label class="wu-choice"><input type="radio" name="v2e" checked><span>MiniMax</span></label>
+      </div>
+      <div class="hf-voice"><span class="wu-badge" data-tone="info">A</span><div><div style="font-size:12.5px;font-weight:600">李雷 · 主持</div><select class="wu-input" aria-label="A 音色" style="margin-top:4px"><option>MiniMax 系统音色 · male_01</option></select></div><button type="button" class="wu-btn" data-variant="secondary" data-size="sm"><span class="wu-btn-label">试听</span></button></div>
+      <div class="wu-alert" data-tone="warning">已切换语音引擎，请重新试听确认双方音色；本地参考音绑定保留不删，可随时切回。</div>
+    </div>
+  </div>
+
+  <div class="var">
+    <div class="cap">V3 · 时长超限（&gt;300 秒）</div>
+    <div class="desc">保留音频并显示超出量；提供精简 / 删除 / 调整语速后试听；不自动截尾、不强行倍速（01 §5.4）。</div>
+    <div class="demo">
+      <div class="hf-dur" style="border:1px solid var(--wu-semantic-border);border-radius:8px">
+        <span>时长检查：<b class="hf-mono" style="color:var(--wu-semantic-danger)">05:12.480</b> / 05:00</span><span class="wu-badge" data-tone="danger">超出 12.5s</span>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+        <button type="button" class="wu-btn" data-variant="secondary" data-size="sm"><span class="wu-btn-label">精简某段</span></button>
+        <button type="button" class="wu-btn" data-variant="secondary" data-size="sm"><span class="wu-btn-label">删除某段</span></button>
+        <button type="button" class="wu-btn" data-variant="secondary" data-size="sm"><span class="wu-btn-label">调整语速后试听</span></button>
+      </div>
+      <p class="wu-caption" style="margin-top:8px">音频保留可听；不自动截尾、不强行倍速。</p>
+    </div>
+  </div>
+
+  <div class="var">
+    <div class="cap">V4 · 发音段失败</div>
+    <div class="desc">某段失败：保留其他段，显示错误位置与受影响单元；原位重试。重新生成默认只重生成对应单元（01 §5.3 / §7.2）。</div>
+    <div class="demo">
+      <div class="hf-turn sm" style="border-color:var(--wu-semantic-danger);box-shadow:0 0 0 1px var(--wu-semantic-danger)">
+        <div class="hf-turn-head"><span class="hf-turn-id">#T05</span><span class="wu-badge" data-tone="speaker-b">B</span><span class="hf-turn-text">比如一家客服公司……</span><span class="wu-badge" data-tone="danger">✗ 失败</span></div>
+        <div class="hf-turn-meta">受影响单元 U12（相邻 T04 句尾若受影响会一并列出）</div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:8px">
+        <button type="button" class="wu-btn" data-variant="secondary" data-size="sm"><span class="wu-btn-label">原位重试</span></button>
+        <span class="wu-caption">其他段保留，不重跑</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="var" style="grid-column:1 / -1">
+    <div class="cap">V5 · 新旧对比（候选先审后换）</div>
+    <div class="desc">新结果先进入候选，用户采用后替换当前版本；失败不删除旧结果（01 §5.3）。</div>
+    <div class="demo" style="display:flex;gap:20px;align-items:flex-start;flex-wrap:wrap">
+      <div style="flex:1;min-width:280px">
+        <div class="hf-turn sm" style="margin:0">
+          <div class="hf-turn-head"><span class="hf-turn-id">#T05</span><span class="wu-badge" data-tone="speaker-b">B</span><span class="hf-turn-text">比如一家客服公司……（旧）</span><span class="wu-badge" data-tone="success">✓ 12.4s</span></div>
+        </div>
+        <div class="hf-cand" style="margin-top:8px">
+          <div class="t">候选 · 单元 U12 重新生成</div>
+          <p style="font-size:12.5px">比如一家客服公司……（新，语速 1.05）</p>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button type="button" class="wu-btn" data-variant="secondary" data-size="sm"><span class="wu-btn-label">试听新</span></button>
+            <button type="button" class="wu-btn" data-variant="brand" data-size="sm"><span class="wu-btn-label">采用</span></button>
+            <button type="button" class="wu-btn" data-variant="ghost" data-size="sm"><span class="wu-btn-label">放弃</span></button>
+          </div>
+        </div>
+      </div>
+      <div style="flex:1;min-width:280px">
+        <p class="wu-caption" style="margin-top:0;line-height:1.7">对比维度：<b>时长</b> 12.4s → 11.8s · <b>读音</b> 3 处 → 1 处（已应用词典）<br>失败时旧结果保留可听，不删除。</p>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<h2 class="sec"><span class="no">三</span>状态矩阵</h2>
+<div class="dcard">
+  <table class="dt">
+    <thead><tr><th>对象</th><th>状态</th><th>呈现（基线组件与色调）</th><th>依据</th></tr></thead>
+    <tbody>
+      <tr><td rowspan="3"><b>本阶段整体（七态）</b></td><td>执行中 <span class="wu-caption">（默认）</span></td><td>阶段轨③徽章 info「生成中」；清单行 ⏳ + 进度条；「确认配音」禁用</td><td>01 §13.1</td></tr>
+      <tr><td>待确认</td><td>全部就绪后徽章转 warning「待确认」；「确认配音」brand 可用</td><td>01 §13.1</td></tr>
+      <tr><td>已就绪</td><td>确认后阶段轨③转 done；TimelineBar 常驻可展开</td><td>01 §13.1 / 05 §1.5</td></tr>
+      <tr><td rowspan="2"><b>语音引擎</b></td><td>本地引擎 <span class="wu-caption">（默认）</span></td><td>默认选中；A/B 音色下拉 + 试听按钮</td><td>01 §5.3</td></tr>
+      <tr><td>MiniMax</td><td>切换要求重新试听；本地绑定保留；能力状态见服务设置</td><td>01 §5.3 / §9.1</td></tr>
+      <tr><td rowspan="3"><b>配音清单</b></td><td>已生成</td><td>✓ + 真实时长（非预估）</td><td>01 §5.3</td></tr>
+      <tr><td>生成中</td><td>⏳ + 进度；阶段轨徽章同步</td><td>01 §5.3</td></tr>
+      <tr><td>读音 / 对齐问题</td><td>⚠ 行级标注；可经读音词典或对齐设置处理</td><td>01 §5.3</td></tr>
+      <tr><td rowspan="4"><b>单元操作</b></td><td>重新生成</td><td>默认只重生成对应单元；相邻受影响时列出单元 ID</td><td>01 §5.3</td></tr>
+      <tr><td>拆出一句</td><td>变为独立合成单元；提示「不承诺与原段完全一致的音色表现」</td><td>01 §5.3</td></tr>
+      <tr><td>新旧对比</td><td>新结果先进候选，采用后替换；失败不删除旧结果</td><td>01 §5.3</td></tr>
+      <tr><td>间隔调整</td><td>拖动 transitionGapMs → 重排时间轴，通常不重新合成声音</td><td>01 §5.3</td></tr>
+      <tr><td><b>时长检查</b></td><td>&gt;300s</td><td>保留音频并显示超出量；精简 / 删除 / 调整语速；不截尾不倍速</td><td>01 §5.4</td></tr>
+      <tr><td><b>TimelineBar</b></td><td>本屏起</td><td>深色面板 56；A/B 轨色块 = 实际波形区间；发言轨双击跳编辑；样片标记可拖动</td><td>05 §1.5</td></tr>
+      <tr><td><b>确认配音</b></td><td>主按钮</td><td>条件：所有使用中音频有效、必要校正已处理、总时长未超上限；生成新的音轨版本</td><td>01 §5.3</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<h2 class="sec"><span class="no">四</span>边界说明</h2>
+<div class="dcard">
+  <ul class="b">
+    <li><b>风格基准</b>：全部视觉来自 workspace-ui v0.2 基线 + <code>duo-shell.css</code> 组合扩展；时间轨深色面板为全应用唯一深色面（05 §1.5 令牌例外），A/B 波形用深底派生色 <code>#7FA3D8 / #C97B96</code>。</li>
+    <li><b>三层对象</b>：句子（Line）/ 发言（Turn）/ 合成单元（Unit）；默认以自然话轮为单位，允许用户拆分；不宣称整段合成必定比逐句更保音色。</li>
+    <li><b>时长权威</b>：清单行显示<b>真实时长</b>（样本次数权威）；预估仅用于阶段②底部统计。</li>
+    <li><b>间隔语义</b>：transitionGapMs 是额外静音，与模型自然停顿的关系在界面说明；改间隔不重新合成声音。</li>
+    <li><b>引擎切换</b>：切换后要求重新试听；角色 A 本地切 MiniMax 保留脚本 / 形象 / 场景，只重新生成受影响角色音频（02 §4.4 切换矩阵）。</li>
+    <li><b>时长超限</b>：不自动截尾、不强行倍速；配音时长含片头片尾发言及显式首尾停顿。</li>
+    <li><b>确认语义</b>：确认配音生成新的音轨版本 R9；TimelineBar 随之常驻；「下一步」仅导航。</li>
+  </ul>
+</div>
+
+<h2 class="sec"><span class="no">五</span>衔接与配套</h2>
+<div class="cols2">
+  <div class="dcard">
+    <h5 style="font-size:13.5px;margin:0 0 6px;font-weight:600">上下游</h5>
+    <ul class="b">
+      <li>「确认配音」→ <b>HF-04 阶段④预览画面</b>（音轨进入 TimelineBar 常驻）</li>
+      <li>音色绑定 → 资产库角色语音绑定（HF-06）；引擎能力 → 服务设置（HF-07）</li>
+      <li>上一屏：<b>HF-02 阶段②编辑对话</b>（脚本确认后可自动启动）</li>
+      <li>点台词跳编辑 → 回到阶段②对应话轮</li>
+    </ul>
+  </div>
+  <div class="dcard">
+    <h5 style="font-size:13.5px;margin:0 0 6px;font-weight:600">验证状态</h5>
+    <ul class="b">
+      <li>已做：与 01 §5 元素逐项对齐；壳分区与 05 §4.1–4.2 一致；TimelineBar 深色令牌例外已登记；状态变体实况渲染</li>
+      <li>未做：真实音频播放、拖动交互（间隔 / 时间轨）、键盘走查、200% 文本缩放</li>
+      <li>基线自身状态：implemented-prototype（沿用基线声明）</li>
+    </ul>
+  </div>
+</div>
+
+</div>
+
+<script>
+(function(){
+  var vp=document.getElementById('vp'),fr=document.getElementById('frame'),pct=document.getElementById('pct');
+  var bFit=document.getElementById('bFit'),bOne=document.getElementById('bOne'),mode='fit';
+  function fit(){
+    if(mode==='fit'){
+      var s=Math.min(1,vp.clientWidth/1440);
+      fr.style.transform='scale('+s+')';
+      vp.style.height=(fr.offsetHeight*s)+'px';
+      pct.textContent='显示 '+Math.round(s*100)+'%';
+    }else{
+      fr.style.transform='none';
+      vp.style.height=fr.offsetHeight+'px';
+      pct.textContent='1:1 · 横向滚动';
+    }
+  }
+  window.addEventListener('resize',fit);
+  bFit.onclick=function(){mode='fit';bFit.classList.add('on');bOne.classList.remove('on');fit()};
+  bOne.onclick=function(){mode='one';bOne.classList.add('on');bFit.classList.remove('on');fit()};
+  fit();
+})();
+</script>
+</body>
+</html>
