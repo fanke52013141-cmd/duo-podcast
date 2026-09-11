@@ -10,6 +10,7 @@ import asyncio
 import hashlib
 import json
 from pathlib import Path
+from typing import Any
 
 
 def _content_hash(*parts: str) -> str:
@@ -25,6 +26,7 @@ class MockTextProvider:
     def __init__(self, delay_ms: int = 600) -> None:
         self.delay_ms = delay_ms
         self.capabilities = {
+            "simulated": True,
             "streaming": True,
             "maxContextChars": 200_000,
             "structuredOutput": True,
@@ -106,6 +108,7 @@ class MockImageProvider:
         self.delay_ms = delay_ms
         self.artifacts_root = artifacts_root
         self.capabilities = {
+            "simulated": True,
             "textToImage": True,
             "singleImageEdit": True,
             "multiRefEdit": False,
@@ -113,7 +116,7 @@ class MockImageProvider:
             "async_": True,
             "cancel": False,
             "download": True,
-            "paid": True,
+            "paid": False,
         }
 
     async def generate(self, req: dict[str, Any]) -> dict[str, Any]:
@@ -129,6 +132,7 @@ class MockTTSProvider:
         self.delay_ms = delay_ms
         self.sample_rate = sample_rate
         self.capabilities = {
+            "simulated": True,
             "voiceCloning": True,
             "emotion": True,
             "speed": True,
@@ -144,8 +148,11 @@ class MockTTSProvider:
         await asyncio.sleep(self.delay_ms / 1000)
         text = "".join(req.get("lineTexts", []))
         chars = max(len(text), 4)
-        # 权威时长来源：sampleCount（48kHz 口径，按字符估算 220ms/字）
-        sample_count = int(chars * 0.22 * self.sample_rate)
+        # 仅为演示估算，不能当作真实音频测量值。
+        speed = float(req.get("speedRatio", 1.0))
+        if speed <= 0:
+            raise ValueError("语速必须大于 0")
+        sample_count = int(chars * 0.22 * self.sample_rate / speed)
         return {
             "sampleRate": self.sample_rate,
             "sampleCount": sample_count,
@@ -163,12 +170,13 @@ class MockVideoProvider:
     def __init__(self, delay_ms: int = 1200) -> None:
         self.delay_ms = delay_ms
         self.capabilities = {
+            "simulated": True,
             "dualTrackInput": True,
             "resolutions": ["1280x720", "1920x1080"],
             "fps": [24, 30],
             "progress": True,
             "cancel": False,
-            "paid": True,
+            "paid": False,
         }
 
     async def submit(self, req: dict[str, Any]) -> str:

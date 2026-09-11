@@ -155,6 +155,8 @@ export interface Job {
 
 export interface ProviderCaps {
   ready: boolean;
+  productionReady?: boolean;
+  mode?: 'mock' | 'live';
   capabilities: Record<string, unknown>;
 }
 

@@ -57,7 +57,7 @@ class ProjectStore:
     def list_ids(self) -> list[str]:
         if not self.root.exists():
             return []
-        ids = [d.name for d in self.root.iterdir() if (d / "project.json").exists()]
+        ids = set(self._projects) | {d.name for d in self.root.iterdir() if (d / "project.json").exists()}
         return sorted(ids)
 
     # ---- 写（唯一入口） ----

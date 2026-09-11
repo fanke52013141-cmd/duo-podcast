@@ -5,7 +5,7 @@
 import React from 'react';
 import { STAGE_META, STAGE_ORDER, type AudioTimeline, type Project, type StageState } from '../lib/types';
 import { Badge, Icon, type Tone } from './wu';
-import { useProjectStore, type View } from '../stores';
+import { useProjectStore, useServiceStore, type View } from '../stores';
 
 const ENTRY_VIEWS: { id: View; label: string; icon: 'folder' | 'gear' | 'task' }[] = [
   { id: 'assets', label: '资产库', icon: 'folder' },
@@ -20,6 +20,8 @@ function stageTone(state: StageState | undefined): Tone {
 
 export function TopBar({ project }: { project: Project | null }) {
   const { setView, view, leaveProject } = useProjectStore();
+  const capabilities = useServiceStore((s) => s.capabilities);
+  const simulated = capabilities && Object.values(capabilities).some((p) => p.mode === 'mock');
   return (
     <header className="hf-top">
       <button type="button" className="hf-brand" onClick={leaveProject}>
@@ -27,7 +29,7 @@ export function TopBar({ project }: { project: Project | null }) {
       </button>
       {project && <span className="hf-proj">{project.id} · {project.title}</span>}
       <span className="hf-spacer" />
-      <span className="hf-vram"><span className="bar"><i /></span>VRAM 17%</span>
+      <span className="hf-vram">{simulated ? '演示模式 · 不生成真实媒体' : '显存：尚未测定'}</span>
       <button
         type="button"
         className="wu-btn"

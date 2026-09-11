@@ -96,13 +96,15 @@ def main() -> None:
              {"clientToken": "sm-render", "revisionId": tl["revisionId"], "resolution": "1920x1080", "fps": 30})
     j = wait_job(j["jobId"])
     proj = call("GET", f"/projects/{pid}")
-    assert proj["outputVersion"], proj
-    print("[ok] renders:", proj["outputVersion"], "stage=", proj["stageProgress"]["render"])
+    assert j['result']['simulated'] is True, j
+    assert proj["outputVersion"] is None, proj
+    assert j['result']['artifactIds'] == [], j
+    print("[ok] renders: demo completed without claiming real video")
 
     # 8) 资产登记
     arts = call("GET", "/artifacts")["artifacts"]
     kinds = {a["kind"] for a in arts}
-    assert {"audio", "image", "video"}.issubset(kinds), kinds
+    assert not any(a['artifactId'] in j['result']['artifactIds'] for a in arts)
     print("[ok] artifacts:", len(arts), "items kinds=", sorted(kinds))
 
     # 9) 机器设置保存

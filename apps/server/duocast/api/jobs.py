@@ -28,7 +28,7 @@ def get_job(job_id: str, request: Request) -> dict:
 
 
 @router.post("/{job_id}/pause")
-def pause_job(job_id: str, request: Request) -> dict:
+async def pause_job(job_id: str, request: Request) -> dict:
     try:
         job = _manager(request).pause(job_id)
     except KeyError as exc:
@@ -37,9 +37,18 @@ def pause_job(job_id: str, request: Request) -> dict:
 
 
 @router.post("/{job_id}/cancel")
-def cancel_job(job_id: str, request: Request) -> dict:
+async def cancel_job(job_id: str, request: Request) -> dict:
     try:
         job = _manager(request).cancel(job_id)
+    except KeyError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    return job.model_dump(mode="json", by_alias=True)
+
+
+@router.post("/{job_id}/resume")
+async def resume_job(job_id: str, request: Request) -> dict:
+    try:
+        job = _manager(request).resume(job_id)
     except KeyError as exc:
         raise HTTPException(404, str(exc)) from exc
     return job.model_dump(mode="json", by_alias=True)

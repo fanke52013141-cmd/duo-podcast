@@ -89,6 +89,7 @@ class Project(BaseModel):
     script_revisions: list[ScriptRevision] = Field(default_factory=list)
     voice_bindings: list[VoiceBinding] = Field(default_factory=list)  # A/B 角色声音绑定（01 §11.2）
     audio_timeline: Optional[AudioTimeline] = None  # 阶段③产物（01 §11.2）
+    audio_history: list[AudioTimeline] = Field(default_factory=list)
     visual_variants: list[VisualVariant] = Field(default_factory=list)  # 阶段④产物
     output_version: Optional[str] = None  # 阶段⑤产物版本（OUT-Rn-vN）
     stage_progress: dict[StageId, StageState] = Field(default_factory=dict)

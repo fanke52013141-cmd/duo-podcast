@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 from ..core.logging import log
@@ -27,18 +28,15 @@ def recover_on_startup(jobs_root: Path) -> list[Job]:
         except Exception as exc:  # noqa: BLE001
             log("recovery", "job manifest unreadable, marking unknown", job_dir=job_dir.name, error=str(exc))
             continue
-        if job.status in (JobStatus.SUCCEEDED, JobStatus.FAILED, JobStatus.CANCELLED):
-            continue  # 终态不处理
-        if job.status == JobStatus.UNKNOWN:
-            recovered.append(job)
-            continue  # 保持 unknown 计入 UI 待核实（不支持查询的提供方）
-        if job.status in (JobStatus.RUNNING, JobStatus.RECOVERING):
+        if job.status in (JobStatus.RUNNING, JobStatus.RECOVERING, JobStatus.PAUSE_REQUESTED,
+                          JobStatus.CANCEL_REQUESTED):
             # 无定向查询能力的最小实现：标 unknown，避免误判重跑（02 §7.2 纪律）
             job.status = JobStatus.UNKNOWN
-            job_file.write_text(json.dumps(job.model_dump(mode="json", by_alias=True), ensure_ascii=False),
-                                encoding="utf-8")
-            recovered.append(job)
-        elif job.status in (JobStatus.QUEUED, JobStatus.PAUSE_REQUESTED, JobStatus.PAUSED):
-            recovered.append(job)  # 保持状态，由调度器继续
+            temporary = job_file.with_suffix(".json.tmp")
+            temporary.write_text(json.dumps(job.model_dump(mode="json", by_alias=True), ensure_ascii=False),
+                                 encoding="utf-8")
+            os.replace(temporary, job_file)
+        # 终态也装入管理器：历史任务与幂等键重启后仍然有效。
+        recovered.append(job)
     log("recovery", "startup recovery scan done", recovered=len(recovered))
     return recovered

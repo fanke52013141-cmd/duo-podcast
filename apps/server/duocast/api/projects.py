@@ -34,7 +34,7 @@ def list_projects(request: Request) -> list[dict]:
 
 
 @router.post("")
-def create_project(request: Request, payload: dict) -> dict:
+async def create_project(request: Request, payload: dict) -> dict:
     store: ProjectStore = _init_store(request)
     project_id = payload.get("id") or f"EP{len(store.list_ids()) + 1:03d}"
     proj = store.create(project_id, payload.get("title", "未命名节目"))
@@ -51,7 +51,7 @@ def get_project(project_id: str, request: Request) -> dict:
 
 
 @router.patch("/{project_id}")
-def patch_project(project_id: str, payload: dict, request: Request) -> dict:
+async def patch_project(project_id: str, payload: dict, request: Request) -> dict:
     store: ProjectStore = _init_store(request)
     expected = payload.get("expectedRevision")
     patch = {k: v for k, v in payload.items() if k != "expectedRevision"}

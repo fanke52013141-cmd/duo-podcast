@@ -29,13 +29,15 @@ class JobStatus(str, Enum):
 
 # 状态转换表（02 §7.1 权威；manager.py 为唯一执行者）
 TRANSITIONS: dict[JobStatus, frozenset[JobStatus]] = {
-    JobStatus.QUEUED: frozenset({JobStatus.RUNNING, JobStatus.CANCEL_REQUESTED, JobStatus.FAILED, JobStatus.UNKNOWN}),
+    JobStatus.QUEUED: frozenset({JobStatus.RUNNING, JobStatus.PAUSED, JobStatus.CANCELLED,
+                               JobStatus.CANCEL_REQUESTED, JobStatus.FAILED, JobStatus.UNKNOWN}),
     JobStatus.RUNNING: frozenset(
         {JobStatus.PAUSE_REQUESTED, JobStatus.CANCEL_REQUESTED, JobStatus.SUCCEEDED, JobStatus.FAILED,
          JobStatus.WAITING_CONFIRMATION, JobStatus.UNKNOWN, JobStatus.RECOVERING}
     ),
     JobStatus.PAUSE_REQUESTED: frozenset({JobStatus.PAUSED, JobStatus.FAILED, JobStatus.CANCEL_REQUESTED}),
-    JobStatus.PAUSED: frozenset({JobStatus.QUEUED, JobStatus.CANCEL_REQUESTED, JobStatus.FAILED}),
+    JobStatus.PAUSED: frozenset({JobStatus.QUEUED, JobStatus.SUCCEEDED, JobStatus.CANCELLED,
+                               JobStatus.CANCEL_REQUESTED, JobStatus.FAILED}),
     JobStatus.WAITING_CONFIRMATION: frozenset({JobStatus.RUNNING, JobStatus.CANCELLED, JobStatus.FAILED}),
     JobStatus.RECOVERING: frozenset({JobStatus.RUNNING, JobStatus.UNKNOWN, JobStatus.FAILED}),
     JobStatus.SUCCEEDED: frozenset(),

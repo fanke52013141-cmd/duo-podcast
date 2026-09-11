@@ -23,7 +23,9 @@ def derive_stage_states(project: Project, jobs: list | None = None) -> dict[Stag
         job.kind for job in (jobs or []) if job.status in (JobStatus.QUEUED, JobStatus.RUNNING,
                                                            JobStatus.PAUSE_REQUESTED, JobStatus.RECOVERING)
     }
-    approved = {a.kind for a in project.approvals if a.decision == "accepted"}
+    latest = {a.kind: a for a in project.approvals
+              if a.input_revision_id == project.current_draft_revision}
+    approved = {kind for kind, a in latest.items() if a.decision == "accepted"}
     has_script = bool(project.current_draft_revision)
     has_voice = bool(getattr(project, "audio_timeline", None))
     has_visual = bool(getattr(project, "visual_variants", None))
@@ -34,6 +36,14 @@ def derive_stage_states(project: Project, jobs: list | None = None) -> dict[Stag
     states["voice"] = _stage(has_voice, "voice" in approved, "tts.synthesize" in running_kinds)
     states["visual"] = _stage(has_visual, "sample" in approved, "visual.generate" in running_kinds)
     states["render"] = _stage(has_render, True, "renders" in running_kinds)
+    timeline = project.audio_timeline
+    if timeline and "tts.synthesize" not in running_kinds:
+        if timeline.revision_id != project.current_draft_revision:
+            states["voice"] = StageState.STALE
+        elif timeline.sample_rate <= 0 or timeline.sample_count <= 0 or timeline.sample_count > 300 * timeline.sample_rate:
+            states["voice"] = StageState.NOT_READY
+    if has_visual and timeline and timeline.revision_id != project.current_draft_revision:
+        states["visual"] = StageState.STALE
     return states
 
 

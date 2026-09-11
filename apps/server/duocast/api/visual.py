@@ -12,7 +12,7 @@ router = APIRouter(prefix="/api/projects/{project_id}/visual", tags=["visual"])
 
 
 @router.post("/generate")
-def generate(project_id: str, payload: dict, request: Request) -> dict:
+async def generate(project_id: str, payload: dict, request: Request) -> dict:
     manager: JobManager = request.app.state.job_manager
     store = request.app.state.project_store
     if store.load(project_id) is None:

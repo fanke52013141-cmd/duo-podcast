@@ -25,7 +25,7 @@ def _turn_from_dict(data: dict[str, Any]) -> Turn:
 
 def build_script_revision(project: Project, provider: TextProvider, result: dict[str, Any]) -> ScriptRevision:
     rev = ScriptRevision(
-        id=result.get("revisionId") or f"R{uuid.uuid4().hex[:4].upper()}",
+        id=f"R{uuid.uuid4().hex[:12].upper()}",
         source_input={"kind": "article", "content": result.get("sourceInput", {}).get("content", "")},
         turns=[_turn_from_dict(t) for t in result.get("turns", [])],
         text_api_config_ref=result.get("textApiConfigRef", provider.name),
@@ -33,12 +33,15 @@ def build_script_revision(project: Project, provider: TextProvider, result: dict
     return rev
 
 
-def apply_script_revision(store: ProjectStore, project_id: str, revision: ScriptRevision) -> Project:
+def apply_script_revision(store: ProjectStore, project_id: str, revision: ScriptRevision,
+                          expected_project_revision: int | None = None) -> Project:
     project = store.load(project_id)
     if project is None:
         raise KeyError(f"project not found: {project_id}")
     # 候选版本登记：追加到 revisions，currentDraftRevision 指向最新
-    return store.apply(project_id, {
+    patch = {
         "script_revisions": [r.model_dump(by_alias=True) for r in project.script_revisions] + [revision.model_dump(by_alias=True)],
-        "current_draft_revision": revision.id,
-    }, expected_revision=project.revision)
+    }
+    if expected_project_revision is not None and project.revision == expected_project_revision:
+        patch["current_draft_revision"] = revision.id
+    return store.apply(project_id, patch, expected_revision=project.revision)

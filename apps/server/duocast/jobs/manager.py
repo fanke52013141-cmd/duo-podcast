@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import uuid
+from copy import deepcopy
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Awaitable, Callable, Optional
@@ -29,12 +30,13 @@ class JobManager:
         self.queue_caps = queue_caps or {"gpu": 1, "api": 16, "cpu": 4}
         self._jobs: dict[str, Job] = {}
         self._queues: dict[str, asyncio.Queue] = {
-            k: asyncio.Queue(maxsize=cap) for k, cap in self.queue_caps.items()
+            k: asyncio.Queue() for k in self.queue_caps
         }
         self._gpu_lock = asyncio.Lock()
         self._runner: Optional[JobRunner] = None
         self._scheduler_task: Optional[asyncio.Task] = None
         self._dispatch_started = False
+        self._workers: list[asyncio.Task] = []
 
     # ---- 生命周期 ----
     def set_runner(self, runner: JobRunner) -> None:
@@ -45,12 +47,31 @@ class JobManager:
         if self._dispatch_started:
             return
         self._dispatch_started = True
-        self._scheduler_task = asyncio.get_event_loop().create_task(self._dispatch_loop())
+        for queue_class, cap in self.queue_caps.items():
+            # GPU 始终排他；API/CPU 上限是执行并发，不是等待队列长度。
+            count = 1 if queue_class == "gpu" else max(1, cap)
+            for _ in range(count):
+                self._workers.append(asyncio.get_running_loop().create_task(self._worker(queue_class)))
+
+    async def stop(self) -> None:
+        for worker in self._workers:
+            worker.cancel()
+        await asyncio.gather(*self._workers, return_exceptions=True)
+        self._workers.clear()
+        self._dispatch_started = False
+
+    def restore(self, jobs: list[Job]) -> None:
+        for job in jobs:
+            if job.id in self._jobs:
+                continue
+            self._jobs[job.id] = job
+            if job.status == JobStatus.QUEUED:
+                self._queues[job.queue_class].put_nowait(job)
 
     def submit(self, kind: str, project_id: str, queue_class: str, client_token: str,
                input_snapshot: dict[str, Any], attempt: int = 0) -> Job:
         # 幂等（01 §12.1：相同请求连续点击只创建一项任务）
-        existing = self._find_by_token(client_token)
+        existing = self._find_by_token(client_token, project_id, kind)
         if existing is not None:
             return existing
         job = Job(
@@ -59,7 +80,7 @@ class JobManager:
             kind=kind,
             queue_class=queue_class,
             client_token=client_token,
-            input_snapshot=input_snapshot,
+            input_snapshot=deepcopy(input_snapshot),
             attempt=attempt,
             created_at=datetime.now(timezone.utc).isoformat(timespec="milliseconds"),
         )
@@ -78,10 +99,11 @@ class JobManager:
             jobs = [j for j in jobs if j.project_id == project_id]
         return sorted(jobs, key=lambda j: j.created_at, reverse=True)
 
-    def _find_by_token(self, client_token: str) -> Optional[Job]:
+    def _find_by_token(self, client_token: str, project_id: str, kind: str) -> Optional[Job]:
         if not client_token:
             return None
-        return next((j for j in self._jobs.values() if j.client_token == client_token), None)
+        return next((j for j in self._jobs.values() if j.client_token == client_token
+                     and j.project_id == project_id and j.kind == kind), None)
 
     # ---- 状态机（唯一执行者） ----
     def transition(self, job: Job, target: JobStatus, **extra) -> bool:
@@ -93,10 +115,13 @@ class JobManager:
         for k, v in extra.items():
             setattr(job, k, v)
         self._persist(job)
+        self.bus.publish("job.stage", jobId=job.id, stage=job.stage, status=job.status.value)
         if target == JobStatus.SUCCEEDED:
-            self.bus.publish("job.done", jobId=job.id, artifactIds=(job.result or {}).get("artifactIds", []))
+            self.bus.publish("job.done", jobId=job.id, status=job.status.value,
+                             artifactIds=(job.result or {}).get("artifactIds", []))
         elif target in (JobStatus.FAILED,):
-            self.bus.publish("job.failed", jobId=job.id, error=job.error or "", retryable=job.retryable)
+            self.bus.publish("job.failed", jobId=job.id, status=job.status.value,
+                             error=job.error or "", retryable=job.retryable)
         return True
 
     def set_stage(self, job: Job, stage: str, message: str | None = None) -> None:
@@ -106,57 +131,66 @@ class JobManager:
 
     def pause(self, job_id: str) -> Job:
         job = self._require(job_id)
-        self.transition(job, JobStatus.PAUSE_REQUESTED)
+        if job.status == JobStatus.QUEUED:
+            self.transition(job, JobStatus.PAUSED)
+        elif job.status == JobStatus.RUNNING:
+            self.transition(job, JobStatus.PAUSE_REQUESTED)
+        return job
+
+    def resume(self, job_id: str) -> Job:
+        job = self._require(job_id)
+        if job.status == JobStatus.PAUSED:
+            if job.result is not None:
+                self.transition(job, JobStatus.SUCCEEDED)
+            else:
+                self.transition(job, JobStatus.QUEUED)
+                self._queues[job.queue_class].put_nowait(job)
         return job
 
     def cancel(self, job_id: str) -> Job:
         job = self._require(job_id)
         if job.status in (JobStatus.SUCCEEDED, JobStatus.FAILED, JobStatus.CANCELLED):
             return job
+        if job.status in (JobStatus.QUEUED, JobStatus.PAUSED, JobStatus.WAITING_CONFIRMATION):
+            self.transition(job, JobStatus.CANCELLED)
+            return job
+        if job.status in (JobStatus.UNKNOWN, JobStatus.RECOVERING):
+            return job  # 外部执行情况未核实时，不伪称已取消。
         self.transition(job, JobStatus.CANCEL_REQUESTED)
         return job
 
     # ---- 调度（三队列，06 §6.1） ----
-    async def _dispatch_loop(self) -> None:
-        # 简化轮询：逐个消费三类队列；GPU 队列以锁排他
+    async def _worker(self, queue_class: str) -> None:
+        queue = self._queues[queue_class]
         while True:
-            item = await self._wait_any()
-            if item is None:
-                await asyncio.sleep(0.05)
-                continue
-            job, queue_class = item
-            if job.status == JobStatus.CANCEL_REQUESTED:
-                self.transition(job, JobStatus.CANCELLED)
-                continue
-            if job.status != JobStatus.QUEUED:
-                continue
-            self.transition(job, JobStatus.RUNNING)
+            job = await queue.get()
             try:
+                if job.status != JobStatus.QUEUED:
+                    continue
+                self.transition(job, JobStatus.RUNNING)
                 async with self._gpu_lock if queue_class == "gpu" else _null_ctx():
                     if self._runner is None:
                         raise RuntimeError("JobManager.runner not set")
                     self.set_stage(job, "infer")
                     result = await self._runner(job)
                     job.result = result
-                    self.transition(job, JobStatus.SUCCEEDED)
+                    if job.status == JobStatus.CANCEL_REQUESTED:
+                        self.transition(job, JobStatus.CANCELLED)
+                    elif job.status == JobStatus.PAUSE_REQUESTED:
+                        self.transition(job, JobStatus.PAUSED)
+                    else:
+                        self.transition(job, JobStatus.SUCCEEDED)
             except asyncio.CancelledError:
+                # 停止本地等待并不证明外部推理停止。留给恢复流程核实。
+                job.status = JobStatus.UNKNOWN
+                self._persist(job)
                 raise
             except Exception as exc:  # noqa: BLE001
                 job.error = str(exc)
                 job.retryable = False
                 self.transition(job, JobStatus.FAILED)
-
-    async def _wait_any(self):
-        # 简单公平轮询（minimal）：优先 GPU/API/CPU 顺序各 peek 一次
-        for qc in ("gpu", "api", "cpu"):
-            q = self._queues[qc]
-            try:
-                job = q.get_nowait()
-                return job, qc
-            except asyncio.QueueEmpty:
-                continue
-        await asyncio.sleep(0.05)
-        return None
+            finally:
+                queue.task_done()
 
     def _require(self, job_id: str) -> Job:
         job = self.get(job_id)

@@ -11,7 +11,7 @@ import {
 import type { AudioTimeline, Job, Project, SynthesisUnit } from '../lib/types';
 import { Alert, Badge, Button, Choice, Icon } from '../components/wu';
 import { AppShell, FootBar, StageHead, TimelineBar } from '../components/AppShell';
-import { useProjectStore } from '../stores';
+import { useProjectStore, useServiceStore } from '../stores';
 
 const RESOLUTION_OPTIONS = [
   { id: '480p', label: '480p（快）', value: '854x480' },
@@ -42,13 +42,13 @@ function planSegments(timeline: AudioTimeline): Segment[] {
   for (let i = 0; i < units.length; i += chunk) {
     const slice = units.slice(i, i + chunk);
     const start = sec(timeline.unitOffsets[slice[0].id] ?? 0);
-    const end = start + slice.reduce((n, u) => n + sec(u.sampleCount), 0);
+    const end = i + chunk < units.length ? sec(timeline.unitOffsets[units[i + chunk].id] ?? 0) : total;
     const ctx = 8;
     out.push({
       id: `S${String(out.length + 1).padStart(2, '0')}`,
       units: slice,
-      outputRange: [start, end],
-      renderRange: [start, end],
+      outputRange: [i === 0 ? 0 : start, end],
+      renderRange: [i === 0 ? 0 : start, end],
       contextRange: [Math.max(0, start - ctx), Math.min(total, end + ctx)],
     });
   }
@@ -76,6 +76,7 @@ export function RenderPage({ projectId }: { projectId: string }) {
   const jobs = useJobs(projectId);
   const render = useRenderGenerate();
   const setView = useProjectStore((s) => s.setView);
+  const simulated = useServiceStore((s) => s.capabilities?.video.mode === 'mock');
 
   const proj: Project | undefined = project.data;
   const [resolutionId, setResolutionId] = useState('480p');
@@ -103,7 +104,8 @@ export function RenderPage({ projectId }: { projectId: string }) {
     (j) => j.kind === 'renders' && ['queued', 'running', 'recovering'].includes(j.status),
   );
   const rendering = !!renderJob;
-  const canRender = !!proj && !!proj.currentDraftRevision && !!timeline && !rendering;
+  const canRender = !!proj && !!timeline && timeline.revisionId === proj.currentDraftRevision
+    && timeline.sampleCount > 0 && timeline.sampleCount <= 300 * timeline.sampleRate && !rendering;
   const resolution = RESOLUTION_OPTIONS.find((r) => r.id === resolutionId)?.value ?? '854x480';
   const totalSecs = timeline ? timeline.sampleCount / (timeline.sampleRate || 48000) : 0;
 
@@ -122,8 +124,8 @@ export function RenderPage({ projectId }: { projectId: string }) {
   const recentRender = (jobs.data ?? []).find((j) => j.kind === 'renders' && j.status === 'succeeded');
   const lastMeta = recentRender?.result?.meta as { outputVersion?: string; resolution?: string; fps?: number } | undefined;
 
-  const voiceSource = proj?.voiceBindings?.[0]?.providerProfileId === 'minimax' ? 'MiniMax' : '本地引擎';
-  const reusedCount = outputVersion ? segments.length : 0;
+  const voiceSource = simulated ? '模拟语音' : proj?.voiceBindings?.[0]?.providerProfileId === 'minimax' ? 'MiniMax' : '本地引擎';
+  const reusedCount = 0; // 未取得后端哈希校验计划，不能把存在旧输出当作可复用。
 
   return (
     <AppShell
@@ -218,10 +220,13 @@ export function RenderPage({ projectId }: { projectId: string }) {
         <Button
           variant="brand" icon="play" busy={rendering} disabled={!canRender}
           onClick={handleRender}
-        >{rendering ? '生成中' : outputVersion ? '重新生成' : '开始生成'}</Button>
+        >{rendering ? '执行中' : simulated ? '运行流程演示' : outputVersion ? '重新生成' : '开始生成'}</Button>
       </StageHead>
 
       <div className="hf-body">
+        {simulated && <Alert tone="warning">当前为流程演示，不生成 MP4、WAV 或 SRT；下方分段为示意，真实模型效果与规格尚未验证。</Alert>}
+        {timeline && totalSecs > 300 && <Alert tone="danger">完整音轨超过 5 分钟，请先精简内容，不会自动截断尾句。</Alert>}
+        {timeline && timeline.revisionId !== proj?.currentDraftRevision && <Alert tone="warning">当前配音属于旧脚本，请先生成或采用当前版本配音。</Alert>}
         {error && <Alert tone="danger">{error}</Alert>}
         {!timeline && (
           <Alert tone="warning">
@@ -234,7 +239,7 @@ export function RenderPage({ projectId }: { projectId: string }) {
         )}
         {lastMeta && (
           <Alert tone="success">
-            渲染完成：{lastMeta.outputVersion} · {lastMeta.resolution} @ {lastMeta.fps}fps，已登记为不可变视频资产。
+            {recentRender?.result?.simulated ? '流程演示完成，无真实视频文件' : '渲染完成'}：{lastMeta.outputVersion} · {lastMeta.resolution} @ {lastMeta.fps}fps。
           </Alert>
         )}
 
@@ -243,7 +248,7 @@ export function RenderPage({ projectId }: { projectId: string }) {
           <section className="hf-summary">
             <div className="hf-summary-t">开始生成前确认 <span className="wu-caption">输入快照将在点击「开始生成」时冻结</span></div>
             <div className="hf-summary-grid">
-              <div className="hf-kv"><div className="k">实际时长</div><div className="v hf-mono">{timeline ? fmtT(totalSecs) : '—'}</div></div>
+              <div className="hf-kv"><div className="k">{simulated ? '演示估算时长' : '实际时长'}</div><div className="v hf-mono">{timeline ? fmtT(totalSecs) : '—'}</div></div>
               <div className="hf-kv"><div className="k">画布</div><div className="v">{proj?.aspect === 'portrait' ? '竖屏 9:16' : '横屏 16:9'} · {resolution} 导出画布</div></div>
               <div className="hf-kv"><div className="k">语音来源</div><div className="v">{voiceSource}</div></div>
               <div className="hf-kv"><div className="k">视频模式</div><div className="v">双人动态同框</div></div>
@@ -265,7 +270,7 @@ export function RenderPage({ projectId }: { projectId: string }) {
             ) : (
               <div className="hf-seg-grid">
                 {segments.map((sg, i) => {
-                  const reused = !!outputVersion;
+                const reused = false;
                   const dur = sg.renderRange[1] - sg.renderRange[0];
                   return (
                     <div className="hf-segcard" key={sg.id}>

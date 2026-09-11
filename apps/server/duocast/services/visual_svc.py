@@ -23,5 +23,7 @@ def apply_visual_variant(store: ProjectStore, project: Project, result: dict[str
         image_api_config_ref="mock-image",
     )
     variants = [v.model_dump(by_alias=True) for v in project.visual_variants] + [variant.model_dump(by_alias=True)]
-    store.apply(project.id, {"visual_variants": variants}, expected_revision=project.revision)
+    store.apply(project.id, {"visual_variants": variants,
+                             "approvals": [a for a in project.approvals if a.kind != 'sample']},
+                expected_revision=project.revision)
     return [variant]

@@ -22,7 +22,7 @@ from .core.eventbus import EventBus
 from .core.logging import log, setup_logging
 from .jobs.manager import JobManager
 from .jobs.recovery import recover_on_startup
-from .services.render_svc import apply_output_version
+from .domain.project import Project, ScriptRevision
 from .services.script_svc import apply_script_revision, build_script_revision
 from .services.visual_svc import apply_visual_variant
 from .services.voice_svc import find_revision, synthesize_timeline
@@ -48,14 +48,15 @@ def _job_runner(manager: JobManager, store: ProjectStore, artifacts: ArtifactSto
             if project is None:
                 raise RuntimeError("project vanished")
             revision = build_script_revision(project, text_provider, result)
-            apply_script_revision(store, job.project_id, revision)
+            apply_script_revision(store, job.project_id, revision,
+                                  job.input_snapshot.get("expectedProjectRevision"))
             return {"artifactIds": [revision.id]}
         if job.kind == "script.rewrite":
             # 候选改写：不落盘，返回差异供用户审阅（01 §4.2 接受后才替换）
             project = store.load(job.project_id)
             if project is None:
                 raise RuntimeError("project vanished")
-            rev = find_revision(project, job.input_snapshot.get("revisionId"))
+            rev = ScriptRevision.model_validate(job.input_snapshot["scriptSnapshot"])
             selected = [t.model_dump(by_alias=True) for t in rev.turns
                         if t.id in job.input_snapshot.get("turnIds", [])]
             result = await text_provider.rewrite({
@@ -65,20 +66,17 @@ def _job_runner(manager: JobManager, store: ProjectStore, artifacts: ArtifactSto
             })
             return {"candidate": result, "revisionId": rev.id}
         if job.kind == "tts.synthesize":
-            project = store.load(job.project_id)
-            if project is None:
-                raise RuntimeError("project vanished")
+            project = Project.model_validate(job.input_snapshot["projectSnapshot"])
             revision = find_revision(project, job.input_snapshot.get("revisionId"))
             timeline = await synthesize_timeline(
                 store, tts_provider, project, revision,
                 bindings=job.input_snapshot.get("voiceBindings", {}),
                 transition_gap_ms=job.input_snapshot.get("transitionGapMs"),
+                lead_in_ms=job.input_snapshot.get("leadInMs", 0),
+                tail_out_ms=job.input_snapshot.get("tailOutMs", 0),
             )
-            artifacts.register(f"audio-{job.id}", "audio", "", f"rev:{revision.id}:{job.id}",
-                               params_snapshot={"revisionId": revision.id, "units": len(timeline.units)},
-                               workflow_version="v0.1")
             return {
-                "artifactIds": [f"audio-{job.id}", *[u.candidate_audio_asset_ids[0] for u in timeline.units if u.candidate_audio_asset_ids]],
+                "artifactIds": [],
                 "meta": {"sampleRate": timeline.sample_rate, "sampleCount": timeline.sample_count,
                          "units": len(timeline.units)},
             }
@@ -89,31 +87,24 @@ def _job_runner(manager: JobManager, store: ProjectStore, artifacts: ArtifactSto
             variants = apply_visual_variant(store, project, {
                 "aspect": job.input_snapshot.get("aspect", "landscape"),
             })
-            artifacts.register(variants[0].master_image.artifact_id, "image", "",
-                               f"proj:{job.project_id}:{job.id}",
-                               params_snapshot={"aspect": job.input_snapshot.get("aspect")},
-                               workflow_version="v0.1")
-            return {"artifactIds": [v.id for v in variants], "meta": {"variantId": variants[0].id}}
+            return {"artifactIds": [], "meta": {"variantId": variants[0].id}}
         if job.kind == "renders":
-            project = store.load(job.project_id)
-            if project is None:
-                raise RuntimeError("project vanished")
-            revision_id = job.input_snapshot.get("revisionId") or project.current_draft_revision
-            output = apply_output_version(store, project, revision_id)
-            artifacts.register(f"video-{job.id}", "video", "", f"out:{output}",
-                               params_snapshot={"outputVersion": output,
-                                                "resolution": job.input_snapshot.get("resolution"),
-                                                "fps": job.input_snapshot.get("fps")},
-                               workflow_version="v0.1")
+            # 模拟任务只验证流程；不得登记不存在的视频或覆盖真实输出指针。
+            project = Project.model_validate(job.input_snapshot["projectSnapshot"])
+            revision_id = job.input_snapshot["revisionId"]
+            output = f"DEMO-{revision_id}-{job.id}"
             return {
-                "artifactIds": [f"video-{job.id}"],
+                "artifactIds": [],
                 "meta": {"outputVersion": output,
                          "resolution": job.input_snapshot.get("resolution"),
                          "fps": job.input_snapshot.get("fps")},
             }
         raise RuntimeError(f"unknown job kind: {job.kind}")
 
-    return runner
+    async def simulated_runner(job):
+        return {**await runner(job), "simulated": True}
+
+    return simulated_runner
 
 
 @asynccontextmanager
@@ -154,14 +145,17 @@ async def lifespan(app: FastAPI):
 
     # ---- 启动自检（02 §7.4 最小版） ----
     recovered = recover_on_startup(settings.storage_root / "jobs")
+    job_manager.restore(recovered)
     log("startup", "duocast server assembling", host=settings.host, port=settings.port,
         storage=settings.storage_root, recovered_jobs=len(recovered))
     job_manager.start()
 
-    yield
-
-    # 关闭：等待在途任务（简化）或由进程退出接管
-    log("shutdown", "duocast server stopping")
+    try:
+        yield
+    finally:
+        await job_manager.stop()
+        project_store.flush()
+        log("shutdown", "duocast server stopping")
 
 
 app = FastAPI(title="DuoCast 双声播客工坊", version="0.1.0", lifespan=lifespan)

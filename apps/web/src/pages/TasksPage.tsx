@@ -4,15 +4,15 @@
    检查器：所选任务 / 五阶段进度 / 取消语义 / 连接与一致性 / 输入快照
    ========================================================================== */
 import { useMemo, useState } from 'react';
-import { useJobPause, useJobCancel, useJobs } from '../lib/api';
+import { useJobPause, useJobResume, useJobCancel, useJobs } from '../lib/api';
 import { JOB_LABEL, type Job, type JobStatus } from '../lib/types';
 import { Badge, Button } from '../components/wu';
 import { AppShell } from '../components/AppShell';
 import { useProjectStore } from '../stores';
 
-const RUNNING: JobStatus[] = ['running', 'pause_requested', 'paused', 'recovering', 'waiting_confirmation'];
+const RUNNING: JobStatus[] = ['running', 'pause_requested', 'paused', 'recovering', 'waiting_confirmation', 'cancel_requested', 'unknown'];
 const QUEUED: JobStatus[] = ['queued'];
-const FINISHED: JobStatus[] = ['succeeded', 'failed', 'cancelled', 'cancel_requested'];
+const FINISHED: JobStatus[] = ['succeeded', 'failed', 'cancelled'];
 
 const PHASES: { key: Job['stage']; label: string }[] = [
   { key: 'prepare', label: '准备' },
@@ -81,6 +81,7 @@ function phaseState(j: Job, idx: number): { cls: string; pct: number } {
 export function TasksPage() {
   const jobs = useJobs();
   const pause = useJobPause();
+  const resume = useJobResume();
   const cancel = useJobCancel();
   const setView = useProjectStore((s) => s.setView);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -98,10 +99,10 @@ export function TasksPage() {
 
   const selected = all.find((j) => j.id === selectedId) ?? groups.running[0] ?? groups.queued[0] ?? groups.finished[0] ?? null;
 
-  const canPause = selected != null && ['running', 'recovering', 'waiting_confirmation'].includes(selected.status);
-  const canCancel = selected != null && ['queued', 'running', 'pause_requested', 'paused', 'recovering', 'waiting_confirmation'].includes(selected.status);
+  const canPause = selected != null && ['queued', 'running', 'paused'].includes(selected.status);
+  const canCancel = selected != null && ['queued', 'running', 'pause_requested', 'paused', 'waiting_confirmation'].includes(selected.status);
 
-  const handlePause = () => { if (selected) pause.mutate(selected.id); };
+  const handlePause = () => { if (selected) (selected.status === 'paused' ? resume : pause).mutate(selected.id); };
   const handleCancel = () => { if (selected) cancel.mutate(selected.id); };
 
   const renderTask = (j: Job, inQueue: boolean) => {
@@ -159,7 +160,7 @@ export function TasksPage() {
               </Button>
             )}
             {canCancel && (RUNNING.includes(j.status) || inQueue) && (
-              <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); handleCancel(); }}>
+              <Button variant="ghost" size="sm" disabled={!active} onClick={(e) => { e.stopPropagation(); handleCancel(); }}>
                 {inQueue ? '取消排队' : '取消'}
               </Button>
             )}
@@ -216,7 +217,7 @@ export function TasksPage() {
           <div className="hf-ins-sec">
             <h4>取消语义</h4>
             <div className="hf-task-ops" style={{ marginTop: 0 }}>
-              <Button variant="secondary" size="sm" disabled={!canPause} busy={pause.isPending} onClick={handlePause}>当前段完成后暂停</Button>
+              <Button variant="secondary" size="sm" disabled={!canPause} busy={pause.isPending || resume.isPending} onClick={handlePause}>{selected?.status === 'paused' ? '继续' : '当前任务完成后暂停'}</Button>
               <Button variant="ghost" size="sm" disabled={!canCancel} busy={cancel.isPending} onClick={handleCancel}>取消</Button>
             </div>
             <p className="wu-caption" style={{ marginTop: 8, lineHeight: 1.65 }}>

@@ -20,6 +20,7 @@ yarn-error.log*
 
 # ===== Python / 后端 =====
 __pycache__/
+*.egg-info/
 *.py[cod]
 .venv/
 venv/

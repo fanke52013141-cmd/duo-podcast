@@ -25,4 +25,6 @@ async def test_provider(provider_id: str, request: Request) -> dict:
     caps = provider_map.get(provider_id)
     if caps is None:
         return {"ok": False, "error": "unknown provider"}
-    return {"ok": True, "provider": provider_id, "capabilities": caps}
+    return {"ok": True, "provider": provider_id, "capabilities": caps,
+            "simulated": bool(caps.get("simulated")),
+            "message": "模拟适配器自检通过，尚未测试真实服务" if caps.get("simulated") else "提供方已装配"}

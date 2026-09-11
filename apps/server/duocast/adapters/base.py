@@ -51,9 +51,13 @@ class CapabilityRegistry:
     video: dict[str, Any] = field(default_factory=dict)
 
     def snapshot(self) -> dict[str, Any]:
+        def status(caps):
+            simulated = bool(caps.get("simulated", False))
+            return {"ready": bool(caps), "productionReady": bool(caps) and not simulated,
+                    "mode": "mock" if simulated else "live", "capabilities": caps}
         return {
-            "textApi": {"ready": bool(self.text), "capabilities": self.text},
-            "imageApi": {"ready": bool(self.image), "capabilities": self.image},
-            "tts": {"ready": bool(self.tts), "capabilities": self.tts},
-            "video": {"ready": bool(self.video), "capabilities": self.video},
+            "textApi": status(self.text),
+            "imageApi": status(self.image),
+            "tts": status(self.tts),
+            "video": status(self.video),
         }
