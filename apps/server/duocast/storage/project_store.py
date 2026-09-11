@@ -30,7 +30,7 @@ class ProjectRevisionConflict(Exception):
 
 
 class ProjectStore:
-    def __init__(self, root: Path, debounce_ms: int = 2000) -> None:
+    def __init__(self, root: Path, debounce_ms: int = 500) -> None:
         self.root = root
         self.root.mkdir(parents=True, exist_ok=True)
         self.debounce_ms = debounce_ms

@@ -14,6 +14,19 @@ from ..core.eventbus import EventBus
 router = APIRouter(prefix="/api/events", tags=["events"])
 
 
+def _sse(event: dict) -> dict:
+    """SSE 帧。resync 标记事件（seq=-1）不带 id，避免污染浏览器 Last-Event-ID（11 报告 P2-12）。"""
+    out: dict = {"data": _serialize(event)}
+    if event.get("seq", -1) >= 0:
+        out["id"] = str(event["seq"])
+    return out
+
+
+def is_contiguous(missed: list[dict], after_seq: int) -> bool:
+    """补发序列必须从 after_seq+1 开始才算无缺口；否则客户端存在静默事件缺口（11 报告 P1-3）。"""
+    return bool(missed) and missed[0]["seq"] == after_seq + 1
+
+
 @router.get("")
 async def subscribe(request: Request) -> EventSourceResponse:
     bus: EventBus = request.app.state.event_bus
@@ -24,12 +37,18 @@ async def subscribe(request: Request) -> EventSourceResponse:
     async def gen():
         try:
             if last_seq:
-                missed = bus.replay(int(last_seq))
-                if missed:
+                last = int(last_seq)
+                missed = bus.replay(last)
+                if is_contiguous(missed, last):
                     for event in missed:
-                        yield {"id": str(event["seq"]), "data": _serialize(event)}
+                        yield _sse(event)
+                elif last >= bus.latest_seq:
+                    # 追平：无需补发。last > latest_seq 意味着序号来自上次服务生命周期，
+                    # 落到下面 resync；last == latest_seq 才真正无缺口。
+                    if last != bus.latest_seq:
+                        yield {"id": "0", "data": '{"type":"system.resync"}'}
                 else:
-                    # 窗口外（日志已轮转）：提示前端走快照路径（06 §5.2）
+                    # 轮转缺口或跨重启：走快照路径（06 §5.2 / 11 报告 P1-3）
                     yield {"id": "0", "data": '{"type":"system.resync"}'}
             while True:
                 if await request.is_disconnected():
@@ -39,7 +58,7 @@ async def subscribe(request: Request) -> EventSourceResponse:
                 except asyncio.TimeoutError:
                     yield {"data": ": keepalive"}
                     continue
-                yield {"id": str(event["seq"]), "data": _serialize(event)}
+                yield _sse(event)
         finally:
             bus.unsubscribe(qid)
 

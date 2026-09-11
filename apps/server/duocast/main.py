@@ -34,14 +34,15 @@ setup_logging()
 
 
 def _job_runner(manager: JobManager, store: ProjectStore, artifacts: ArtifactStore,
-                text_provider: MockTextProvider, tts_provider: MockTTSProvider):
+                text_provider: MockTextProvider, image_provider: MockImageProvider,
+                tts_provider: MockTTSProvider):
     """Job 执行分派：按 kind 路由到对应 service（06 §6.1 runner 装配）。"""
 
     async def runner(job):
         if job.kind == "script.generate":
             snapshot = job.input_snapshot
             result = await text_provider.generate({
-                "content": snapshot.get("sourceInput", {}).get("content", ""),
+                "sourceInput": snapshot.get("sourceInput", {}),
                 "brief": snapshot.get("brief", {}),
             })
             project = store.load(job.project_id)
@@ -50,7 +51,8 @@ def _job_runner(manager: JobManager, store: ProjectStore, artifacts: ArtifactSto
             revision = build_script_revision(project, text_provider, result)
             apply_script_revision(store, job.project_id, revision,
                                   job.input_snapshot.get("expectedProjectRevision"))
-            return {"artifactIds": [revision.id]}
+            # mock 无真实媒体产物：artifactIds 留空，版本指针走 meta（11 报告 P2-4）
+            return {"artifactIds": [], "meta": {"revisionId": revision.id}}
         if job.kind == "script.rewrite":
             # 候选改写：不落盘，返回差异供用户审阅（01 §4.2 接受后才替换）
             project = store.load(job.project_id)
@@ -81,6 +83,12 @@ def _job_runner(manager: JobManager, store: ProjectStore, artifacts: ArtifactSto
                          "units": len(timeline.units)},
             }
         if job.kind == "visual.generate":
+            # 先走图片提供方（mock 阶段为占位延迟），await 结束后重读工程——
+            # 避免用合成期间用户编辑前的旧 revision 提交导致冲突失败（11 报告 P2-2）
+            await image_provider.generate({
+                "aspect": job.input_snapshot.get("aspect", "landscape"),
+                "prompt": job.input_snapshot.get("prompt", ""),
+            })
             project = store.load(job.project_id)
             if project is None:
                 raise RuntimeError("project vanished")
@@ -141,7 +149,7 @@ async def lifespan(app: FastAPI):
     app.state.event_bus = event_bus
     app.state.job_manager = job_manager
     app.state.capabilities = capabilities
-    job_manager.set_runner(_job_runner(job_manager, project_store, artifacts, text_api, local_tts))
+    job_manager.set_runner(_job_runner(job_manager, project_store, artifacts, text_api, image_api, local_tts))
 
     # ---- 启动自检（02 §7.4 最小版） ----
     recovered = recover_on_startup(settings.storage_root / "jobs")

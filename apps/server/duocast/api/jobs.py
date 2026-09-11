@@ -14,13 +14,13 @@ def _manager(request: Request) -> JobManager:
 
 
 @router.get("")
-def list_jobs(request: Request, project_id: str | None = None) -> list[dict]:
+async def list_jobs(request: Request, project_id: str | None = None) -> list[dict]:
     jobs = _manager(request).list(project_id)
     return [j.model_dump(mode="json", by_alias=True) for j in jobs]
 
 
 @router.get("/{job_id}")
-def get_job(job_id: str, request: Request) -> dict:
+async def get_job(job_id: str, request: Request) -> dict:
     job = _manager(request).get(job_id)
     if job is None:
         raise HTTPException(404, "job not found")

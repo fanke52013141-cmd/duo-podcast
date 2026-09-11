@@ -90,7 +90,10 @@ export function VisualPage({ projectId }: { projectId: string }) {
 
   const handleAccept = () => {
     if (!proj) return;
-    confirm.mutate({ projectId, expectedRevision: proj.revision, kind: 'sample', inputRevisionId: proj.currentDraftRevision });
+    // 样片确认绑当前草稿；服务端校验绑定关系，过期确认会 422（11 报告 P1-6）
+    confirm.mutate({ projectId, expectedRevision: proj.revision, kind: 'sample', inputRevisionId: proj.currentDraftRevision }, {
+      onError: (e) => setError((e as Error).message),
+    });
   };
 
   // 人物区域（归一化坐标 → 画布百分比）

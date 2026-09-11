@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any, Awaitable, Callable, Optional
 
 from ..core.eventbus import EventBus
+from ..core.logging import log
 from ..domain.job import Job, JobStatus
 
 # 任务执行体：async (job) -> {artifactIds: [...]}；适配器回调经 bus 发事件
@@ -108,8 +109,9 @@ class JobManager:
     # ---- 状态机（唯一执行者） ----
     def transition(self, job: Job, target: JobStatus, **extra) -> bool:
         if not job.can_transition(target):
-            self.bus.publish("job.failed", jobId=job.id, error=f"illegal transition {job.status}->{target}",
-                             retryable=False)
+            # 非法转移只记日志，不再广播 job.failed（11 报告 P1-1：矛盾事件会让任务中心误判失败）
+            log("jobs", "illegal transition rejected", jobId=job.id,
+                current=job.status.value, target=target.value)
             return False
         job.status = target
         for k, v in extra.items():
@@ -149,8 +151,9 @@ class JobManager:
 
     def cancel(self, job_id: str) -> Job:
         job = self._require(job_id)
-        if job.status in (JobStatus.SUCCEEDED, JobStatus.FAILED, JobStatus.CANCELLED):
-            return job
+        if job.status in (JobStatus.SUCCEEDED, JobStatus.FAILED, JobStatus.CANCELLED,
+                          JobStatus.CANCEL_REQUESTED):
+            return job  # 已在取消流程/终态：幂等返回，不重复转移（11 报告 P1-1）
         if job.status in (JobStatus.QUEUED, JobStatus.PAUSED, JobStatus.WAITING_CONFIRMATION):
             self.transition(job, JobStatus.CANCELLED)
             return job

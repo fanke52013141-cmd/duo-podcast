@@ -1,6 +1,8 @@
 """渲染业务编排（06 §3.2 render_svc）：输出版本登记（01 §11.4）。
 
-mock 阶段：输出版本号占位（OUT-Rn-vN），无真实成片文件；关口 B 后替换为真实验证与下载。
+注意（11 报告 P2-4）：apply_output_version 当前**无调用方**——mock 渲染不改写正式
+输出指针（09 边界 #6：模拟渲染不登记不存在的媒体）。真实渲染适配器（关口 B）接线时
+由 _job_runner 在验证真实成片落盘后调用本函数登记 OUT- 版本号。
 """
 
 from __future__ import annotations

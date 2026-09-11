@@ -38,6 +38,15 @@ function kindLabel(kind: string): string {
   return map[kind] ?? kind;
 }
 
+/** 任务级操作资格（与 selected 解耦，供卡片按钮逐卡判断——11 报告 P1-2） */
+function canPauseJob(j: Job): boolean {
+  return ['queued', 'running', 'paused'].includes(j.status);
+}
+
+function canCancelJob(j: Job): boolean {
+  return ['queued', 'running', 'pause_requested', 'paused', 'waiting_confirmation'].includes(j.status);
+}
+
 function fmtTime(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '—';
@@ -99,11 +108,19 @@ export function TasksPage() {
 
   const selected = all.find((j) => j.id === selectedId) ?? groups.running[0] ?? groups.queued[0] ?? groups.finished[0] ?? null;
 
-  const canPause = selected != null && ['queued', 'running', 'paused'].includes(selected.status);
-  const canCancel = selected != null && ['queued', 'running', 'pause_requested', 'paused', 'waiting_confirmation'].includes(selected.status);
+  const canPause = selected != null && canPauseJob(selected);
+  const canCancel = selected != null && canCancelJob(selected);
 
-  const handlePause = () => { if (selected) (selected.status === 'paused' ? resume : pause).mutate(selected.id); };
-  const handleCancel = () => { if (selected) cancel.mutate(selected.id); };
+  // 操作对象显式来自调用卡片（11 报告 P1-2：此前按钮作用于“被选中”的任务，会取消错任务）
+  const handlePause = (j?: Job) => {
+    const t = j ?? selected;
+    if (!t) return;
+    (t.status === 'paused' ? resume : pause).mutate(t.id);
+  };
+  const handleCancel = (j?: Job) => {
+    const t = j ?? selected;
+    if (t) cancel.mutate(t.id);
+  };
 
   const renderTask = (j: Job, inQueue: boolean) => {
     const ic = icClass(j);
@@ -155,12 +172,12 @@ export function TasksPage() {
 
           <div className="hf-task-ops">
             {RUNNING.includes(j.status) && (
-              <Button variant="secondary" size="sm" disabled={!canPause || !active} onClick={(e) => { e.stopPropagation(); handlePause(); }}>
+              <Button variant="secondary" size="sm" disabled={!canPauseJob(j)} onClick={(e) => { e.stopPropagation(); handlePause(j); }}>
                 {j.status === 'paused' || j.status === 'pause_requested' ? '继续' : '当前段完成后暂停'}
               </Button>
             )}
-            {canCancel && (RUNNING.includes(j.status) || inQueue) && (
-              <Button variant="ghost" size="sm" disabled={!active} onClick={(e) => { e.stopPropagation(); handleCancel(); }}>
+            {canCancelJob(j) && (RUNNING.includes(j.status) || inQueue) && (
+              <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); handleCancel(j); }}>
                 {inQueue ? '取消排队' : '取消'}
               </Button>
             )}
@@ -217,8 +234,8 @@ export function TasksPage() {
           <div className="hf-ins-sec">
             <h4>取消语义</h4>
             <div className="hf-task-ops" style={{ marginTop: 0 }}>
-              <Button variant="secondary" size="sm" disabled={!canPause} busy={pause.isPending || resume.isPending} onClick={handlePause}>{selected?.status === 'paused' ? '继续' : '当前任务完成后暂停'}</Button>
-              <Button variant="ghost" size="sm" disabled={!canCancel} busy={cancel.isPending} onClick={handleCancel}>取消</Button>
+              <Button variant="secondary" size="sm" disabled={!canPause} busy={pause.isPending || resume.isPending} onClick={() => handlePause()}>{selected?.status === 'paused' ? '继续' : '当前任务完成后暂停'}</Button>
+              <Button variant="ghost" size="sm" disabled={!canCancel} busy={cancel.isPending} onClick={() => handleCancel()}>取消</Button>
             </div>
             <p className="wu-caption" style={{ marginTop: 8, lineHeight: 1.65 }}>
               「正在取消」与「已取消」分开呈现；没有可验证的定向取消能力时显示「取消待生效」。取消后当前段已落盘内容保留，可续跑。

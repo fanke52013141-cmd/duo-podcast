@@ -24,9 +24,12 @@ def _turn_from_dict(data: dict[str, Any]) -> Turn:
 
 
 def build_script_revision(project: Project, provider: TextProvider, result: dict[str, Any]) -> ScriptRevision:
+    source_input = result.get("sourceInput", {})
     rev = ScriptRevision(
         id=f"R{uuid.uuid4().hex[:12].upper()}",
-        source_input={"kind": "article", "content": result.get("sourceInput", {}).get("content", "")},
+        # 三入口（topic/article/script）的 kind 由提供方结果透传，不再硬编码（11 报告 P2-6）
+        source_input={"kind": source_input.get("kind", "article"),
+                      "content": source_input.get("content", "")},
         turns=[_turn_from_dict(t) for t in result.get("turns", [])],
         text_api_config_ref=result.get("textApiConfigRef", provider.name),
     )

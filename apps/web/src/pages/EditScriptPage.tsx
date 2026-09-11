@@ -117,26 +117,35 @@ export function EditScriptPage({ projectId }: { projectId: string }) {
     }
   }, [revision?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // 选区改写结果（job 完成 → 候选差异，接受后才替换）
+  // 选区改写结果：只为「页面打开期间完成」的任务弹候选，吸收挂载前已完成的旧任务
+  // （11 报告 P2-15：历史会话的旧候选不再反复弹出）
+  const rewriteSeen = useRef<Map<string, string>>(new Map());
   useEffect(() => {
-    const js = jobs.data ?? [];
-    const j = js.find((x) => x.kind === 'script.rewrite' && x.status === 'succeeded');
-    if (j?.result?.candidate && !candidate) {
-      const cand = j.result.candidate as { turns: Turn[]; changedTurnIds: string[] };
-      const ct = cand.turns ?? [];
-      if (ct.length) {
-        setCandidate({ turnIds: cand.changedTurnIds, turns: ct, jobId: j.id });
+    (jobs.data ?? []).forEach((x) => {
+      if (x.kind !== 'script.rewrite') return;
+      const prev = rewriteSeen.current.get(x.id);
+      rewriteSeen.current.set(x.id, x.status);
+      if (prev === undefined) return;
+      if (prev !== 'succeeded' && x.status === 'succeeded' && x.result?.candidate && !candidate) {
+        const cand = x.result.candidate as { turns: Turn[]; changedTurnIds: string[] };
+        const ct = cand.turns ?? [];
+        if (ct.length) {
+          setCandidate({ turnIds: cand.changedTurnIds, turns: ct, jobId: x.id });
+        }
       }
-    }
+    });
   }, [jobs.data]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // 自动保存（2s 防抖，01 §4.2）
+  // 自动保存（2s 防抖，01 §4.2）；baseRevId 是正在编辑的版本（11 报告 P0-1：
+  // 查看历史版本时编辑 → 新建草稿，绝不覆盖当前草稿内容）
   const scheduleSave = (nextTurns: Turn[]) => {
     if (!proj) return;
     if (saveTimer.current) window.clearTimeout(saveTimer.current);
     saveTimer.current = window.setTimeout(() => {
-      const { patch, revId } = upsertDraftTurns(proj, nextTurns);
-      saveDraft.mutate({ projectId, patch, expectedRevision: proj.revision });
+      const { patch, revId } = upsertDraftTurns(proj, nextTurns, viewRevId ?? undefined);
+      saveDraft.mutate({ projectId, patch, expectedRevision: proj.revision }, {
+        onError: (e) => setError((e as Error).message),
+      });
       setViewRevId(revId);
     }, 2000);
   };
@@ -200,7 +209,11 @@ export function EditScriptPage({ projectId }: { projectId: string }) {
 
   const handleConfirm = () => {
     if (!proj || !revision) return;
-    confirm.mutate({ projectId, expectedRevision: proj.revision, kind: 'script', inputRevisionId: revision.id });
+    // 确认只对当前草稿开放（11 报告 P1-6：确认历史版本不会推进阶段，两条口径会分裂）
+    if (!viewIsDraft) return;
+    confirm.mutate({ projectId, expectedRevision: proj.revision, kind: 'script', inputRevisionId: revision.id }, {
+      onError: (e) => setError((e as Error).message),
+    });
   };
 
   const handleRegenerate = () => {
@@ -357,7 +370,8 @@ export function EditScriptPage({ projectId }: { projectId: string }) {
         </label>
         <Button
           variant="brand" size="sm" icon="check"
-          disabled={!revision || scriptApproved || generating}
+          disabled={!revision || scriptApproved || generating || !viewIsDraft}
+          title={viewIsDraft ? undefined : '仅当前草稿可确认；请在版本选择器切回草稿'}
           onClick={handleConfirm}
         >
           {scriptApproved ? '已确认' : '确认脚本'}
@@ -522,7 +536,7 @@ export function EditScriptPage({ projectId }: { projectId: string }) {
         <span>字数 {charCount.toLocaleString()}</span>
         <span>预估 {fmtMs(estimateSecs(turns))}（基于历史语速）</span>
         <span className="hf-spacer" />
-        <span className="wu-caption">自动保存 2s 防抖 · Ctrl+Z 撤销</span>
+        <span className="wu-caption">自动保存 2s 防抖 · 拖动手柄可排序</span>
       </div>
 
       {/* ---- 读音词典（01 §4.2 全局面板） ---- */}

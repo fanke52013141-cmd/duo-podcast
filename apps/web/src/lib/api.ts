@@ -9,6 +9,10 @@ import type {
 
 const BASE = '/api';
 
+function is409(err: unknown): boolean {
+  return err instanceof Error && err.message.startsWith('409');
+}
+
 async function getJson<T>(path: string): Promise<T> {
   const res = await fetch(`${BASE}${path}`);
   if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
@@ -147,30 +151,34 @@ export function nextRevisionId(proj: Project): string {
 
 /**
  * 草稿话轮 upsert：
- * - 当前草稿未被确认且位于列表尾部 → 原位替换（不膨胀历史）
- * - 已确认或已被任务绑定 → 新建草稿版本（不覆盖已用版本，01 §13.2）
+ * - 基版本为当前草稿、未被确认且位于列表尾部 → 原位替换（不膨胀历史）
+ * - 其余情况（已确认 / 非尾部 / **基版本不是当前草稿**）→ 新建草稿版本
+ *   （11 报告 P0-1：baseRevId 是编辑所基于的版本；查看历史版本时编辑必须新建草稿，
+ *    绝不把历史内容写进当前草稿。已用版本不覆盖，01 §13.2）
  */
-export function upsertDraftTurns(proj: Project, turns: Turn[]): { patch: Record<string, unknown>; revId: string } {
-  const cur = proj.scriptRevisions.find((r) => r.id === proj.currentDraftRevision)
+export function upsertDraftTurns(proj: Project, turns: Turn[], baseRevId?: string): { patch: Record<string, unknown>; revId: string } {
+  const base = (baseRevId ? proj.scriptRevisions.find((r) => r.id === baseRevId) : undefined)
+    ?? proj.scriptRevisions.find((r) => r.id === proj.currentDraftRevision)
     ?? proj.scriptRevisions[proj.scriptRevisions.length - 1];
-  if (!cur) {
+  if (!base) {
     const rev: ScriptRevision = { id: nextRevisionId(proj), sourceInput: { kind: 'topic', content: '' }, turns, textApiConfigRef: '' };
     return { patch: { scriptRevisions: [rev], currentDraftRevision: rev.id }, revId: rev.id };
   }
   const approved = proj.approvals.some(
-    (a) => a.kind === 'script' && a.decision === 'accepted' && a.inputRevisionId === cur.id,
+    (a) => a.kind === 'script' && a.decision === 'accepted' && a.inputRevisionId === base.id,
   );
-  const isLast = proj.scriptRevisions[proj.scriptRevisions.length - 1]?.id === cur.id;
-  if (!approved && isLast) {
-    const replaced = proj.scriptRevisions.map((r) => (r.id === cur.id ? { ...r, turns } : r));
-    return { patch: { scriptRevisions: replaced }, revId: cur.id };
+  const isLast = proj.scriptRevisions[proj.scriptRevisions.length - 1]?.id === base.id;
+  const isDraft = base.id === proj.currentDraftRevision;
+  if (!approved && isLast && isDraft) {
+    const replaced = proj.scriptRevisions.map((r) => (r.id === base.id ? { ...r, turns } : r));
+    return { patch: { scriptRevisions: replaced }, revId: base.id };
   }
   const rev: ScriptRevision = {
     id: nextRevisionId(proj),
-    sourceInput: cur.sourceInput,
-    contentBrief: cur.contentBrief,
+    sourceInput: base.sourceInput,
+    contentBrief: base.contentBrief,
     turns,
-    textApiConfigRef: cur.textApiConfigRef,
+    textApiConfigRef: base.textApiConfigRef,
   };
   return {
     patch: { scriptRevisions: [...proj.scriptRevisions, rev], currentDraftRevision: rev.id },
@@ -178,11 +186,23 @@ export function upsertDraftTurns(proj: Project, turns: Turn[]): { patch: Record<
   };
 }
 
+/** PATCH + 冲突重放（11 报告 P0-2）：409 时以服务端最新 revision 重放一次同一 patch；
+ *  再次 409（真实的并发竞争或校验拒绝）向上抛给调用方展示。 */
+async function patchProjectWithReplay(projectId: string, patch: Record<string, unknown>, expectedRevision: number): Promise<Project> {
+  try {
+    return await sendJson<Project>(`/projects/${projectId}`, 'PATCH', { ...patch, expectedRevision });
+  } catch (err) {
+    if (!is409(err)) throw err;
+    const fresh = await getJson<Project>(`/projects/${projectId}`);
+    return await sendJson<Project>(`/projects/${projectId}`, 'PATCH', { ...patch, expectedRevision: fresh.revision });
+  }
+}
+
 export const useSaveDraft = () => {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ projectId, patch, expectedRevision }: { projectId: string; patch: Record<string, unknown>; expectedRevision: number }) =>
-      sendJson<Project>(`/projects/${projectId}`, 'PATCH', { ...patch, expectedRevision }),
+      patchProjectWithReplay(projectId, patch, expectedRevision),
     onSuccess: (proj) => qc.setQueryData(['project', proj.id], proj),
   });
 };
@@ -210,11 +230,11 @@ export const useConfirm = () => {
         note: note ?? '',
         at: new Date().toISOString(),
       };
-      return sendJson<Project>(`/projects/${projectId}`, 'PATCH', {
-        // approvals 为整字段替换语义：追加到现有确认记录后（01 §13.2 只追加不修改）
+      // approvals 为整字段替换语义：追加到现有确认记录后（01 §13.2 只追加不修改）；
+      // 冲突重放见 patchProjectWithReplay（11 报告 P0-2）。绑定校验在服务端（P1-6）。
+      return patchProjectWithReplay(projectId, {
         approvals: [...(proj?.approvals ?? []), approval],
-        expectedRevision,
-      });
+      }, expectedRevision);
     },
     onSuccess: (proj) => {
       qc.setQueryData(['project', proj.id], proj);

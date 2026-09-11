@@ -52,7 +52,8 @@ export function StageRail({ project, onNavigate }: { project: Project | null; on
       {STAGE_ORDER.map((s, i) => {
         const st = progress[s.id];
         const active = view === s.id;
-        const done = st === 'done' || st === 'pending_confirm' || st === 'stale';
+        // stale 不算完成态（11 报告 P2-17）：过期阶段保留其 warning 徽章，不再复用 done 高亮
+        const done = st === 'done' || st === 'pending_confirm';
         return (
           <button
             key={s.id}

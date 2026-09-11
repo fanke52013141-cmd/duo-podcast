@@ -26,7 +26,13 @@ def recover_on_startup(jobs_root: Path) -> list[Job]:
             data = json.loads(job_file.read_text(encoding="utf-8"))
             job = Job.model_validate(data)
         except Exception as exc:  # noqa: BLE001
-            log("recovery", "job manifest unreadable, marking unknown", job_dir=job_dir.name, error=str(exc))
+            # 占位 unknown 入管理器（11 报告 P1-5）：损坏清单若直接跳过，任务会在 UI 凭空消失。
+            log("recovery", "job manifest unreadable, keeping placeholder as unknown",
+                job_dir=job_dir.name, error=str(exc))
+            recovered.append(Job(
+                id=job_dir.name, project_id="", kind="unknown",
+                status=JobStatus.UNKNOWN, error=f"manifest unreadable: {exc}",
+            ))
             continue
         if job.status in (JobStatus.RUNNING, JobStatus.RECOVERING, JobStatus.PAUSE_REQUESTED,
                           JobStatus.CANCEL_REQUESTED):

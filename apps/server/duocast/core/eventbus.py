@@ -41,6 +41,9 @@ class EventBus:
             self._log_buffer.popleft()
         try:
             self.log_path.parent.mkdir(parents=True, exist_ok=True)
+            # 简单轮转（11 报告 P2-7）：超过 16MB 归档为 .old（单代），避免 events.jsonl 无限增长
+            if self.log_path.exists() and self.log_path.stat().st_size > 16 * 1024 * 1024:
+                self.log_path.replace(self.log_path.with_suffix(".jsonl.old"))
             with self.log_path.open("a", encoding="utf-8") as fh:
                 fh.write(json.dumps(event, ensure_ascii=False) + "\n")
         except OSError:
@@ -50,31 +53,35 @@ class EventBus:
         event = {"seq": self._next_seq(), "type": type_, "payload": payload}
         self._persist(event)
         stale: list[str] = []
-        for qid, q in self._subscribers.items():
-            try:
-                q.put_nowait(event)
-            except asyncio.QueueFull:
-                stale.append(qid)
-        for qid in stale:
-            # 慢消费者：丢弃历史事件，仅投递 resync 提示走快照路径（06 §5.2）
-            q = self._subscribers[qid]
-            try:
-                q.get_nowait()
-            except asyncio.QueueEmpty:
-                pass
-            try:
-                q.put_nowait(RESYNC_EVENT)
-            except asyncio.QueueFull:
-                pass
+        with self._lock:
+            for qid, q in self._subscribers.items():
+                try:
+                    q.put_nowait(event)
+                except asyncio.QueueFull:
+                    stale.append(qid)
+            for qid in stale:
+                # 慢消费者：清空历史事件后只投递 resync 提示走快照路径（06 §5.2 / 11 报告 P2-3）
+                q = self._subscribers[qid]
+                while True:
+                    try:
+                        q.get_nowait()
+                    except asyncio.QueueEmpty:
+                        break
+                try:
+                    q.put_nowait(RESYNC_EVENT)
+                except asyncio.QueueFull:
+                    pass
         return event
 
     async def subscribe(self, qid: str, maxsize: int = 1000) -> asyncio.Queue:
         q: asyncio.Queue = asyncio.Queue(maxsize=maxsize)
-        self._subscribers[qid] = q
+        with self._lock:
+            self._subscribers[qid] = q
         return q
 
     def unsubscribe(self, qid: str) -> None:
-        self._subscribers.pop(qid, None)
+        with self._lock:
+            self._subscribers.pop(qid, None)
 
     def replay(self, after_seq: int) -> list[dict[str, Any]]:
         """按序号补发内存缓冲中的事件（06 §5.2：日志已轮转 → 调用方应返回 snapshot_required）。"""

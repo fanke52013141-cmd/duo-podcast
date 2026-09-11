@@ -21,8 +21,9 @@ class Settings:
     queue_cap_gpu: int = 1
     queue_cap_api: int = 16
     queue_cap_cpu: int = 4
-    # 编辑类 PATCH 防抖落盘间隔（毫秒，01 §12 预期 revision 冲突保护之上）
-    project_debounce_ms: int = 2000
+    # 编辑类 PATCH 防抖落盘间隔（毫秒，01 §12 预期 revision 冲突保护之上）。
+    # 500ms（11 报告 P2-9）：窗口内 kill -9 会丢已确认给客户端的编辑，窗口越短暴露面越小。
+    project_debounce_ms: int = 500
     # 事件日志保留条数（超出后最旧事件轮转，重连需走快照路径）
     event_log_cap: int = 20_000
 

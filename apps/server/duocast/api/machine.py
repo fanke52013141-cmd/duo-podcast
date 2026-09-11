@@ -18,8 +18,17 @@ def _machine(request: Request) -> MachineSettings:
     return request.app.state.machine
 
 
+def _sanitize_profiles(profiles: dict) -> dict:
+    """只保留 credentialRef 引用（06 §7.3：密钥存系统凭据管理器，11 报告 §5 约束强制）。"""
+    out: dict = {}
+    for pid, profile in profiles.items():
+        if isinstance(profile, dict) and profile.get("credentialRef"):
+            out[str(pid)] = {"credentialRef": str(profile["credentialRef"])}
+    return out
+
+
 @router.get("")
-def get_machine(request: Request) -> dict:
+async def get_machine(request: Request) -> dict:
     m = _machine(request)
     data = m._data()  # noqa: SLF001（读文件快照，非写入）
     return {
@@ -35,11 +44,11 @@ def get_machine(request: Request) -> dict:
 
 
 @router.patch("")
-def patch_machine(payload: dict, request: Request) -> dict:
+async def patch_machine(payload: dict, request: Request) -> dict:
     m = _machine(request)
     data = m._data()
     if isinstance(payload.get("providerProfiles"), dict):
-        data["providerProfiles"] = payload["providerProfiles"]
+        data["providerProfiles"] = _sanitize_profiles(payload["providerProfiles"])
     if isinstance(payload.get("vramAllocation"), dict):
         data["vramAllocation"] = payload["vramAllocation"]
     m.save(data)

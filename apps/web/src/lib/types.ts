@@ -127,6 +127,8 @@ export interface Project {
   scriptRevisions: ScriptRevision[];
   voiceBindings: VoiceBinding[];
   audioTimeline: AudioTimeline | null;
+  /** 历史配音候选（11 报告 P2-11：后端 09 起恒追加，前端此前缺类型） */
+  audioHistory?: AudioTimeline[];
   visualVariants: VisualVariant[];
   outputVersion: string | null;
   stageProgress: Partial<Record<StageId, StageState>>;

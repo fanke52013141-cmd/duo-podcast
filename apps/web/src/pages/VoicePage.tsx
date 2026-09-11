@@ -4,7 +4,7 @@
    底部：时长检查条 + TimelineBar（全应用唯一深色面，05 §1.5）
    检查器：所选发言 / 间隔调整（transitionGapMs）/ 高级折叠
    ========================================================================== */
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   useConfirm, useJobs, useProject, useVoiceSynthesize,
 } from '../lib/api';
@@ -94,11 +94,11 @@ export function VoicePage({ projectId }: { projectId: string }) {
   }, [bs]);
 
   const defaultGaps = timeline?.transitionGapMs ?? (turnCount > 1 ? Array(turnCount - 1).fill(320) : []);
-  const gapMs = gapOverride !== null
-    ? defaultGaps.map((v, i) => (i === 0 ? gapOverride : v))
-    : defaultGaps;
+  // gapMs 的覆盖逻辑移到下方 gapIdx 计算之后（11 报告 P2-10）
 
-  const canSynthesize = !!proj && !!revision && turnCount > 0 && !synthesizing && !voiceApproved;
+  // 已确认后仍允许重新合成（11 报告 P2-16：与下方 Alert 承诺一致）——
+  // 重合成会替换当前时间轨并撤销 voice/sample 确认（voice_svc 写回规则）
+  const canSynthesize = !!proj && !!revision && turnCount > 0 && !synthesizing;
 
   const updateBinding = (spk: 'A' | 'B', patch: Partial<VoiceBinding>) => {
     if (!bs) return;
@@ -136,7 +136,9 @@ export function VoicePage({ projectId }: { projectId: string }) {
 
   const handleConfirm = () => {
     if (!proj || !timeline) return;
-    confirm.mutate({ projectId, expectedRevision: proj.revision, kind: 'voice', inputRevisionId: timeline.revisionId });
+    confirm.mutate({ projectId, expectedRevision: proj.revision, kind: 'voice', inputRevisionId: timeline.revisionId }, {
+      onError: (e) => setError((e as Error).message),
+    });
   };
 
   // ---- 时间轨派生 ----
@@ -153,6 +155,14 @@ export function VoicePage({ projectId }: { projectId: string }) {
     ? turns.findIndex((t) => t.id === selectedUnit.turnId)
     : -1;
   const gapIdx = selectedTurnIdx > 0 ? selectedTurnIdx - 1 : 0;
+  // 间隔覆盖写入「当前选中」的间隔位，而非固定第一处（11 报告 P2-10：此前显示与数据错位）
+  const gapMs = gapOverride !== null
+    ? defaultGaps.map((v, i) => (i === gapIdx ? gapOverride : v))
+    : defaultGaps;
+  useEffect(() => {
+    // 切换所选单元后回到默认值，滑杆显示的是新间隔的真实值
+    setGapOverride(null);
+  }, [selectedUnitId]); // eslint-disable-line react-hooks/exhaustive-deps
   const gapValue = gapMs[gapIdx] ?? 320;
   const gapPct = Math.round((gapValue / GAP_MAX_MS) * 100);
   const prevTurnLabel = turns[gapIdx]?.id ?? '—';

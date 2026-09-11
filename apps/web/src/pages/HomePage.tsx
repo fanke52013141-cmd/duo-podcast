@@ -108,9 +108,15 @@ export function HomePage() {
   const [renameTo, setRenameTo] = useState('');
 
   const handleCreate = async () => {
-    const proj = await createProject.mutateAsync({ title: '未命名节目' });
-    setModalOpen(false);
-    openProject(proj.id);
+    // 失败时 Modal 内已有 createProject.isError 告警（见下方渲染），
+    // 这里捕获以避免未处理 rejection（11 报告 P2-14）
+    try {
+      const proj = await createProject.mutateAsync({ title: '未命名节目' });
+      setModalOpen(false);
+      openProject(proj.id);
+    } catch {
+      /* 提示由 Modal 内的 isError 告警承担 */
+    }
   };
 
   const openOps = (p: Project) => {

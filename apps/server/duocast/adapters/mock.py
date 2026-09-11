@@ -35,9 +35,10 @@ class MockTextProvider:
 
     async def generate(self, req: dict[str, Any]) -> dict[str, Any]:
         await asyncio.sleep(self.delay_ms / 1000)
-        content = req.get("content", "")
+        source = req.get("sourceInput", {})
+        content = source.get("content", "")
         brief = req.get("brief", "")
-        return self._build_script(content, brief)
+        return self._build_script(content, brief, kind=source.get("kind", "article"))
 
     async def rewrite(self, req: dict[str, Any]) -> dict[str, Any]:
         await asyncio.sleep(self.delay_ms / 1000)
@@ -69,7 +70,7 @@ class MockTextProvider:
         return t
 
     @staticmethod
-    def _build_script(content: str, brief: str = "") -> dict[str, Any]:
+    def _build_script(content: str, brief: str = "", kind: str = "article") -> dict[str, Any]:
         # 简化拆分：按段落轮流分配给 A / B，产出结构化话轮（真实实现见 02 §5.1 单元划分 + script_svc 两次生成）
         paragraphs = [p.strip() for p in content.split("\n") if p.strip()] or [content or "（空输入）"]
         turns = []
@@ -87,7 +88,7 @@ class MockTextProvider:
             })
         return {
             "revisionId": f"R{mock_script_counter()}",
-            "sourceInput": {"kind": "article", "content": content},
+            "sourceInput": {"kind": kind, "content": content},
             "turns": turns,
             "textApiConfigRef": "mock-text",
         }
