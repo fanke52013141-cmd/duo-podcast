@@ -248,3 +248,52 @@ def test_new_audio_requires_new_voice_and_sample_confirmation(tmp_path):
     ]}, project.revision)
     asyncio.run(synthesize_timeline(store, AudioProvider(), project, revision, {}))
     assert [a.kind for a in store.load(project.id).approvals] == ['script']
+
+
+# ---- 终态完成时刻 finished_at（前端任务耗时口径的后端依据） ----
+
+def test_terminal_transition_stamps_finished_at(tmp_path):
+    manager = manager_fixture(tmp_path)
+    job = manager.submit('test', 'p', 'cpu', 't-finished', {})
+    manager.transition(job, JobStatus.RUNNING)
+    assert job.finished_at is None  # 进行中没有完成时刻
+    manager.transition(job, JobStatus.SUCCEEDED, result={'artifactIds': []})
+    assert job.finished_at is not None
+    # 非法转换不改变状态也不改时间戳
+    before = job.finished_at
+    assert manager.transition(job, JobStatus.RUNNING) is False
+    assert job.finished_at == before
+    # 终态时刻落盘可恢复
+    stored = (tmp_path / 'jobs' / job.id / 'job.json').read_text(encoding='utf-8')
+    assert 'finishedAt' in stored
+
+
+def test_paused_is_not_terminal_but_failed_is(tmp_path):
+    """PAUSED 可恢复（非终态，不盖完成戳）；FAILED 才是终态。"""
+    manager = manager_fixture(tmp_path)
+    job = manager.submit('test', 'p', 'cpu', 't-pause', {})
+    manager.transition(job, JobStatus.RUNNING)
+    manager.transition(job, JobStatus.PAUSED)
+    assert job.finished_at is None  # 暂停 ≠ 完成，可恢复
+    manager.transition(job, JobStatus.FAILED, error='boom')
+    assert job.finished_at is not None
+
+
+def test_running_job_keeps_elapsed_live_in_persisted_file(tmp_path):
+    """进行中任务落盘后 finishedAt 必须为 null/缺失，前端才能用 now - createdAt。"""
+    manager = manager_fixture(tmp_path)
+    job = manager.submit('test', 'p', 'cpu', 't-live', {})
+    manager.transition(job, JobStatus.RUNNING)
+    import json as _json
+    data = _json.loads((tmp_path / 'jobs' / job.id / 'job.json').read_text(encoding='utf-8'))
+    assert data.get('finishedAt') in (None, '')
+
+
+# ---- 提供方测试接口别名（服务设置页 textApi/imageApi 与后端 text/image 对齐） ----
+
+def test_provider_test_accepts_frontend_aliases():
+    from duocast.api.providers import _canonical_provider_id
+    assert _canonical_provider_id('textApi') == 'text'
+    assert _canonical_provider_id('imageApi') == 'image'
+    assert _canonical_provider_id('tts') == 'tts'
+    assert _canonical_provider_id('video') == 'video'

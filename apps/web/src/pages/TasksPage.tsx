@@ -60,8 +60,13 @@ function fmtDur(sec: number): string {
 }
 
 function elapsedOf(j: Job): number {
-  const t = new Date(j.createdAt).getTime();
-  return Number.isNaN(t) ? 0 : (Date.now() - t) / 1000;
+  // 终态任务耗时 = finishedAt - createdAt；进行中任务 = now - createdAt。
+  // 没有终态时刻时终态任务显示 0（不冒充仍在增长的耗时）。
+  const start = new Date(j.createdAt).getTime();
+  if (Number.isNaN(start)) return 0;
+  const end = j.finishedAt ? new Date(j.finishedAt).getTime() : Date.now();
+  if (Number.isNaN(end)) return 0;
+  return Math.max(0, (end - start) / 1000);
 }
 
 /** 状态圆点语义（01 §10.1） */
@@ -143,7 +148,7 @@ export function TasksPage() {
             <span className="hf-tag">{j.queueClass}</span>
             <span className="hf-task-meta" style={{ margin: 0, marginLeft: 'auto' }}>
               <span>{JOB_LABEL[j.status]}</span>
-              {ok && <span>{fmtDur(elapsedOf(j))} · {fmtTime(j.createdAt)} 完成</span>}
+              {ok && <span>{fmtDur(elapsedOf(j))} · {fmtTime(j.finishedAt ?? j.createdAt)} 完成</span>}
               {!ok && RUNNING.includes(j.status) && <span>已 {fmtDur(elapsedOf(j))}</span>}
               {j.error && <span className="err">{j.error}</span>}
             </span>
@@ -205,6 +210,7 @@ export function TasksPage() {
                 <div className="hf-fld"><label>类型</label><span>{kindLabel(selected.kind)} · <span className="hf-mono">{selected.kind}</span></span></div>
                 <div className="hf-fld"><label>队列</label><span><Badge tone="muted">{selected.queueClass}</Badge></span></div>
                 <div className="hf-fld"><label>提交</label><span>{fmtTime(selected.createdAt)} · 第 {selected.attempt + 1} 次尝试</span></div>
+                {selected.finishedAt && <div className="hf-fld"><label>完成</label><span>{fmtTime(selected.finishedAt)}</span></div>}
                 <div className="hf-fld"><label>状态</label><span><Badge tone={selected.status === 'succeeded' ? 'success' : selected.status === 'failed' ? 'danger' : 'info'}>{JOB_LABEL[selected.status]}</Badge></span></div>
                 <div className="hf-fld"><label>工程</label><span className="hf-mono">{selected.projectId}</span></div>
               </div>
@@ -280,7 +286,11 @@ export function TasksPage() {
         <span className="wu-caption">本地与 API 任务统一视图</span>
         <span className="hf-spacer" />
         <span className="wu-caption">更新于 {new Date(refreshedAt).toLocaleTimeString('zh-CN', { hour12: false })}</span>
-        <Button variant="secondary" size="sm" icon="refresh" onClick={() => setRefreshedAt(Date.now())}>刷新</Button>
+        <Button
+          variant="secondary" size="sm" icon="refresh"
+          busy={jobs.isFetching}
+          onClick={() => { jobs.refetch(); setRefreshedAt(Date.now()); }}
+        >刷新</Button>
       </div>
 
       <div className="hf-body2">

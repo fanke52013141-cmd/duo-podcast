@@ -4,11 +4,12 @@
    编辑 → 草稿版本 upsert（已用版本不覆盖）；确认脚本 → approvals 只追加
    ========================================================================== */
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   upsertDraftTurns, useConfirm, useGenerateScript, useJobs, useProject, useSaveDraft,
   useScriptRewrite,
 } from '../lib/api';
-import { type Job, type ScriptRevision, type Turn } from '../lib/types';
+import { type Job, type Project, type ScriptRevision, type Turn } from '../lib/types';
 import { Alert, Badge, Button, Icon, Input, Modal, Textarea } from '../components/wu';
 import { AppShell, FootBar, StageHead } from '../components/AppShell';
 import { useProjectStore } from '../stores';
@@ -90,6 +91,7 @@ export function EditScriptPage({ projectId }: { projectId: string }) {
   const regenerate = useGenerateScript();
   const rewrite = useScriptRewrite();
   const setView = useProjectStore((s) => s.setView);
+  const qc = useQueryClient();
 
   const proj = project.data;
   const [viewRevId, setViewRevId] = useState<string | null>(null);
@@ -101,6 +103,10 @@ export function EditScriptPage({ projectId }: { projectId: string }) {
   const [dictOpen, setDictOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const saveTimer = useRef<number | null>(null);
+  // 保存流水线状态：未保存 / 保存中 / 已保存 / 保存失败。确认与改写必须先过保存屏障。
+  const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  // 保存完成后由 resolve 通知等待者（确认/改写前的 flushDraft）。
+  const saveWaiter = useRef<(() => void) | null>(null);
 
   // 当前查看版本：默认当前草稿
   const revision: ScriptRevision | undefined = useMemo(() => {
@@ -136,18 +142,57 @@ export function EditScriptPage({ projectId }: { projectId: string }) {
     });
   }, [jobs.data]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // 自动保存（2s 防抖，01 §4.2）；baseRevId 是正在编辑的版本（11 报告 P0-1：
-  // 查看历史版本时编辑 → 新建草稿，绝不覆盖当前草稿内容）
+  // 自动保存（2s 防抖，01 §4.2）。
+  // 关键 1：防抖回调读最新工程快照（qc.getQueryData），不用闭包捕获的旧 proj.revision，
+  // 否则「编辑 → 立刻确认」时保存会用过期 revision 发 PATCH，触发 409 后确认再以另一个旧
+  // revision 提交，双写竞态导致丢编辑或锁死确认按钮。
+  // 关键 2：baseRevId 是正在编辑的版本（11 报告 P0-1：查看历史版本时编辑 → 新建草稿，
+  // 绝不覆盖当前草稿内容）。
+  const doSave = (nextTurns: Turn[]) => {
+    const latest = qc.getQueryData<Project>(['project', projectId]);
+    if (!latest) return;
+    const { patch, revId } = upsertDraftTurns(latest, nextTurns, viewRevId ?? undefined);
+    setSaveState('saving');
+    saveDraft.mutate(
+      { projectId, patch, expectedRevision: latest.revision },
+      {
+        onSuccess: () => {
+          setSaveState('saved');
+          saveWaiter.current?.();
+          saveWaiter.current = null;
+        },
+        onError: (e) => {
+          setSaveState('error');
+          setError(`自动保存失败：${(e as Error).message}（可再次编辑重试，或刷新页面核对）`);
+          saveWaiter.current?.();
+          saveWaiter.current = null;
+        },
+      },
+    );
+    setViewRevId(revId);
+  };
+
   const scheduleSave = (nextTurns: Turn[]) => {
     if (!proj) return;
     if (saveTimer.current) window.clearTimeout(saveTimer.current);
-    saveTimer.current = window.setTimeout(() => {
-      const { patch, revId } = upsertDraftTurns(proj, nextTurns, viewRevId ?? undefined);
-      saveDraft.mutate({ projectId, patch, expectedRevision: proj.revision }, {
-        onError: (e) => setError((e as Error).message),
-      });
-      setViewRevId(revId);
-    }, 2000);
+    saveTimer.current = window.setTimeout(() => doSave(nextTurns), 2000);
+  };
+
+  /** 保存屏障：确认 / 改写前把挂起的防抖保存立即落盘并等待结果。 */
+  const flushDraft = (): Promise<boolean> => {
+    if (saveTimer.current) {
+      window.clearTimeout(saveTimer.current);
+      saveTimer.current = null;
+      doSave(turns);
+    }
+    if (saveState === 'idle' || saveState === 'saved') return Promise.resolve(saveState === 'saved');
+    return new Promise<boolean>((resolve) => {
+      const prev = saveWaiter.current;
+      saveWaiter.current = () => {
+        prev?.();
+        resolve(saveState !== 'error');
+      };
+    });
   };
 
   const applyTurns = (next: Turn[]) => {
@@ -192,11 +237,15 @@ export function EditScriptPage({ projectId }: { projectId: string }) {
   const handleRewrite = (mode: 'rewrite' | 'casual' | 'probe' | 'dedupe' | 'trim') => {
     if (!proj || !revision || selected.length === 0) return;
     setCandidate(null);
-    rewrite.mutate({
-      projectId, clientToken: crypto.randomUUID(), revisionId: revision.id,
-      turnIds: selected, mode,
-    }, {
-      onError: (e) => setError((e as Error).message),
+    // 改写基于 revisionId 冻结输入，先把挂起编辑保存掉，避免改写结果落后于所见。
+    flushDraft().then((ok) => {
+      if (!ok) return;
+      rewrite.mutate({
+        projectId, clientToken: crypto.randomUUID(), revisionId: revision.id,
+        turnIds: selected, mode,
+      }, {
+        onError: (e) => setError((e as Error).message),
+      });
     });
   };
 
@@ -209,10 +258,16 @@ export function EditScriptPage({ projectId }: { projectId: string }) {
 
   const handleConfirm = () => {
     if (!proj || !revision) return;
-    // 确认只对当前草稿开放（11 报告 P1-6：确认历史版本不会推进阶段，两条口径会分裂）
+    // 确认只对当前草稿开放（11 报告 P1-6：确认历史版本不会推进阶段，两条口径会分裂）。
+    // 确认屏障：先把挂起的编辑保存进草稿版本，再以最新 revision 发确认（避免 expectedRevision 落后必 409）。
     if (!viewIsDraft) return;
-    confirm.mutate({ projectId, expectedRevision: proj.revision, kind: 'script', inputRevisionId: revision.id }, {
-      onError: (e) => setError((e as Error).message),
+    flushDraft().then(() => {
+      const latest = qc.getQueryData<Project>(['project', projectId]) ?? proj;
+      confirm.mutate({
+        projectId, expectedRevision: latest.revision, kind: 'script', inputRevisionId: revision.id,
+      }, {
+        onError: (e) => setError((e as Error).message),
+      });
     });
   };
 
@@ -227,6 +282,7 @@ export function EditScriptPage({ projectId }: { projectId: string }) {
   };
 
   // ---- 派生 ----
+  const saving = saveState === 'saving';
   const scriptApproved = proj?.approvals.some(
     (a) => a.kind === 'script' && a.decision === 'accepted' && revision && a.inputRevisionId === revision.id,
   ) ?? false;
@@ -340,7 +396,7 @@ export function EditScriptPage({ projectId }: { projectId: string }) {
             <Badge tone="warning" icon="alert">确认点 · 脚本确认</Badge>
             <span className="wu-caption">确认后可选自动启动配音</span>
             <span className="hf-spacer" />
-            <Button size="sm" onClick={() => setView('voice')}>下一步<Icon name="arrowRight" size={14} /></Button>
+            <Button size="sm" disabled={!revision || saving} onClick={() => setView('voice')}>下一步<Icon name="arrowRight" size={14} /></Button>
           </span>
         }
       />
@@ -370,11 +426,12 @@ export function EditScriptPage({ projectId }: { projectId: string }) {
         </label>
         <Button
           variant="brand" size="sm" icon="check"
-          disabled={!revision || scriptApproved || generating || !viewIsDraft}
+          disabled={!revision || scriptApproved || generating || saving || !viewIsDraft}
+          busy={confirm.isPending || saving}
           title={viewIsDraft ? undefined : '仅当前草稿可确认；请在版本选择器切回草稿'}
           onClick={handleConfirm}
         >
-          {scriptApproved ? '已确认' : '确认脚本'}
+          {scriptApproved ? '已确认' : saving ? '保存中…' : '确认脚本'}
         </Button>
       </StageHead>
 
@@ -536,7 +593,12 @@ export function EditScriptPage({ projectId }: { projectId: string }) {
         <span>字数 {charCount.toLocaleString()}</span>
         <span>预估 {fmtMs(estimateSecs(turns))}（基于历史语速）</span>
         <span className="hf-spacer" />
-        <span className="wu-caption">自动保存 2s 防抖 · 拖动手柄可排序</span>
+        <span className="wu-caption">
+          {saveState === 'saving' ? '保存中…'
+            : saveState === 'error' ? <span style={{ color: 'var(--wu-semantic-danger)' }}>保存失败 · 再编辑可重试</span>
+            : saveState === 'saved' ? '已保存 · Ctrl+Z 撤销'
+            : '自动保存 2s 防抖 · Ctrl+Z 撤销'}
+        </span>
       </div>
 
       {/* ---- 读音词典（01 §4.2 全局面板） ---- */}

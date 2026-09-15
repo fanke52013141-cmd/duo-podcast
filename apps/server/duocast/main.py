@@ -10,9 +10,9 @@ import asyncio
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from .adapters.base import CapabilityRegistry
@@ -28,7 +28,7 @@ from .services.visual_svc import apply_visual_variant
 from .services.voice_svc import find_revision, synthesize_timeline
 from .storage.artifacts import ArtifactStore
 from .storage.machine import CacheStore, MachineSettings
-from .storage.project_store import ProjectStore
+from .storage.project_store import InvalidProjectInput, ProjectStore
 
 setup_logging()
 
@@ -167,6 +167,12 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="DuoCast 双声播客工坊", version="0.1.0", lifespan=lifespan)
+
+
+@app.exception_handler(InvalidProjectInput)
+async def invalid_project_input(request: Request, exc: InvalidProjectInput) -> JSONResponse:
+    return JSONResponse(status_code=422, content={"detail": str(exc)})
+
 
 app.add_middleware(
     CORSMiddleware,

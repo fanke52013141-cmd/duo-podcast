@@ -153,6 +153,8 @@ export interface Job {
   retryable: boolean;
   result: Record<string, unknown> | null;
   createdAt: string;
+  /** 进入 succeeded/failed/cancelled 终态的时刻（ISO8601）；进行中为 null */
+  finishedAt?: string | null;
 }
 
 export interface ProviderCaps {

@@ -41,10 +41,11 @@ export function ServicesPage() {
   const capsData = caps.data ?? machine.data?.capabilities ?? null;
   const queueCaps = machine.data?.queueCaps ?? { gpu: 1, api: 16, cpu: 4 };
   const totalVram = Object.values(vram).reduce((n, v) => n + (Number(v) || 0), 0);
-  // 设计稿 HF-07 显存条为「2.8 / 16 GB」；后端 machine.json 目前只持久化分配合计，
-  // 不提供实测占用与物理上限，故此处沿用设计稿常量（与 TopBar 的 VRAM 指标同源）。
-  const usedVram = 2.8;
-  const totalGb = 16;
+  // 后端 machine.json 只持久化分配合计，不提供实测占用与物理上限。
+  // 不再冒充真实读数：仅显示人工分配预算；mock 模式单独标注。
+  const anyMock = capsData
+    ? Object.values(capsData).some((p) => p?.mode === 'mock')
+    : false;
 
   const handleVram = (id: string, v: number) => {
     if (!Number.isFinite(v)) return;
@@ -84,7 +85,8 @@ export function ServicesPage() {
     { nm: '图片 · 多参考图编辑', ok: feature('imageApi', 'multiRefEdit'), badge: feature('imageApi', 'multiRefEdit') ? '已连接' : '不支持', tone: feature('imageApi', 'multiRefEdit') ? 'success' : 'warning', note: '同框图走上传替代' },
     { nm: '本地 TTS', ok: !!capOf('tts')?.ready, badge: capOf('tts')?.ready ? '就绪' : '不可用', tone: capOf('tts')?.ready ? 'success' : 'danger' },
     { nm: '本地口型', ok: !!capOf('video')?.ready, badge: capOf('video')?.ready ? '就绪' : '不可用', tone: capOf('video')?.ready ? 'success' : 'danger' },
-    { nm: 'MiniMax 音色可用', ok: feature('tts', 'voiceCloning'), badge: feature('tts', 'voiceCloning') ? `${2} 个绑定有效` : '未配置', tone: feature('tts', 'voiceCloning') ? 'success' : 'warning' },
+    // 后端不提供有效绑定计数，不冒充「2 个绑定有效」；只登记能力开关本身。
+    { nm: 'MiniMax 音色可用', ok: feature('tts', 'voiceCloning'), badge: feature('tts', 'voiceCloning') ? 'voice_id 绑定能力开放' : '未配置', tone: feature('tts', 'voiceCloning') ? 'success' : 'warning' },
   ];
 
   return (
@@ -183,9 +185,10 @@ export function ServicesPage() {
               </div>
               <div className="hf-fld">
                 <label>显存</label>
-                <span className="hf-vram">
-                  <span className="bar"><i style={{ width: `${Math.min(100, (usedVram / totalGb) * 100)}%` }} /></span>
-                  {usedVram} / {totalGb} GB
+                <span>
+                  {anyMock
+                    ? <Badge tone="warning">演示模式 · 不占用真实显存</Badge>
+                    : <span className="wu-caption">实际占用待本地引擎接入后测定</span>}
                 </span>
                 <Button variant="ghost" size="sm" busy={test.isPending && testResult.tts === null} onClick={() => handleTest('tts')}>自检</Button>
               </div>
@@ -201,7 +204,7 @@ export function ServicesPage() {
                 <label>状态</label>
                 <span>
                   <Badge tone={feature('tts', 'voiceCloning') ? 'success' : 'warning'}>
-                    {feature('tts', 'voiceCloning') ? '2 个绑定有效' : '未配置'}
+                    {feature('tts', 'voiceCloning') ? '绑定能力开放' : '未配置'}
                   </Badge>
                 </span>
                 <Button variant="secondary" size="sm" disabled title="接入密钥库后可管理">管理绑定</Button>

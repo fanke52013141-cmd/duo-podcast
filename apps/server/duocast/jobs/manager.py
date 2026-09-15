@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
+import tempfile
 import uuid
 from copy import deepcopy
 from datetime import datetime, timezone
@@ -107,6 +109,8 @@ class JobManager:
                      and j.project_id == project_id and j.kind == kind), None)
 
     # ---- 状态机（唯一执行者） ----
+    _TERMINAL_STATUSES = frozenset({JobStatus.SUCCEEDED, JobStatus.FAILED, JobStatus.CANCELLED})
+
     def transition(self, job: Job, target: JobStatus, **extra) -> bool:
         if not job.can_transition(target):
             # 非法转移只记日志，不再广播 job.failed（11 报告 P1-1：矛盾事件会让任务中心误判失败）
@@ -114,6 +118,11 @@ class JobManager:
                 current=job.status.value, target=target.value)
             return False
         job.status = target
+        # 终态记录完成时刻；非终态（如恢复重跑回 RUNNING）视为进行中，清空旧值。
+        if target in self._TERMINAL_STATUSES:
+            job.finished_at = datetime.now(timezone.utc).isoformat(timespec="milliseconds")
+        else:
+            job.finished_at = None
         for k, v in extra.items():
             setattr(job, k, v)
         self._persist(job)
@@ -204,12 +213,18 @@ class JobManager:
     def _persist(self, job: Job) -> None:
         p = self.root / job.id / "job.json"
         p.parent.mkdir(parents=True, exist_ok=True)
-        tmp = p.with_suffix(".json.tmp")
-        tmp.write_text(json.dumps(job.model_dump(mode="json", by_alias=True), ensure_ascii=False, indent=2),
-                       encoding="utf-8")
-        import os
-
-        os.replace(tmp, p)
+        # 唯一临时文件名：不跟随预置的 project.json.tmp 之类的固定名链接，避免链接攻击。
+        fd = tempfile.NamedTemporaryFile(
+            mode="w", encoding="utf-8", prefix=".job-", suffix=".json.tmp",
+            dir=str(p.parent), delete=False,
+        )
+        tmp_path = Path(fd.name)
+        try:
+            with fd:
+                fd.write(json.dumps(job.model_dump(mode="json", by_alias=True), ensure_ascii=False, indent=2))
+            os.replace(tmp_path, p)
+        finally:
+            tmp_path.unlink(missing_ok=True)
 
 
 class _null_ctx:

@@ -80,6 +80,9 @@ export function VoicePage({ projectId }: { projectId: string }) {
     (j) => j.kind === 'tts.synthesize' && ['queued', 'running', 'recovering'].includes(j.status),
   );
   const synthesizing = !!synthJob;
+  // 已确认 = 对当前时间轨版本的 voice 确认记录。仅用于展示确认状态；
+  // 不再作为「生成整期配音」的禁用条件（旧实现 !voiceApproved 造成死锁：
+  // 脚本回改后时间轨过期却仍禁止重新合成，用户无路可走）。
   const voiceApproved = proj?.approvals.some(
     (a) => a.kind === 'voice' && a.decision === 'accepted' && timeline && a.inputRevisionId === timeline.revisionId,
   ) ?? false;
@@ -94,10 +97,15 @@ export function VoicePage({ projectId }: { projectId: string }) {
   }, [bs]);
 
   const defaultGaps = timeline?.transitionGapMs ?? (turnCount > 1 ? Array(turnCount - 1).fill(320) : []);
-  // gapMs 的覆盖逻辑移到下方 gapIdx 计算之后（11 报告 P2-10）
+  // gapMs 的覆盖逻辑在 gapIdx 计算之后（11 报告 P2-10：按所选单元真实相邻区间写入）。
 
-  // 已确认后仍允许重新合成（11 报告 P2-16：与下方 Alert 承诺一致）——
-  // 重合成会替换当前时间轨并撤销 voice/sample 确认（voice_svc 写回规则）
+  // 时间轨过期 = 脚本草稿版本 ≠ 时间轨对应版本。此时允许（且应当）重新合成；
+  // 阶段状态由后端 stage_svc 权威推导为 stale，前端只展示。
+  const timelineStale = !!timeline && !!proj && timeline.revisionId !== proj.currentDraftRevision;
+
+  // 合成许可：有工程、有话轮、没有正在进行的合成任务即可。
+  // 已确认的配音也允许重做（11 报告 P2-16 + v3.1 死锁解除：重合成会替换当前时间轨
+  // 并撤销 voice/sample 确认，voice_svc 写回规则）。
   const canSynthesize = !!proj && !!revision && turnCount > 0 && !synthesizing;
 
   const updateBinding = (spk: 'A' | 'B', patch: Partial<VoiceBinding>) => {
@@ -154,6 +162,7 @@ export function VoicePage({ projectId }: { projectId: string }) {
   const selectedTurnIdx = selectedUnit
     ? turns.findIndex((t) => t.id === selectedUnit.turnId)
     : -1;
+  // gap 编辑定位到所选单元的真实相邻区间（旧实现固定写 i===0，拖谁都是改第一段）。
   const gapIdx = selectedTurnIdx > 0 ? selectedTurnIdx - 1 : 0;
   // 间隔覆盖写入「当前选中」的间隔位，而非固定第一处（11 报告 P2-10：此前显示与数据错位）
   const gapMs = gapOverride !== null
@@ -263,7 +272,7 @@ export function VoicePage({ projectId }: { projectId: string }) {
             <h4>依赖提示</h4>
             <ul className="hf-ins-list">
               <li>阶段② 脚本确认：{proj?.approvals.some((a) => a.kind === 'script' && a.decision === 'accepted') ? '已通过' : '未确认'}</li>
-              <li>时间轨过期：脚本话轮改动后需重新合成</li>
+              <li>时间轨过期：{timelineStale ? '是 · 脚本话轮改动后需重新合成' : '否 · 时间轨与当前草稿一致'}</li>
               <li>音频资产不可变：每次合成为新 artifactId</li>
             </ul>
           </div>
@@ -289,7 +298,7 @@ export function VoicePage({ projectId }: { projectId: string }) {
         {revision && <Badge tone="info">脚本 {revision.id} · {turnCount} 条话轮</Badge>}
         {timeline && <Badge tone={voiceApproved ? 'success' : 'warning'}>{timeline.revisionId} · {totalSecs}</Badge>}
         <span className="hf-spacer" />
-        <span className="wu-caption">已保存</span>
+        <span className="wu-caption">时间轨随合成实时写回 · 无需手动保存</span>
         {/* 确认点按钮在阶段标题栏右侧（设计稿 HF-03 位置），不在检查器内 */}
         <Button
           variant="brand" size="sm" icon="check"
@@ -309,6 +318,12 @@ export function VoicePage({ projectId }: { projectId: string }) {
           <Alert tone="info">
             配音已确认（{timeline?.revisionId}）。重新合成将覆盖当前时间轨并回到待确认；确认后可前往
             <a className="hf-link" onClick={() => setView('visual')}>阶段④ 预览画面</a>。
+          </Alert>
+        )}
+        {timelineStale && (
+          <Alert tone="warning">
+            时间轨对应脚本 {timeline?.revisionId}，当前草稿为 {proj?.currentDraftRevision}；脚本已改动，
+            请<b>重新生成整期配音</b>后再确认（旧时间轨保留在音频历史中）。
           </Alert>
         )}
 
@@ -366,7 +381,7 @@ export function VoicePage({ projectId }: { projectId: string }) {
                 size="sm" icon="play" busy={synthesizing} disabled={!canSynthesize}
                 onClick={handleSynthesize}
               >
-                {voiceApproved ? '重新生成整期配音' : '生成整期配音'}
+                {synthesizing ? '合成中…' : voiceApproved ? '重新生成整期配音' : timelineStale ? '重新合成（脚本已改动）' : '生成整期配音'}
               </Button>
             </div>
             <p className="wu-caption" style={{ marginTop: 8, lineHeight: 1.6 }}>
@@ -432,8 +447,8 @@ export function VoicePage({ projectId }: { projectId: string }) {
       {/* ---- 时长检查条 ---- */}
       <div className="hf-dur">
         <span>时长检查：<b className="hf-mono">{timeline ? totalSecs : '—'}</b></span>
-        <Badge tone={voiceApproved ? 'success' : synthesizing ? 'info' : 'muted'}>
-          {voiceApproved ? '已确认' : synthesizing ? '生成中' : '待确认'}
+        <Badge tone={voiceApproved ? 'success' : synthesizing ? 'info' : timelineStale ? 'warning' : 'muted'}>
+          {voiceApproved ? '已确认' : synthesizing ? '生成中' : timelineStale ? '时间轨过期' : '待确认'}
         </Badge>
         <span className="hf-spacer" />
         <span className="wu-caption">配音时长含片头片尾发言及显式首尾停顿；后续新增片尾需重新检查总时长</span>

@@ -1,13 +1,60 @@
 # HANDOFF · 双声播客工坊 DuoCast
 
-> **当前交接状态（2026-09-11）**：v3.0 五阶段演示骨架已完成两轮流程正确性加固。第一轮见 [09-优化落地记录.md](09-优化落地记录.md)；第二轮按 [11-代码审查报告.md](11-代码审查报告.md) 修掉全部 P0/P1（历史版本编辑覆盖草稿、409 静默丢弃、重复取消假失败事件、任务卡片操作错位、SSE 补发缺口、工程 ID 穿越、损坏任务消失、确认绑定校验）与大部分 P2，回归 35 项 + 场景 12 项 + smoke 全绿。mock 提供方仍不能生成真实内容（`mode: mock` / `productionReady: false`）；模拟渲染不登记虚假媒体。
+> **当前交接状态（2026-09-15）**：v3.1 安全与正确性修复批次已落地。此前两轮流程加固见 [09-优化落地记录.md](09-优化落地记录.md) 与 [11-代码审查报告.md](11-代码审查报告.md)（第二轮修掉全部 P0/P1：历史版本编辑覆盖草稿、409 静默丢弃、重复取消假失败事件、任务卡片操作错位、SSE 补发缺口、工程 ID 穿越、损坏任务消失、确认绑定校验）。v3.1 在此之上修复三处核心链路：①工程存储路径与编号安全（防路径穿越/链接攻击/409 冲突）；②脚本保存-确认竞态与配音回改死锁（flushDraft 保存屏障 + 终态 finished_at）；③服务设置与任务中心的假数据清理（provider 别名对齐、去掉硬编码显存/绑定数、刷新真正 refetch）。后端 398+ tests passed，前端 tsc 零错误 + vite 构建通过。详见下文「v3.1 修复批次（2026-09-15）」。
+
+> **前一轮交接（2026-09-11）**：v3.0 五阶段演示骨架完成流程正确性优化。mock 提供方仍不能生成真实内容，但会明确标记 `mode: mock` / `productionReady: false`；模拟渲染不会登记虚假媒体或正式成片。详细变更、验证与遗留边界见 [09-优化落地记录.md](09-优化落地记录.md)。
 
 > 交接文档。写给下一位接手这个仓库的开发者：读完这份文档，你应当能在本机把项目跑起来、看懂代码落在哪、知道哪些是真的、哪些还是占位、以及下一步从哪里开工。
 >
-> - 交接日期：2026-09-11
-> - 当前迭代：v3.0 五阶段演示骨架 + 流程正确性优化
+> - 交接日期：2026-09-15（v3.1 修复批次）
+> - 当前迭代：v3.1 五阶段演示骨架 + 安全与正确性修复
 > - 权威需求文档：[04-详细优化方案.md](04-详细优化方案.md)
 > - 变更记录：[09-优化落地记录.md](09-优化落地记录.md)
+
+---
+
+## v3.1 修复批次（2026-09-15）
+
+本批次基于全量代码审查（基线 `d925a3e`，20 项发现）落地了可在不接入真实外部服务前提下独立修复的缺陷。三个修复组：
+
+### ① 工程存储安全（后端）
+
+- **路径与 ID 校验**（`storage/project_store.py`）：`_path()` 强制 ID 为 `[A-Za-z0-9_-]+`（1–255 字符），拒绝 Windows 设备保留名（CON/PRN/AUX/NUL/COM1-9/LPT1-9）；`Path.resolve()` + `is_relative_to()` 防穿越；拒绝根内链接别名（同一工程不能用不同 ID 访问）。`load()` 缓存命中前也走校验，并验证 `proj.id == project_id`。
+- **原子写加固**：`flush()` 改用 `NamedTemporaryFile`（`prefix=".project-"`），不再跟随攻击者预置的 `project.json.tmp` 链接；`os.replace` 失败保留旧文件，`finally` 清理临时文件。`jobs/manager.py` 的 `_persist()` 同步升级（`prefix=".job-"`）。
+- **创建冲突语义**：`create()` 对已存在目录 / 占位文件 / 坏 JSON / 缓存冲突抛 `ProjectAlreadyExists` → API 409；自动编号取「已落盘工程 ∪ 根目录所有子项」的 `EP\d+` 最大值 +1（占位目录也占号，防止覆盖）。
+- **输入校验**：`apply()` 拒绝非 dict patch、`id` 不可变、非 int/负数 `expectedRevision`；非法 ID/路径统一 `InvalidProjectInput` → `main.py` 异常处理器映射 422。
+- **打包修复**（`pyproject.toml`）：`packages.find` 替换固定 `packages = ["duocast"]`，wheel 现在包含全部子包。
+- **测试**：新增 `tests/test_project_safety.py`（497 行），覆盖非法 ID 全操作拒绝、合法 ID round-trip、重复创建 409、占位路径拒绝、resolve 越界受控、符号链接/hardlink 不读写、`os.replace` 失败保留旧文件、API 422 映射、默认编号算法、PATCH 不改 id 等 372 用例。
+- **已知环境限制**：本机 Windows + Python 3.13 的 `symlink_to()` 可能静默不创建链接（不抛异常），测试辅助 `make_symlink()` 创建后会校验存在性，失败即 `pytest.skip`（当前 7 skipped）。FastAPI 0.141+ 的 `include_router` 把业务路由包在 `_IncludedRouter` 里，测试需递归展开（`_flatten_api_routes()`）。
+
+### ② 保存-确认竞态与配音死锁（前端 + 后端）
+
+- **保存屏障**（`EditScriptPage.tsx`）：新增 `flushDraft()`——确认脚本 / 提交改写前，先把挂起的 2s 防抖保存立即执行并等待结果。旧实现闭包捕获过期 `proj.revision`，编辑后立刻确认必然 409（expectedRevision 落后），且 `handleConfirm` 不等保存完成，双写竞态会丢编辑。防抖回调现在从 `qc.getQueryData` 读最新工程快照，不再用旧闭包 revision。
+- **保存状态四态**：底部统计条与确认按钮显示「未保存 / 保存中 / 已保存 / 保存失败」，替代固定「已保存」文案；保存中禁用确认与「下一步」。
+- **配音回改死锁解除**（`VoicePage.tsx`）：`canSynthesize` 移除 `!voiceApproved` 条件——旧逻辑下脚本回改后时间轨过期（`timeline.revisionId != currentDraftRevision`），确认记录仍指向旧版本导致按钮永久禁用，用户无路可走。现在已确认的配音允许重新生成（后端 `voice_svc.synthesize_timeline` 会清除旧 voice/sample 确认并写入新时间轨，语义安全）。
+- **时间轨过期显式化**：新增 `timelineStale` 派生，页面顶部显示警示、按钮文案变为「重新合成（脚本已改动）」、时长检查条 Badge 显示「时间轨过期」。
+- **gap 编辑定位修复**：转场间隔滑杆按 `selectedUnitId` 对应话轮的真实相邻区间写入（旧实现固定写 `i===0`，拖谁都是改第一段）。
+- **任务终态时刻**（后端）：`Job` 域模型新增 `finished_at`（对外 `finishedAt`）；`transition()` 进入 `succeeded/failed/cancelled` 时打戳、回到进行中状态清空、非法转换不动戳。前端 `elapsedOf` 终态任务耗时 = `finishedAt - createdAt`（不再无限增长），任务卡显示「完成」时刻，检查器增加完成行。
+- **测试**：`tests/test_optimization.py` 新增 4 组用例（终态打戳、暂停非终态、进行中落盘 `finishedAt` 为空、provider 别名映射）。
+
+### ③ 显示口径清理（前端 + 后端）
+
+- **provider 测试别名**（`api/providers.py`）：`textApi` / `imageApi` 作为 `text` / `image` 的规范别名接受，响应返回 canonical ID。旧实现前端「测试连接」发 `textApi`/`imageApi`，后端只认 `text`/`image`，返回 `{ok:false, error:"unknown provider"}`，但能力面板仍显示「已连接」——按钮形同虚设。
+- **去掉假读数**（`ServicesPage.tsx`）：删除硬编码 `usedVram = 2.8 / totalGb = 16` 显存条（后端 machine.json 不提供实测占用），改为「演示模式 · 不占用真实显存」Badge 或「实际占用待本地引擎接入后测定」；删除「2 个绑定有效」假计数（后端无绑定数量接口），改为「绑定能力开放 / 未配置」。mock 模式标识沿用能力快照的 `mode: 'mock'`。
+- **任务中心刷新**（`TasksPage.tsx`）：刷新按钮真正调用 `jobs.refetch()` 并显示 `isFetching` busy 态（旧实现只改本地 `refreshedAt`，不发请求）。
+
+### v3.1 验证记录（2026-09-15）
+
+- 后端全量：`pytest tests/ -q` → **398 passed, 7 skipped**（7 skipped 均为符号链接环境限制）。
+- 前端：`tsc --noEmit` 零错误；`vite build` 通过（`dist/assets/index-*.js` 303.91 kB / gzip 93.01 kB）。
+- 未接入任何真实外部服务；所有测试使用临时目录；mock 结果不冒充真实产出的显示口径保持。
+
+### v3.1 已知剩余问题（下一批次候选）
+
+- `EditScriptPage` 的确认仍依赖「flushDraft 成功」这一本地屏障；若保存失败用户强行刷新页面，未落盘编辑会丢（浏览器无 beforeunload 拦截）。
+- `VoicePage` 单元级「重新生成 / 拆出一句 / 新旧对比」按钮仍是 disabled 占位（需后端单元级重合成 API）。
+- `jobs/manager.py` 的 `set_stage()` 不打 `finished_at`（只走 `transition()` 才打）——当前所有终态都经 `transition()`，无实际影响，但新增终态路径时要记得走 `transition()`。
+- 插入句内停顿按钮 disabled 占位（引擎语法未验证）。
 
 ---
 

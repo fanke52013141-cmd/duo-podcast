@@ -10,10 +10,11 @@ import json
 import re
 
 from fastapi import APIRouter, HTTPException, Request
+from pydantic import ValidationError
 
 from ..domain.project import Project
 from ..services.stage_svc import derive_stage_states
-from ..storage.project_store import ProjectRevisionConflict, ProjectStore
+from ..storage.project_store import ProjectAlreadyExists, ProjectRevisionConflict, ProjectStore
 
 router = APIRouter(prefix="/api/projects", tags=["projects"])
 
@@ -48,15 +49,37 @@ async def list_projects(request: Request) -> list[dict]:
 @router.post("")
 async def create_project(request: Request, payload: dict) -> dict:
     store: ProjectStore = _init_store(request)
-    project_id = payload.get("id") or f"EP{len(store.list_ids()) + 1:03d}"
-    if not isinstance(project_id, str) or not PROJECT_ID_RE.match(project_id):
-        raise HTTPException(
-            422,
-            f"非法工程 id: {project_id!r}（允许字母/数字/空格/连字符/下划线/中文，不含路径分隔符与点号）",
-        )
-    if store.load(project_id) is not None:
-        raise HTTPException(409, f"工程已存在: {project_id}")
-    proj = store.create(project_id, payload.get("title", "未命名节目"))
+    title = payload.get("title", "未命名节目")
+    # ID 白名单（P1-4 路径穿越）：显式 ID 先过正则，非法直接 422。
+    project_id = payload.get("id")
+    if project_id is not None:
+        if not isinstance(project_id, str) or not PROJECT_ID_RE.match(project_id):
+            raise HTTPException(
+                422,
+                f"非法工程 id: {project_id!r}（允许字母/数字/空格/连字符/下划线/中文，不含路径分隔符与点号）",
+            )
+    try:
+        if project_id is not None:
+            proj = store.create(project_id, title)
+        else:
+            # 未落盘工程、空目录及链接占位均占用编号，不能覆盖或复用。
+            occupied = set(store.list_ids()) | {d.name for d in store.root.iterdir()}
+            number = max(
+                (int(i[2:]) for i in occupied if re.fullmatch(r"EP[0-9]+", i)),
+                default=0,
+            ) + 1
+            while True:
+                try:
+                    proj = store.create(f"EP{number:03d}", title)
+                    break
+                except ProjectAlreadyExists:
+                    number += 1
+    except ProjectAlreadyExists as exc:
+        raise HTTPException(409, detail=str(exc)) from exc
+    except ValidationError as exc:
+        raise HTTPException(422, detail=exc.errors(
+            include_url=False, include_context=False, include_input=False,
+        )) from exc
     return _inject_states(request, proj)
 
 
@@ -108,4 +131,8 @@ async def patch_project(project_id: str, payload: dict, request: Request) -> dic
         raise HTTPException(404, str(exc)) from exc
     except ProjectRevisionConflict as exc:
         raise HTTPException(409, detail=str(exc)) from exc
+    except ValidationError as exc:
+        raise HTTPException(422, detail=exc.errors(
+            include_url=False, include_context=False, include_input=False,
+        )) from exc
     return _inject_states(request, updated)

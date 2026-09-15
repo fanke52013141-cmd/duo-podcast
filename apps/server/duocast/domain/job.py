@@ -64,6 +64,7 @@ class Job(BaseModel):
     retryable: bool = False
     result: Optional[dict[str, Any]] = None  # {artifactIds: [...]}
     created_at: str = ""
+    finished_at: Optional[str] = None  # 进入 succeeded/failed/cancelled 终态时写入（ISO8601）
 
     def can_transition(self, target: JobStatus) -> bool:
         return target in TRANSITIONS.get(self.status, frozenset())

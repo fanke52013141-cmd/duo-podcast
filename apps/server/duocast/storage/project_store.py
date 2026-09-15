@@ -9,6 +9,8 @@ import asyncio
 import json
 import logging
 import os
+import re
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
@@ -29,9 +31,18 @@ class ProjectRevisionConflict(Exception):
     pass
 
 
+class InvalidProjectInput(ValueError):
+    pass
+
+
+class ProjectAlreadyExists(Exception):
+    pass
+
+
 class ProjectStore:
     def __init__(self, root: Path, debounce_ms: int = 500) -> None:
-        self.root = root
+        # resolve 固化真实路径：防符号链接别名导致同一工程被不同 ID 访问（v3.1 存储安全）。
+        self.root = root.resolve()
         self.root.mkdir(parents=True, exist_ok=True)
         self.debounce_ms = debounce_ms
         self._projects: dict[str, Project] = {}
@@ -40,29 +51,60 @@ class ProjectStore:
 
     # ---- 路径 ----
     def _path(self, project_id: str) -> Path:
-        return self.root / project_id / "project.json"
+        if (
+            not isinstance(project_id, str)
+            or not 1 <= len(project_id) <= 255
+            or re.fullmatch(r"[A-Za-z0-9_-]+", project_id) is None
+            or re.fullmatch(r"CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9]", project_id, re.IGNORECASE)
+        ):
+            raise InvalidProjectInput("invalid project id")
+        candidate = self.root / project_id / "project.json"
+        try:
+            target = candidate.resolve()
+        except (OSError, RuntimeError) as exc:
+            raise InvalidProjectInput("invalid project path") from exc
+        # 同时拒绝越界和根内链接别名，避免不同 ID 读写同一个工程。
+        if not target.is_relative_to(self.root) or target != candidate:
+            raise InvalidProjectInput("invalid project path")
+        return target
 
     # ---- 读 ----
     def load(self, project_id: str) -> Optional[Project]:
+        p = self._path(project_id)
         if project_id in self._projects:
             return self._projects[project_id]
-        p = self._path(project_id)
         if not p.exists():
             return None
         data = json.loads(p.read_text(encoding="utf-8"))
         proj = Project.model_validate(data)
+        if proj.id != project_id:
+            raise InvalidProjectInput("project id does not match storage directory")
         self._projects[project_id] = proj
         return proj
 
     def list_ids(self) -> list[str]:
         if not self.root.exists():
             return []
-        ids = set(self._projects) | {d.name for d in self.root.iterdir() if (d / "project.json").exists()}
+        candidates = set(self._projects) | {d.name for d in self.root.iterdir()}
+        ids = []
+        for project_id in candidates:
+            try:
+                path = self._path(project_id)
+            except InvalidProjectInput:
+                continue
+            if project_id in self._projects or path.is_file():
+                ids.append(project_id)
         return sorted(ids)
 
     # ---- 写（唯一入口） ----
     def apply(self, project_id: str, patch: dict[str, Any], expected_revision: int) -> Project:
         current = self.load(project_id)
+        if not isinstance(patch, dict):
+            raise InvalidProjectInput("patch must be an object")
+        if "id" in patch and patch["id"] != project_id:
+            raise InvalidProjectInput("project id cannot be changed")
+        if type(expected_revision) is not int or expected_revision < 0:
+            raise InvalidProjectInput("expectedRevision must be a non-negative integer")
         if current is None:
             raise KeyError(f"project not found: {project_id}")
         if current.revision != expected_revision:
@@ -81,8 +123,11 @@ class ProjectStore:
         return updated
 
     def create(self, project_id: str, title: str = "未命名节目") -> Project:
-        if self.load(project_id) is not None:
-            return self._projects[project_id]
+        path = self._path(project_id)
+        if path.parent.exists() or any(
+            self.root / existing_id == path.parent for existing_id in self._projects
+        ):
+            raise ProjectAlreadyExists(f"project already exists: {project_id}")
         proj = Project(id=project_id, title=title, revision=0, updated_at=_now_iso())
         self._projects[project_id] = proj
         self._dirty.add(project_id)
@@ -113,12 +158,21 @@ class ProjectStore:
             target = self._path(project_id)
             target.parent.mkdir(parents=True, exist_ok=True)
             # 原子替换（02 §6.3）：tmp → fsync → os.replace
-            tmp = target.with_suffix(".json.tmp")
             payload = json.dumps(proj.model_dump(mode="json", by_alias=True), ensure_ascii=False, indent=2)
-            with tmp.open("w", encoding="utf-8") as fh:
-                fh.write(payload)
-                fh.flush()
-                os.fsync(fh.fileno())
-            os.replace(tmp, target)
+            # 独占创建随机临时文件，不跟随预先放置的 project.json.tmp 链接。
+            tmp = None
+            try:
+                with tempfile.NamedTemporaryFile(
+                    mode="w", encoding="utf-8", dir=target.parent,
+                    prefix=".project-", suffix=".json.tmp", delete=False,
+                ) as fh:
+                    tmp = Path(fh.name)
+                    fh.write(payload)
+                    fh.flush()
+                    os.fsync(fh.fileno())
+                os.replace(tmp, target)
+            finally:
+                if tmp is not None:
+                    tmp.unlink(missing_ok=True)
             self._dirty.discard(project_id)
             logger.info("project persisted", extra={"ctx": {"id": project_id, "revision": proj.revision}})
