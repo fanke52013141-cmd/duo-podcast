@@ -1,13 +1,13 @@
 # HANDOFF · 双声播客工坊 DuoCast
 
-> **当前交接状态（2026-09-15）**：v3.1 安全与正确性修复批次已落地。此前两轮流程加固见 [09-优化落地记录.md](09-优化落地记录.md) 与 [11-代码审查报告.md](11-代码审查报告.md)（第二轮修掉全部 P0/P1：历史版本编辑覆盖草稿、409 静默丢弃、重复取消假失败事件、任务卡片操作错位、SSE 补发缺口、工程 ID 穿越、损坏任务消失、确认绑定校验）。v3.1 在此之上修复三处核心链路：①工程存储路径与编号安全（防路径穿越/链接攻击/409 冲突）；②脚本保存-确认竞态与配音回改死锁（flushDraft 保存屏障 + 终态 finished_at）；③服务设置与任务中心的假数据清理（provider 别名对齐、去掉硬编码显存/绑定数、刷新真正 refetch）。后端 398+ tests passed，前端 tsc 零错误 + vite 构建通过。详见下文「v3.1 修复批次（2026-09-15）」。
+> **当前交接状态（2026-09-16）**：v3.1 修复批次已与远程 `806f654`（第二轮审查 P0×2/P1×6/P2×15 落地）完成 rebase 合并（合并提交 `a3177ce`），6 处冲突全部手工解决并保留双方有效修复。合并后测试契约差异（ID 中文/空格白名单、`id:null` 自动编号、PATCH 字段白名单）已对齐，后端 411 tests passed，前端 tsc 零错误 + vite 构建通过。此前记录见 [09-优化落地记录.md](09-优化落地记录.md) 与 [11-代码审查报告.md](11-代码审查报告.md)。详见下文「v3.1 修复批次」与「与远程 806f654 合并（2026-09-16）」。
 
 > **前一轮交接（2026-09-11）**：v3.0 五阶段演示骨架完成流程正确性优化。mock 提供方仍不能生成真实内容，但会明确标记 `mode: mock` / `productionReady: false`；模拟渲染不会登记虚假媒体或正式成片。详细变更、验证与遗留边界见 [09-优化落地记录.md](09-优化落地记录.md)。
 
 > 交接文档。写给下一位接手这个仓库的开发者：读完这份文档，你应当能在本机把项目跑起来、看懂代码落在哪、知道哪些是真的、哪些还是占位、以及下一步从哪里开工。
 >
-> - 交接日期：2026-09-15（v3.1 修复批次）
-> - 当前迭代：v3.1 五阶段演示骨架 + 安全与正确性修复
+> - 交接日期：2026-09-16（v3.1 修复批次 + 远程合并）
+> - 当前迭代：v3.1 五阶段演示骨架 + 安全与正确性修复（已含远程第二轮审查落地）
 > - 权威需求文档：[04-详细优化方案.md](04-详细优化方案.md)
 > - 变更记录：[09-优化落地记录.md](09-优化落地记录.md)
 
@@ -43,11 +43,27 @@
 - **去掉假读数**（`ServicesPage.tsx`）：删除硬编码 `usedVram = 2.8 / totalGb = 16` 显存条（后端 machine.json 不提供实测占用），改为「演示模式 · 不占用真实显存」Badge 或「实际占用待本地引擎接入后测定」；删除「2 个绑定有效」假计数（后端无绑定数量接口），改为「绑定能力开放 / 未配置」。mock 模式标识沿用能力快照的 `mode: 'mock'`。
 - **任务中心刷新**（`TasksPage.tsx`）：刷新按钮真正调用 `jobs.refetch()` 并显示 `isFetching` busy 态（旧实现只改本地 `refreshedAt`，不发请求）。
 
-### v3.1 验证记录（2026-09-15）
+### v3.1 验证记录（合并后，2026-09-16）
 
-- 后端全量：`pytest tests/ -q` → **398 passed, 7 skipped**（7 skipped 均为符号链接环境限制）。
-- 前端：`tsc --noEmit` 零错误；`vite build` 通过（`dist/assets/index-*.js` 303.91 kB / gzip 93.01 kB）。
+- 后端全量：`pytest tests/ -q` → **411 passed, 7 skipped**（7 skipped 均为符号链接环境限制）。
+- 前端：`tsc --noEmit` 零错误；`vite build` 通过（`dist/assets/index-*.js` 304.59 kB / gzip 93.31 kB）。
 - 未接入任何真实外部服务；所有测试使用临时目录；mock 结果不冒充真实产出的显示口径保持。
+
+### 与远程 806f654 合并（2026-09-16）
+
+本地 v3.1（`3f01959`）与远程第二轮审查落地（`806f654`）rebase 合并为 `a3177ce`，6 处冲突手工解决，策略为**保留双方有效修复**：
+
+- **`project_store.py`**：保留远程 `debounce_ms=500` + 本地 `root.resolve()`（防链接别名）与本地的 `_path()`/`apply()`/`flush()` 安全版本。
+- **`api/projects.py`**：保留远程 `PROJECT_ID_RE`（允许中文/空格）、`ALLOWED_PATCH_FIELDS` 白名单、确认绑定校验，叠加本地的"占位目录也占号 + 409 重试"编号逻辑与显式 ID 校验。
+- **`EditScriptPage.tsx`**（4 处）：远程 `baseRevId` 乐观锁 + 本地 `flushDraft` 保存屏障/四态显示合并；确认按钮叠加远程的 `!viewIsDraft` 门控与本地的 busy 态。
+- **`VoicePage.tsx`**：远程 `timelineStale` 显式化 + 本地的 gap 编辑定位修复；`canSynthesize` 采纳远程 P2-16 语义（已确认可重做，仅显式标注过期）。
+- **`HANDOFF.md`**：双方状态与章节合并。
+
+**合并后测试契约对齐**（远程语义为准，本地测试已改写）：
+
+1. **ID 字符集**：`project_store._path()` 正则扩展为与 API 层 `PROJECT_ID_RE` 对齐——允许中文与内部空格（`test_review_fixes.py::test_project_id_still_accepts_chinese_and_spaces` 要求）。本地额外加固保留：拒绝首尾空白（Windows 会剥离目录名尾部空格，`"EP001 "` 与 `"EP001"` 会落同一目录造成覆盖），保留设备保留名拒绝与 resolve/containment 检查。测试中 `"EP 001"` 移入合法列表，新增 `"中文工程"`、`"EP 中文01"`、`"第1期_嘉宾访谈"` 覆盖。
+2. **`id: null` 语义**：API 层显式 `id=null` 等价于不传（走自动编号），仅 store 层拒绝 `None`。`test_create_api_rejects_explicit_invalid_id` 改用排除 `None` 的 `API_INVALID_IDS`，并新增 `test_create_api_treats_null_id_as_auto_numbering`。
+3. **PATCH 字段白名单**（远程 P2-5）：`id`/`revision`/`updatedAt`/`audioTimeline` 等内部字段注入返回 422——这是正确的服务端防护，原测试通过 PATCH 写这些字段验证命名兼容的做法不再成立。改写为双断言：先验证注入被拒（422 + 具体字段名），再验证合法业务字段（`title`/`currentDraftRevision`）正常写入；`audioTimeline` 注入单独成测试。
 
 ### v3.1 已知剩余问题（下一批次候选）
 

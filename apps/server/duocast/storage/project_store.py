@@ -51,10 +51,14 @@ class ProjectStore:
 
     # ---- 路径 ----
     def _path(self, project_id: str) -> Path:
+        # 正则与 api/projects.py 的 PROJECT_ID_RE 对齐（中文/内部空格合法），
+        # 但额外拒绝首尾空白：Windows 文件系统会剥离目录名尾部空格，
+        # "EP001 " 与 "EP001" 将落到同一目录，造成同名工程互相覆盖。
         if (
             not isinstance(project_id, str)
             or not 1 <= len(project_id) <= 255
-            or re.fullmatch(r"[A-Za-z0-9_-]+", project_id) is None
+            or project_id != project_id.strip()
+            or re.fullmatch(r"[A-Za-z0-9_\-\u4e00-\u9fff][A-Za-z0-9 _\-\u4e00-\u9fff]*", project_id) is None
             or re.fullmatch(r"CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9]", project_id, re.IGNORECASE)
         ):
             raise InvalidProjectInput("invalid project id")

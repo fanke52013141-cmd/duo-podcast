@@ -30,7 +30,7 @@ INVALID_IDS = [
     "../outside", "..\\outside", "nested/project", "nested\\project",
     "/tmp/outside", "C:\\outside", "C:/outside", "C:outside",
     "\\\\server\\share", "//server/share", "\\rooted",
-    "EP001.", "EP001 ", " EP001", "EP 001", "\x00", "\n", "EP001\n",
+    "EP001.", "EP001 ", " EP001", "\x00", "\n", "EP001\n",
     "a:b", "a?b", "a*b", '"EP001"', "a|b", "a<b", "a>b",
     "CON", "con", "PrN", "AUX", "nul", "COM1", "com9", "LPT1", "lpt9",
     "CON.txt", "NUL.json", "COM1.txt", "CONIN$", "CONOUT$", "COM¹", "LPT²",
@@ -39,6 +39,7 @@ INVALID_IDS = [
 VALID_IDS = [
     "EP001", "a17a96de-58a0-4c34-81a0-840b88a98922", "abcXYZ019",
     "episode_1-part-2", "test", "COM0", "COM10", "LPT0", "LPT10", "_", "-",
+    "EP 001", "中文工程", "EP 中文01", "第1期_嘉宾访谈",
 ]
 
 
@@ -109,6 +110,11 @@ def test_store_rejects_invalid_ids_before_access(store, project_id, operation):
     assert store._projects == {}
     assert store._dirty == set()
     assert list(store.root.iterdir()) == []
+
+
+# API 层显式 id=null 等价于"不传 id"（走自动编号），其余非法输入仍 422。
+# 该列表与 INVALID_IDS 一致但去掉 None（远程 806f654 的语义，测试保留双方约定）。
+API_INVALID_IDS = [i for i in INVALID_IDS if not (isinstance(i, type(None)) or i is None)]
 
 
 @pytest.mark.parametrize("project_id", [b"EP001", Path("EP001")])
@@ -298,13 +304,20 @@ def test_legacy_file_keeps_defaults_and_rejects_mismatched_identity(store):
         ProjectStore(store.root).load("EP001")
 
 
-@pytest.mark.parametrize("project_id", INVALID_IDS)
+@pytest.mark.parametrize("project_id", API_INVALID_IDS)
 def test_create_api_rejects_explicit_invalid_id(client, store, project_id):
     response = client.post("/api/projects", json={"id": project_id})
     assert response.status_code == 422, response.text
     assert response.json()["detail"]
     assert store._projects == {}
     assert list(store.root.iterdir()) == []
+
+
+def test_create_api_treats_null_id_as_auto_numbering(client, store):
+    """远程语义：显式 id=null 与不传 id 相同，走自动编号而非 422。"""
+    response = client.post("/api/projects", json={"id": None, "title": "自动编号"})
+    assert response.status_code == 200, response.text
+    assert response.json()["id"] == "EP001"
 
 
 @pytest.mark.parametrize("method,suffix", [
@@ -420,9 +433,17 @@ def test_same_id_and_both_field_naming_styles_remain_compatible(client, store):
         "current_draft_revision": "R1",
     }, 0)
     assert internal.current_draft_revision == "R1"
+    # 远程 P2-5 白名单拒绝注入内部字段（id/revision/updatedAt），合法业务字段正常写入。
+    guarded = client.patch("/api/projects/EP001", json={
+        "expectedRevision": 1, "id": "EP999", "revision": 99,
+        "updatedAt": "不能伪造", "audioTimeline": {"revisionId": "R1"},
+    })
+    assert guarded.status_code == 422, guarded.text
+    assert sorted(guarded.json()["detail"].split(": ", 1)[1].strip("[]'").split("', '")) == [
+        "audioTimeline", "id", "revision", "updatedAt",
+    ]
     response = client.patch("/api/projects/EP001", json={
-        "expectedRevision": 1, "id": "EP001", "title": "改名",
-        "currentDraftRevision": "R2", "revision": 99, "updatedAt": "不能伪造",
+        "expectedRevision": 1, "title": "改名", "currentDraftRevision": "R2",
     })
     assert response.status_code == 200, response.text
     project = response.json()
@@ -450,7 +471,7 @@ def test_invalid_expected_revision_returns_422_not_conflict(client, store, expec
 @pytest.mark.parametrize("patch", [
     {"title": None}, {"title": []}, {"aspect": "square"}, {"voiceBindings": {}},
     {"scriptRevisions": [{"id": "R1", "turns": [{"id": "T1", "speaker": "C"}]}]},
-    {"audioTimeline": {"revisionId": "R1", "sampleRate": "invalid"}},
+    {"currentDraftRevision": 42},
 ])
 def test_patch_validation_errors_are_422_and_atomic(client, store, patch):
     original = store.create("EP001")
@@ -459,6 +480,19 @@ def test_patch_validation_errors_are_422_and_atomic(client, store, patch):
     detail = response.json()["detail"]
     assert isinstance(detail, list)
     assert detail[0]["loc"]
+    assert store.load("EP001") == original
+    assert store._dirty == set()
+
+
+def test_patch_audio_timeline_injection_rejected_as_unknown_field(client, store):
+    """audioTimeline 是阶段③服务端产物，不在客户端白名单（11 报告 P2-5）。"""
+    original = store.create("EP001")
+    response = client.patch("/api/projects/EP001", json={
+        "expectedRevision": 0,
+        "audioTimeline": {"revisionId": "R1", "sampleRate": "invalid"},
+    })
+    assert response.status_code == 422, response.text
+    assert "audioTimeline" in response.json()["detail"]
     assert store.load("EP001") == original
     assert store._dirty == set()
 
