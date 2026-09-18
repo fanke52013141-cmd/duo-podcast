@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import heapq
 import json
 import os
 import tempfile
@@ -19,6 +20,44 @@ from ..domain.job import Job, JobStatus
 # 任务执行体：async (job) -> {artifactIds: [...]}；适配器回调经 bus 发事件
 JobRunner = Callable[[Job], Awaitable[dict[str, Any]]]
 
+# kind → 默认优先级（12 报告 C-1：整期渲染排后，交互链路任务插队先跑，数值小者先）
+KIND_PRIORITY: dict[str, int] = {"renders": 10}
+
+
+class _PriorityQueue:
+    """类内 (priority, created_at, 入队序) 最小堆。取代 asyncio.Queue 的纯 FIFO，
+    支持「样片/脚本先于整期渲染」的排队策略；取出后状态非 queued 的副本由 worker 丢弃。"""
+
+    def __init__(self) -> None:
+        self._heap: list[tuple[int, str, int, Job]] = []
+        self._counter = 0
+        self._event = asyncio.Event()
+
+    def put(self, job: Job) -> None:
+        heapq.heappush(self._heap, (job.priority, job.created_at, self._counter, job))
+        self._counter += 1
+        self._event.set()
+
+    def __len__(self) -> int:
+        return len(self._heap)
+
+    def position_of(self, job_id: str) -> int | None:
+        """堆内排位（1 起）。近似值：堆的弹出顺序受后续入队影响，仅用于「排第几」展示。"""
+        ordered = sorted(self._heap)
+        for i, entry in enumerate(ordered):
+            if entry[3].id == job_id:
+                return i + 1
+        return None
+
+    async def get(self) -> Job:
+        while True:
+            if self._heap:
+                return heapq.heappop(self._heap)[3]
+            self._event.clear()
+            if self._heap:  # clear 前已有入队
+                continue
+            await self._event.wait()
+
 
 class JobManager:
     def __init__(
@@ -32,9 +71,7 @@ class JobManager:
         self.bus = event_bus
         self.queue_caps = queue_caps or {"gpu": 1, "api": 16, "cpu": 4}
         self._jobs: dict[str, Job] = {}
-        self._queues: dict[str, asyncio.Queue] = {
-            k: asyncio.Queue() for k in self.queue_caps
-        }
+        self._queues: dict[str, _PriorityQueue] = {k: _PriorityQueue() for k in self.queue_caps}
         self._gpu_lock = asyncio.Lock()
         self._runner: Optional[JobRunner] = None
         self._scheduler_task: Optional[asyncio.Task] = None
@@ -63,13 +100,21 @@ class JobManager:
         self._workers.clear()
         self._dispatch_started = False
 
+    def _resolve_class(self, queue_class: str) -> str:
+        # 磁盘旧数据/未知类别回落 cpu 而不是启动崩溃（12 报告 C-2 兼容项）
+        if queue_class not in self._queues:
+            log("jobs", "unknown queue_class, fallback to cpu", queue_class=queue_class)
+            return "cpu"
+        return queue_class
+
     def restore(self, jobs: list[Job]) -> None:
         for job in jobs:
             if job.id in self._jobs:
                 continue
+            job.queue_class = self._resolve_class(job.queue_class)
             self._jobs[job.id] = job
             if job.status == JobStatus.QUEUED:
-                self._queues[job.queue_class].put_nowait(job)
+                self._queues[job.queue_class].put(job)
 
     def submit(self, kind: str, project_id: str, queue_class: str, client_token: str,
                input_snapshot: dict[str, Any], attempt: int = 0) -> Job:
@@ -77,6 +122,7 @@ class JobManager:
         existing = self._find_by_token(client_token, project_id, kind)
         if existing is not None:
             return existing
+        queue_class = self._resolve_class(queue_class)
         job = Job(
             id=f"J{uuid.uuid4().hex[:10].upper()}",
             project_id=project_id,
@@ -85,12 +131,13 @@ class JobManager:
             client_token=client_token,
             input_snapshot=deepcopy(input_snapshot),
             attempt=attempt,
+            priority=KIND_PRIORITY.get(kind, 0),
             created_at=datetime.now(timezone.utc).isoformat(timespec="milliseconds"),
         )
         self._jobs[job.id] = job
         self._persist(job)
         self.bus.publish("job.queued", jobId=job.id, kind=job.kind)
-        self._queues[queue_class].put_nowait(job)
+        self._queues[queue_class].put(job)
         return job
 
     def get(self, job_id: str) -> Optional[Job]:
@@ -155,8 +202,24 @@ class JobManager:
                 self.transition(job, JobStatus.SUCCEEDED)
             else:
                 self.transition(job, JobStatus.QUEUED)
-                self._queues[job.queue_class].put_nowait(job)
+                self._queues[self._resolve_class(job.queue_class)].put(job)
         return job
+
+    def abandon(self, job_id: str) -> Job:
+        """UNKNOWN 出路（12 报告 C-4）：外部执行状态无法核实时，允许用户放弃记账，
+        转入 FAILED（retryable=False）而不是永久滞留「进行中」。"""
+        job = self._require(job_id)
+        if job.status != JobStatus.UNKNOWN:
+            return job  # 幂等：非 UNKNOWN 状态不伪称放弃
+        self.transition(job, JobStatus.FAILED,
+                        error=job.error or "已放弃：外部任务状态无法核实", retryable=False)
+        return job
+
+    def queue_position(self, job: Job) -> int | None:
+        """queued 任务的队内排位（1 起）；不在队中返回 None。"""
+        if job.status != JobStatus.QUEUED:
+            return None
+        return self._queues[self._resolve_class(job.queue_class)].position_of(job.id)
 
     def cancel(self, job_id: str) -> Job:
         job = self._require(job_id)
@@ -201,8 +264,6 @@ class JobManager:
                 job.error = str(exc)
                 job.retryable = False
                 self.transition(job, JobStatus.FAILED)
-            finally:
-                queue.task_done()
 
     def _require(self, job_id: str) -> Job:
         job = self.get(job_id)

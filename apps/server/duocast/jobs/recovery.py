@@ -38,11 +38,25 @@ def recover_on_startup(jobs_root: Path) -> list[Job]:
                           JobStatus.CANCEL_REQUESTED):
             # 无定向查询能力的最小实现：标 unknown，避免误判重跑（02 §7.2 纪律）
             job.status = JobStatus.UNKNOWN
-            temporary = job_file.with_suffix(".json.tmp")
-            temporary.write_text(json.dumps(job.model_dump(mode="json", by_alias=True), ensure_ascii=False),
-                                 encoding="utf-8")
-            os.replace(temporary, job_file)
+            _atomic_write(job_file, job)
         # 终态也装入管理器：历史任务与幂等键重启后仍然有效。
         recovered.append(job)
     log("recovery", "startup recovery scan done", recovered=len(recovered))
     return recovered
+
+
+def _atomic_write(job_file: Path, job: Job) -> None:
+    """与 manager._persist 同风格：唯一临时名 + replace，避免固定名 job.json.tmp 的
+    链接/并发覆盖风险（12 报告 C-6 口径统一）。"""
+    import tempfile
+    fd = tempfile.NamedTemporaryFile(
+        mode="w", encoding="utf-8", prefix=".job-", suffix=".json.tmp",
+        dir=str(job_file.parent), delete=False,
+    )
+    tmp_path = Path(fd.name)
+    try:
+        with fd:
+            fd.write(json.dumps(job.model_dump(mode="json", by_alias=True), ensure_ascii=False, indent=2))
+        os.replace(tmp_path, job_file)
+    finally:
+        tmp_path.unlink(missing_ok=True)

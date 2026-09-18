@@ -4,7 +4,7 @@
    检查器：所选任务 / 五阶段进度 / 取消语义 / 连接与一致性 / 输入快照
    ========================================================================== */
 import { useMemo, useState } from 'react';
-import { useJobPause, useJobResume, useJobCancel, useJobs } from '../lib/api';
+import { useJobPause, useJobResume, useJobCancel, useJobAbandon, useJobs } from '../lib/api';
 import { JOB_LABEL, type Job, type JobStatus } from '../lib/types';
 import { Badge, Button } from '../components/wu';
 import { AppShell } from '../components/AppShell';
@@ -97,6 +97,7 @@ export function TasksPage() {
   const pause = useJobPause();
   const resume = useJobResume();
   const cancel = useJobCancel();
+  const abandon = useJobAbandon();
   const setView = useProjectStore((s) => s.setView);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [refreshedAt, setRefreshedAt] = useState(() => Date.now());
@@ -171,7 +172,7 @@ export function TasksPage() {
           {inQueue && (
             <div className="hf-que-note">
               <span className="ph-wait" />
-              等待 {j.queueClass} · 第 {j.attempt + 1} 次尝试
+              等待 {j.queueClass} 队列 · 第 {j.queuePosition ?? '—'} 位（按优先级与提交顺序）
             </div>
           )}
 
@@ -188,6 +189,12 @@ export function TasksPage() {
             )}
             {ok && (
               <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); setSelectedId(j.id); }}>查看产物</Button>
+            )}
+            {j.status === 'unknown' && (
+              <Button variant="ghost" size="sm" busy={abandon.isPending}
+                onClick={(e) => { e.stopPropagation(); abandon.mutate(j.id); }}>
+                无法恢复 · 放弃记账
+              </Button>
             )}
           </div>
         </div>

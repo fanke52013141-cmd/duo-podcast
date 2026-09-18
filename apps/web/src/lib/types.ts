@@ -151,6 +151,10 @@ export interface Job {
   attempt: number;
   error: string | null;
   retryable: boolean;
+  /** 队列内优先级：数值小者先执行（12 报告 C-1） */
+  priority?: number;
+  /** queued 任务的队内排位（1 起），由后端计算 */
+  queuePosition?: number | null;
   result: Record<string, unknown> | null;
   createdAt: string;
   /** 进入 succeeded/failed/cancelled 终态的时刻（ISO8601）；进行中为 null */

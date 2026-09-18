@@ -83,6 +83,26 @@ class EventBus:
         with self._lock:
             self._subscribers.pop(qid, None)
 
+    def resume_from_log(self) -> None:
+        """启动时从 events.jsonl 尾部续接序号（12 报告 C-5）。
+        序号归零会让重连客户端把新生命周期的小序号误判为连续，造成静默事件缺口。"""
+        try:
+            if not self.log_path.exists():
+                return
+            with self.log_path.open("r", encoding="utf-8", errors="replace") as fh:
+                last_seq = 0
+                for line in fh:
+                    try:
+                        seq = json.loads(line).get("seq")
+                    except ValueError:
+                        continue
+                    if isinstance(seq, int) and seq > last_seq:
+                        last_seq = seq
+            with self._lock:
+                self._seq = max(self._seq, last_seq)
+        except OSError:
+            pass
+
     def replay(self, after_seq: int) -> list[dict[str, Any]]:
         """按序号补发内存缓冲中的事件（06 §5.2：日志已轮转 → 调用方应返回 snapshot_required）。"""
         if after_seq > self._seq:

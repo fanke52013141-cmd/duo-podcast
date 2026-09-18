@@ -15,16 +15,26 @@ def _manager(request: Request) -> JobManager:
 
 @router.get("")
 async def list_jobs(request: Request, project_id: str | None = None) -> list[dict]:
-    jobs = _manager(request).list(project_id)
-    return [j.model_dump(mode="json", by_alias=True) for j in jobs]
+    manager = _manager(request)
+    jobs = manager.list(project_id)
+    out = []
+    for j in jobs:
+        d = j.model_dump(mode="json", by_alias=True)
+        # 排队位次（12 报告 C-1）：前端任务卡显示「队列第 N 位」
+        d["queuePosition"] = manager.queue_position(j)
+        out.append(d)
+    return out
 
 
 @router.get("/{job_id}")
 async def get_job(job_id: str, request: Request) -> dict:
-    job = _manager(request).get(job_id)
+    manager = _manager(request)
+    job = manager.get(job_id)
     if job is None:
         raise HTTPException(404, "job not found")
-    return job.model_dump(mode="json", by_alias=True)
+    d = job.model_dump(mode="json", by_alias=True)
+    d["queuePosition"] = manager.queue_position(job)
+    return d
 
 
 @router.post("/{job_id}/pause")
@@ -49,6 +59,16 @@ async def cancel_job(job_id: str, request: Request) -> dict:
 async def resume_job(job_id: str, request: Request) -> dict:
     try:
         job = _manager(request).resume(job_id)
+    except KeyError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    return job.model_dump(mode="json", by_alias=True)
+
+
+@router.post("/{job_id}/abandon")
+async def abandon_job(job_id: str, request: Request) -> dict:
+    """UNKNOWN 任务的出路（12 报告 C-4）：放弃记账，转 FAILED。其他状态幂等返回。"""
+    try:
+        job = _manager(request).abandon(job_id)
     except KeyError as exc:
         raise HTTPException(404, str(exc)) from exc
     return job.model_dump(mode="json", by_alias=True)

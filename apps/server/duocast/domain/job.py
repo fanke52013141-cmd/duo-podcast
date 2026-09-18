@@ -58,6 +58,8 @@ class Job(BaseModel):
     input_snapshot: dict[str, Any] = Field(default_factory=dict)
     stage: JobStage = "prepare"
     status: JobStatus = JobStatus.QUEUED
+    # 队列内优先级：数值小者先执行，同优先级按 created_at FIFO（12 报告 C-1）。
+    priority: int = 0
     provider_task_id: Optional[str] = None
     attempt: int = 0
     error: Optional[str] = None

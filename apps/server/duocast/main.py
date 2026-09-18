@@ -125,6 +125,7 @@ async def lifespan(app: FastAPI):
 
     # ---- 事件总线 + 任务系统 ----
     event_bus = EventBus(log_path=settings.storage_root / "events" / "events.jsonl", cap=settings.event_log_cap)
+    event_bus.resume_from_log()  # 序号跨重启续接（12 报告 C-5），防止重连补发误判连续
     job_manager = JobManager(settings.storage_root / "jobs", event_bus, queue_caps={
         "gpu": settings.queue_cap_gpu, "api": settings.queue_cap_api, "cpu": settings.queue_cap_cpu,
     })

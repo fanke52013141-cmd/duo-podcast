@@ -44,7 +44,19 @@ def derive_stage_states(project: Project, jobs: list | None = None) -> dict[Stag
             states["voice"] = StageState.NOT_READY
     if has_visual and timeline and timeline.revision_id != project.current_draft_revision:
         states["visual"] = StageState.STALE
+    # render 过期传播（12 报告 U-3）：输出版本 OUT-{rev}-vN 内嵌脚本版本，
+    # 草稿改动后旧成片必须显示「已过期」，不能保持「已就绪」。
+    if has_render and project.output_version and project.current_draft_revision:
+        rev_in_output = _output_revision(project.output_version)
+        if rev_in_output and rev_in_output != project.current_draft_revision:
+            states["render"] = StageState.STALE
     return states
+
+
+def _output_revision(output_version: str) -> str:
+    if not output_version.startswith("OUT-") or not output_version.rsplit("-v", 1)[-1].isdigit():
+        return ""
+    return output_version[4:].rsplit("-v", 1)[0]
 
 
 def _stage(has_product: bool, confirmed: bool, running: bool) -> StageState:

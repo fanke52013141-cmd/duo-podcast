@@ -356,3 +356,11 @@ export const useJobResume = () => {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['jobs'] }),
   });
 };
+
+export const useJobAbandon = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (jobId: string) => sendJson<Job>(`/jobs/${jobId}/abandon`, 'POST', {}),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['jobs'] }),
+  });
+};

@@ -27,12 +27,25 @@ class Settings:
     # 事件日志保留条数（超出后最旧事件轮转，重连需走快照路径）
     event_log_cap: int = 20_000
 
+    @staticmethod
+    def _env_int(name: str, default: int) -> int:
+        try:
+            value = int(os.environ.get(name, str(default)))
+        except ValueError:
+            return default
+        return value if value > 0 else default
+
     @classmethod
     def from_env(cls) -> "Settings":
+        # 队列上限可经环境变量覆盖（12 报告 C-3：5080 单机需按实机调参，无需改代码）
         return cls(
             host=os.environ.get("DUOCAST_HOST", "127.0.0.1"),
             port=int(os.environ.get("DUOCAST_PORT", "8100")),
             storage_root=Path(os.environ.get("DUOCAST_STORAGE", str(PROJECT_ROOT / "apps" / "storage"))),
+            queue_cap_gpu=cls._env_int("DUOCAST_QUEUE_GPU", 1),
+            queue_cap_api=cls._env_int("DUOCAST_QUEUE_API", 16),
+            queue_cap_cpu=cls._env_int("DUOCAST_QUEUE_CPU", 4),
+            project_debounce_ms=cls._env_int("DUOCAST_PROJECT_DEBOUNCE_MS", 500),
         )
 
 

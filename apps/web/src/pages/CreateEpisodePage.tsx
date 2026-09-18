@@ -4,7 +4,7 @@
    ========================================================================== */
 import { useEffect, useMemo, useState } from 'react';
 import {
-  useCapabilities, useGenerateScript, useJobs, usePatchProject, useProject,
+  useCapabilities, useGenerateScript, useJobs, useJobCancel, usePatchProject, useProject,
 } from '../lib/api';
 import { STAGE_META, type SourceKind } from '../lib/types';
 import { Alert, Badge, Button, Choice, Field, Icon, Input, SegControl, Tabs, Textarea } from '../components/wu';
@@ -31,6 +31,7 @@ export function CreateEpisodePage({ projectId }: { projectId: string }) {
   const caps = useCapabilities();
   const patchProject = usePatchProject();
   const generateScript = useGenerateScript();
+  const cancelJob = useJobCancel();
   const setView = useProjectStore((s) => s.setView);
 
   const [sourceKind, setSourceKind] = useState<SourceKind>('article');
@@ -57,6 +58,7 @@ export function CreateEpisodePage({ projectId }: { projectId: string }) {
   }, [jobs.data]);
   const generating = !!genJob && (genJob.status === 'queued' || genJob.status === 'running');
   const genDone = !!genJob && genJob.status === 'succeeded';
+  const genFailed = !!genJob && genJob.status === 'failed';
 
   const handleGenerate = async () => {
     setError(null);
@@ -141,7 +143,8 @@ export function CreateEpisodePage({ projectId }: { projectId: string }) {
                   <Icon name="arrowRight" size={14} />
                   <Badge tone="info">结构化话轮</Badge>
                   <span className="hf-spacer" />
-                  <Button variant="ghost" size="sm" onClick={() => setError('取消支持将在任务系统迭代中提供')}>取消</Button>
+                  <Button variant="ghost" size="sm" busy={cancelJob.isPending}
+                    onClick={() => genJob && cancelJob.mutate(genJob.id)}>取消</Button>
                 </div>
                 <div className="hf-prog"><i style={{ width: '46%', animation: 'wu-prog 1.2s ease-in-out infinite alternate' }} /></div>
                 <span className="wu-caption">两次生成：先内容结构，再直接生成双人对话；完成后进入阶段②为候选脚本。</span>
@@ -158,6 +161,19 @@ export function CreateEpisodePage({ projectId }: { projectId: string }) {
                   <Button variant="secondary" size="sm" onClick={() => setView('script')}>
                     前往编辑对话<Icon name="arrowRight" size={14} />
                   </Button>
+                </div>
+              </div>
+            ) : genFailed ? (
+              <div className="wu-alert" data-tone="danger" style={{ display: 'grid', gap: 8 }}>
+                <div className="wu-row">
+                  <Badge tone="danger" icon="alert">生成失败</Badge>
+                  <span className="wu-caption">{genJob?.error || '未知错误'}</span>
+                </div>
+                <div className="wu-row">
+                  <span className="wu-caption">任务已记入任务中心，可直接重试；详情可到任务中心查看。</span>
+                  <span className="hf-spacer" />
+                  <Button variant="secondary" size="sm" onClick={() => setView('tasks')}>查看任务中心</Button>
+                  <Button variant="brand" size="sm" disabled={!canGenerate} onClick={handleGenerate}>重试生成</Button>
                 </div>
               </div>
             ) : (
