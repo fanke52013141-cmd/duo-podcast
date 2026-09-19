@@ -6,7 +6,7 @@
    ========================================================================== */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  useConfirm, useJobs, useProject, useVoiceSynthesize,
+  useConfirm, useJob, useJobs, useProject, useVoiceAudition, useVoiceSynthesize,
 } from '../lib/api';
 import type { AudioTimeline, Job, Project, ScriptRevision, SynthesisUnit, Turn, VoiceBinding } from '../lib/types';
 import { Alert, Badge, Button, Choice, Icon } from '../components/wu';
@@ -55,6 +55,7 @@ export function VoicePage({ projectId }: { projectId: string }) {
   const project = useProject(projectId);
   const jobs = useJobs(projectId);
   const synth = useVoiceSynthesize();
+  const audition = useVoiceAudition();
   const confirm = useConfirm();
   const setView = useProjectStore((s) => s.setView);
 
@@ -65,6 +66,7 @@ export function VoicePage({ projectId }: { projectId: string }) {
   const [selectedUnitId, setSelectedUnitId] = useState<string | null>(null);
   const [gapOverride, setGapOverride] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [auditionJob, setAuditionJob] = useState<{ id: string; spk: 'A' | 'B' } | null>(null);
   const fileInput = useRef<Record<'A' | 'B', HTMLInputElement | null>>({ A: null, B: null });
 
   const revision: ScriptRevision | undefined =
@@ -116,6 +118,33 @@ export function VoicePage({ projectId }: { projectId: string }) {
   const updateBinding = (spk: 'A' | 'B', patch: Partial<VoiceBinding>) => {
     if (!bs) return;
     setBindings({ ...bs, [spk]: { ...bs[spk], ...patch } });
+  };
+
+  // 试听 Job 完成 → 播放产物一句话并登记 audition_state（真实 TTS 通道）
+  const audJob = useJob(auditionJob?.id ?? null);
+  useEffect(() => {
+    const j = audJob.data;
+    if (!j || !auditionJob) return;
+    if (j.status === 'succeeded') {
+      const aid = (j.result as { artifactIds?: string[] } | null)?.artifactIds?.[0];
+      if (aid) {
+        const el = new Audio(`/api/artifacts/${aid}/file`);
+        el.play().catch(() => setError('浏览器阻止了自动播放，请稍候再点试听'));
+      } else {
+        setError('试听未产出音频（模拟通道无真实产物）');
+      }
+      updateBinding(auditionJob.spk, { auditionState: 'passed' });
+    } else if (j.status === 'failed') {
+      setError(`试听失败：${j.error ?? '引擎不可用'}`);
+    } else return;
+    setAuditionJob(null);
+  }, [audJob.data, auditionJob]);
+
+  const startAudition = (spk: 'A' | 'B') => {
+    setError(null);
+    audition.mutateAsync({ projectId, speaker: spk })
+      .then((r) => setAuditionJob({ id: r.jobId, spk }))
+      .catch((e) => setError(`试听提交失败：${e instanceof Error ? e.message : e}`));
   };
 
   const pickEngine = (id: 'local' | 'minimax') => {
@@ -376,7 +405,12 @@ export function VoicePage({ projectId }: { projectId: string }) {
                       </span>
                     </div>
                   </div>
-                  <Button variant="secondary" size="sm" icon="play" disabled title="接入真实 TTS 后可试听">试听</Button>
+                  <Button
+                    variant="secondary" size="sm" icon="play"
+                    busy={auditionJob?.spk === spk.id} disabled={!!auditionJob}
+                    title="合成一句话试听当前参考音色"
+                    onClick={() => startAudition(spk.id)}
+                  >{bs?.[spk.id].auditionState === 'passed' ? '再试听' : '试听'}</Button>
                 </div>
               );
             })}

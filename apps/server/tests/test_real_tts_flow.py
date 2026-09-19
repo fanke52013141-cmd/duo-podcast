@@ -105,3 +105,19 @@ def test_mock_tts_has_no_master_track(tmp_path, monkeypatch):
         tl = client.get(base).json()['audioTimeline']
         assert tl['masterAudioAssetId'] is None
         assert client.get('/api/artifacts/AUD-NOT-EXIST/file').status_code == 404
+
+
+def test_audition_job_produces_playable_asset(tmp_path, monkeypatch):
+    monkeypatch.setattr('duocast.main.settings', replace(
+        settings, storage_root=tmp_path, tts_provider='comfyui'))
+    monkeypatch.setattr('duocast.main.ComfyUITTSProvider', FakeRealTTS)
+    with TestClient(app) as client:
+        project_id = client.post('/api/projects', json={'title': '试听'}).json()['id']
+        base = f'/api/projects/{project_id}'
+        accepted = client.post(base + '/voice/audition', json={'speaker': 'A'}).json()
+        assert accepted['jobId']
+        job = wait_job(client, accepted['jobId'])
+        assert job['result']['simulated'] is False
+        aid = job['result']['artifactIds'][0]
+        assert client.get(f'/api/artifacts/{aid}/file').status_code == 200
+        assert client.post(base + '/voice/audition', json={'speaker': 'C'}).status_code == 422

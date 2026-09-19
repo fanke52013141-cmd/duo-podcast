@@ -289,6 +289,23 @@ export const useVoiceSynthesize = () => {
   });
 };
 
+export interface VoiceAuditionInput {
+  projectId: string;
+  speaker: 'A' | 'B';
+  text?: string;
+}
+
+export const useVoiceAudition = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: VoiceAuditionInput) =>
+      sendJson<JobAccepted>(`/projects/${input.projectId}/voice/audition`, 'POST', {
+        speaker: input.speaker, text: input.text ?? '',
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['jobs'] }),
+  });
+};
+
 export interface VisualGenInput {
   projectId: string;
   clientToken: string;

@@ -89,6 +89,18 @@ def _job_runner(manager: JobManager, store: ProjectStore, artifacts: ArtifactSto
                          "units": len(timeline.units),
                          "masterAudioAssetId": timeline.master_audio_asset_id},
             }
+        if job.kind == "tts.audition":
+            snap = job.input_snapshot
+            speaker = snap.get("speaker", "A")
+            res = await tts_provider.audition({
+                "lineTexts": [snap.get("text") or "你好，这是一段音色试听。"],
+                "voiceBindingId": f"VB-{speaker}-audition",
+                "providerProfileId": "tts-audition", "modelId": "",
+                "emotion": {"label": "自然"}, "speedRatio": snap.get("speedRatio", 1.0),
+            })
+            asset_id = res.get("audioAssetId")
+            return {"artifactIds": [asset_id] if asset_id else [],
+                    "meta": {"durationMs": res.get("durationMs"), "speaker": speaker}}
         if job.kind == "visual.generate":
             # 先走图片提供方（mock 阶段为占位延迟），await 结束后重读工程——
             # 避免用合成期间用户编辑前的旧 revision 提交导致冲突失败（11 报告 P2-2）
@@ -120,7 +132,8 @@ def _job_runner(manager: JobManager, store: ProjectStore, artifacts: ArtifactSto
 
     # kind → 通道：真实适配器的任务不标记 simulated（关口 A：TTS 已接 ComfyUI）
     kind_channel = {"script.generate": "text", "script.rewrite": "text",
-                    "tts.synthesize": "tts", "visual.generate": "image", "renders": "video"}
+                    "tts.synthesize": "tts", "tts.audition": "tts",
+                    "visual.generate": "image", "renders": "video"}
     channel_provider = {
         "text": text_provider, "image": image_provider,
         "tts": tts_provider, "video": None,

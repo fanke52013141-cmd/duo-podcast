@@ -41,3 +41,28 @@ async def synthesize(project_id: str, payload: dict, request: Request) -> dict:
         input_snapshot=snapshot,
     )
     return {"jobId": job.id, "clientToken": client_token}
+
+
+@router.post("/audition")
+async def audition(project_id: str, payload: dict, request: Request) -> dict:
+    """短试听（绑定声线前的一句话验证）：gpu 队列 Job，产物可直接经 /api/artifacts/{id}/file 播放。"""
+    manager: JobManager = request.app.state.job_manager
+    store = request.app.state.project_store
+    if store.load(project_id) is None:
+        raise HTTPException(404, "project not found")
+    speaker = payload.get("speaker", "A")
+    if speaker not in ("A", "B"):
+        raise HTTPException(422, "speaker 必须是 A 或 B")
+    client_token = payload.get("clientToken") or f"aud-{uuid.uuid4().hex[:8]}"
+    job = manager.submit(
+        kind="tts.audition",
+        project_id=project_id,
+        queue_class="gpu",
+        client_token=client_token,
+        input_snapshot={
+            "speaker": speaker,
+            "text": (payload.get("text") or "")[:120],
+            "speedRatio": payload.get("speedRatio", 1.0),
+        },
+    )
+    return {"jobId": job.id, "clientToken": client_token}
