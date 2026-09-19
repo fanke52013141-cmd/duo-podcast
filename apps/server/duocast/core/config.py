@@ -33,6 +33,12 @@ class Settings:
         default_factory=lambda: Path(r"D:\软件\Wan2.2-ReMix-SVI2-V3\Wan2.2-ReMix-SVI2-V3\ComfyUI\input"))
     tts_ref_a: str = r"D:\Program Files (x86)\PPT_presentation_video\data\model_voice_references\76abe9e06a9d4670b40b0d966faa652c.mp3"
     tts_ref_b: str = ""
+    # 关口 A（链路实测 2026-09-19）：图片提供方切换 mock | toapis（需 DUOCAST_TOAPIS_KEY）
+    image_provider: str = "mock"
+    toapis_key: str = ""
+    image_size: str = "4:5"
+    image_quality: str = "low"
+    image_resolution: str = "1k"
 
     @staticmethod
     def _env_int(name: str, default: int) -> int:
@@ -62,6 +68,11 @@ class Settings:
                 "DUOCAST_TTS_REF_A",
                 r"D:\Program Files (x86)\PPT_presentation_video\data\model_voice_references\76abe9e06a9d4670b40b0d966faa652c.mp3"),
             tts_ref_b=os.environ.get("DUOCAST_TTS_REF_B", ""),
+            image_provider=os.environ.get("DUOCAST_IMAGE_PROVIDER", "mock"),
+            toapis_key=os.environ.get("DUOCAST_TOAPIS_KEY", ""),
+            image_size=os.environ.get("DUOCAST_IMAGE_SIZE", "4:5"),
+            image_quality=os.environ.get("DUOCAST_IMAGE_QUALITY", "low"),
+            image_resolution=os.environ.get("DUOCAST_IMAGE_RESOLUTION", "1k"),
         )
 
 

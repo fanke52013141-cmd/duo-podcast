@@ -18,6 +18,7 @@ from fastapi.staticfiles import StaticFiles
 from .adapters.base import CapabilityRegistry, TTSProvider
 from .adapters.comfyui_tts import ComfyUITTSProvider
 from .adapters.mock import MockImageProvider, MockTextProvider, MockTTSProvider, MockVideoProvider
+from .adapters.toapis_image import ToAPIsImageProvider
 from .core.config import PROJECT_ROOT, settings
 from .core.eventbus import EventBus
 from .core.logging import log, setup_logging
@@ -91,7 +92,7 @@ def _job_runner(manager: JobManager, store: ProjectStore, artifacts: ArtifactSto
         if job.kind == "visual.generate":
             # 先走图片提供方（mock 阶段为占位延迟），await 结束后重读工程——
             # 避免用合成期间用户编辑前的旧 revision 提交导致冲突失败（11 报告 P2-2）
-            await image_provider.generate({
+            res = await image_provider.generate({
                 "aspect": job.input_snapshot.get("aspect", "landscape"),
                 "prompt": job.input_snapshot.get("prompt", ""),
             })
@@ -100,8 +101,10 @@ def _job_runner(manager: JobManager, store: ProjectStore, artifacts: ArtifactSto
                 raise RuntimeError("project vanished")
             variants = apply_visual_variant(store, project, {
                 "aspect": job.input_snapshot.get("aspect", "landscape"),
+                **{k: res.get(k) for k in ("artifactId", "path", "fileHash", "provider") if res.get(k)},
             })
-            return {"artifactIds": [], "meta": {"variantId": variants[0].id}}
+            artifact_ids = [variants[0].master_image.artifact_id] if res.get("artifactId") else []
+            return {"artifactIds": artifact_ids, "meta": {"variantId": variants[0].id}}
         if job.kind == "renders":
             # 模拟任务只验证流程；不得登记不存在的视频或覆盖真实输出指针。
             project = Project.model_validate(job.input_snapshot["projectSnapshot"])
@@ -146,9 +149,18 @@ async def lifespan(app: FastAPI):
         "gpu": settings.queue_cap_gpu, "api": settings.queue_cap_api, "cpu": settings.queue_cap_cpu,
     })
 
-    # ---- 适配器（TTS 已接 ComfyUI/IndexTTS 真实引擎；其余通道实测后替换） ----
+    # ---- 适配器（TTS/图片已接真实引擎；其余通道实测后替换） ----
     text_api = MockTextProvider()
-    image_api = MockImageProvider()
+    if settings.image_provider == "toapis" and settings.toapis_key:
+        image_api = ToAPIsImageProvider(
+            api_key=settings.toapis_key,
+            artifacts_root=settings.storage_root / "artifacts",
+            artifact_store=artifacts,
+            size=settings.image_size, quality=settings.image_quality,
+            resolution=settings.image_resolution,
+        )
+    else:
+        image_api = MockImageProvider()
     if settings.tts_provider == "comfyui":
         local_tts: TTSProvider = ComfyUITTSProvider(
             base_url=settings.comfyui_url,
