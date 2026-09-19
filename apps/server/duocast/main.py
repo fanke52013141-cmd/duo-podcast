@@ -15,7 +15,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from .adapters.base import CapabilityRegistry
+from .adapters.base import CapabilityRegistry, TTSProvider
+from .adapters.comfyui_tts import ComfyUITTSProvider
 from .adapters.mock import MockImageProvider, MockTextProvider, MockTTSProvider, MockVideoProvider
 from .core.config import PROJECT_ROOT, settings
 from .core.eventbus import EventBus
@@ -35,7 +36,7 @@ setup_logging()
 
 def _job_runner(manager: JobManager, store: ProjectStore, artifacts: ArtifactStore,
                 text_provider: MockTextProvider, image_provider: MockImageProvider,
-                tts_provider: MockTTSProvider):
+                tts_provider: TTSProvider):
     """Job 执行分派：按 kind 路由到对应 service（06 §6.1 runner 装配）。"""
 
     async def runner(job):
@@ -76,11 +77,16 @@ def _job_runner(manager: JobManager, store: ProjectStore, artifacts: ArtifactSto
                 transition_gap_ms=job.input_snapshot.get("transitionGapMs"),
                 lead_in_ms=job.input_snapshot.get("leadInMs", 0),
                 tail_out_ms=job.input_snapshot.get("tailOutMs", 0),
+                artifact_store=artifacts,
+                artifacts_root=artifacts.root,
             )
+            unit_ids = [u.adopted_audio_asset_id for u in timeline.units if u.adopted_audio_asset_id]
+            master_ids = [timeline.master_audio_asset_id] if timeline.master_audio_asset_id else []
             return {
-                "artifactIds": [],
+                "artifactIds": [*unit_ids, *master_ids],
                 "meta": {"sampleRate": timeline.sample_rate, "sampleCount": timeline.sample_count,
-                         "units": len(timeline.units)},
+                         "units": len(timeline.units),
+                         "masterAudioAssetId": timeline.master_audio_asset_id},
             }
         if job.kind == "visual.generate":
             # 先走图片提供方（mock 阶段为占位延迟），await 结束后重读工程——
@@ -109,8 +115,18 @@ def _job_runner(manager: JobManager, store: ProjectStore, artifacts: ArtifactSto
             }
         raise RuntimeError(f"unknown job kind: {job.kind}")
 
+    # kind → 通道：真实适配器的任务不标记 simulated（关口 A：TTS 已接 ComfyUI）
+    kind_channel = {"script.generate": "text", "script.rewrite": "text",
+                    "tts.synthesize": "tts", "visual.generate": "image", "renders": "video"}
+    channel_provider = {
+        "text": text_provider, "image": image_provider,
+        "tts": tts_provider, "video": None,
+    }
+
     async def simulated_runner(job):
-        return {**await runner(job), "simulated": True}
+        provider = channel_provider.get(kind_channel.get(job.kind, ""))
+        is_simulated = True if provider is None else bool(provider.capabilities.get("simulated"))
+        return {**await runner(job), "simulated": is_simulated}
 
     return simulated_runner
 
@@ -130,10 +146,19 @@ async def lifespan(app: FastAPI):
         "gpu": settings.queue_cap_gpu, "api": settings.queue_cap_api, "cpu": settings.queue_cap_cpu,
     })
 
-    # ---- 适配器（mock 阶段；关口 A 硬件实测后替换为真实实现） ----
+    # ---- 适配器（TTS 已接 ComfyUI/IndexTTS 真实引擎；其余通道实测后替换） ----
     text_api = MockTextProvider()
     image_api = MockImageProvider()
-    local_tts = MockTTSProvider()
+    if settings.tts_provider == "comfyui":
+        local_tts: TTSProvider = ComfyUITTSProvider(
+            base_url=settings.comfyui_url,
+            input_dir=settings.comfyui_input,
+            refs={"A": settings.tts_ref_a, "B": settings.tts_ref_b or settings.tts_ref_a},
+            artifacts_root=settings.storage_root / "artifacts",
+            artifact_store=artifacts,
+        )
+    else:
+        local_tts = MockTTSProvider()
     video = MockVideoProvider()
     capabilities = CapabilityRegistry(
         text=text_api.capabilities,

@@ -26,6 +26,13 @@ class Settings:
     project_debounce_ms: int = 500
     # 事件日志保留条数（超出后最旧事件轮转，重连需走快照路径）
     event_log_cap: int = 20_000
+    # 关口 A（链路实测 2026-09-19）：TTS 提供方切换 mock | comfyui
+    tts_provider: str = "mock"
+    comfyui_url: str = "http://127.0.0.1:8188"
+    comfyui_input: Path = field(
+        default_factory=lambda: Path(r"D:\软件\Wan2.2-ReMix-SVI2-V3\Wan2.2-ReMix-SVI2-V3\ComfyUI\input"))
+    tts_ref_a: str = r"D:\Program Files (x86)\PPT_presentation_video\data\model_voice_references\76abe9e06a9d4670b40b0d966faa652c.mp3"
+    tts_ref_b: str = ""
 
     @staticmethod
     def _env_int(name: str, default: int) -> int:
@@ -46,6 +53,15 @@ class Settings:
             queue_cap_api=cls._env_int("DUOCAST_QUEUE_API", 16),
             queue_cap_cpu=cls._env_int("DUOCAST_QUEUE_CPU", 4),
             project_debounce_ms=cls._env_int("DUOCAST_PROJECT_DEBOUNCE_MS", 500),
+            tts_provider=os.environ.get("DUOCAST_TTS_PROVIDER", "mock"),
+            comfyui_url=os.environ.get("DUOCAST_COMFYUI_URL", "http://127.0.0.1:8188"),
+            comfyui_input=Path(os.environ.get(
+                "DUOCAST_COMFYUI_INPUT",
+                r"D:\软件\Wan2.2-ReMix-SVI2-V3\Wan2.2-ReMix-SVI2-V3\ComfyUI\input")),
+            tts_ref_a=os.environ.get(
+                "DUOCAST_TTS_REF_A",
+                r"D:\Program Files (x86)\PPT_presentation_video\data\model_voice_references\76abe9e06a9d4670b40b0d966faa652c.mp3"),
+            tts_ref_b=os.environ.get("DUOCAST_TTS_REF_B", ""),
         )
 
 

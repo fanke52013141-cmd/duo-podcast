@@ -437,7 +437,12 @@ export function VoicePage({ projectId }: { projectId: string }) {
 
             {turns.length > 0 && (
               <div className="hf-playrow">
-                <Button variant="secondary" size="sm" icon="play" disabled={!timeline}>连续试听</Button>
+                {timeline?.masterAudioAssetId ? (
+                  <audio controls preload="none" style={{ width: '100%', height: 32 }}
+                         src={`/api/artifacts/${timeline.masterAudioAssetId}/file`} />
+                ) : (
+                  <Button variant="secondary" size="sm" icon="play" disabled title="合成整期配音后可试听">连续试听</Button>
+                )}
                 <Button variant="secondary" size="sm" disabled={!timeline}>独听 A</Button>
                 <Button variant="secondary" size="sm" disabled={!timeline}>独听 B</Button>
                 <span className="wu-caption">点击台词跳到对应位置</span>

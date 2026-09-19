@@ -94,6 +94,7 @@ export interface AudioTimeline {
   leadInMs: number;
   tailOutMs: number;
   annotationVersion: string;
+  masterAudioAssetId?: string | null;
 }
 
 /* ---- 阶段④ 视觉变体（01 §11.3） ---- */

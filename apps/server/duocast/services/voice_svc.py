@@ -6,6 +6,13 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
+import uuid
+import wave
+from array import array
+from pathlib import Path
+
 from ..adapters.base import TTSProvider
 from ..domain.audio import AudioTimeline, SynthesisUnit, VoiceBinding
 from ..domain.project import Project, ScriptRevision
@@ -64,8 +71,13 @@ async def synthesize_timeline(
     transition_gap_ms: list[int] | None = None,
     lead_in_ms: int = 0,
     tail_out_ms: int = 0,
+    artifact_store=None,
+    artifacts_root: Path | None = None,
 ) -> AudioTimeline:
-    """逐单元请求 TTS，累积整数样本偏移，构造并写回 AudioTimeline。"""
+    """逐单元请求 TTS，累积整数样本偏移，构造并写回 AudioTimeline。
+
+    真实引擎（返回 audioPath）时在写回前拼接整期母轨（关口 A：③页直接试听）。
+    """
     units = build_units(project, revision, bindings)
     if not units:
         raise ValueError("EMPTY_SCRIPT: 没有可合成的发言")
@@ -82,6 +94,7 @@ async def synthesize_timeline(
         tail_out_ms=tail_out_ms,
     )
     offset = lead_in_ms * 48
+    unit_paths: dict[str, str] = {}
     for index, unit in enumerate(units):
         line_texts = [ln.spoken_text for ln in revision_turn_lines(revision, unit)]
         res = await tts.synthesize({
@@ -96,12 +109,19 @@ async def synthesize_timeline(
             raise ValueError("INVALID_SAMPLE_RATE: 适配器必须先转换为 48kHz 母轨")
         unit.sample_count = sample_count
         unit.candidate_audio_asset_ids = [res["audioAssetId"]] if res.get("audioAssetId") else []
+        unit.adopted_audio_asset_id = res.get("audioAssetId")
+        if res.get("audioPath"):
+            unit_paths[unit.id] = res["audioPath"]
         timeline.unit_offsets[unit.id] = offset
         offset += sample_count
         if index < len(gaps):
             offset += gaps[index] * 48
         timeline.units.append(unit)
     timeline.sample_count = offset + tail_out_ms * 48
+
+    if artifact_store is not None and artifacts_root is not None and len(unit_paths) == len(units):
+        timeline.master_audio_asset_id = _build_master_track(
+            timeline, unit_paths, revision.id, artifact_store, Path(artifacts_root))
 
     # 写回工程（原子 apply：audio_timeline + voice_bindings）
     voice_bindings = binding_models(bindings)
@@ -122,3 +142,43 @@ def revision_turn_lines(revision: ScriptRevision, unit: SynthesisUnit) -> list:
         if turn.id == unit.turn_id:
             return turn.lines
     return []
+
+
+def _build_master_track(
+    timeline: AudioTimeline,
+    unit_paths: dict[str, str],
+    revision_id: str,
+    artifact_store,
+    artifacts_root: Path,
+) -> str:
+    """按整数样本偏移把各单元 PCM16/48k 单声道写入静音母轨，登记为 mixed 产物。"""
+    master = array("h", bytes(timeline.sample_count * 2))
+    for unit in timeline.units:
+        path = unit_paths.get(unit.id)
+        if not path:
+            continue
+        with wave.open(path, "rb") as wf:
+            if wf.getnchannels() != 1 or wf.getsampwidth() != 2 or wf.getframerate() != timeline.sample_rate:
+                raise ValueError("INVALID_MASTER_INPUT: 单元音频必须是 48kHz PCM16 单声道")
+            frames = wf.readframes(wf.getnframes())
+        start = timeline.unit_offsets.get(unit.id, 0)
+        end = min(start + wf.getnframes(), timeline.sample_count)
+        n = max(0, end - start)
+        master[start:end] = array("h", frames[: n * 2])
+    artifacts_root.mkdir(parents=True, exist_ok=True)
+    asset_id = f"AUD-M-{uuid.uuid4().hex[:12]}"
+    path = artifacts_root / "audio" / f"master_{revision_id}_{asset_id}.wav"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with wave.open(str(path), "wb") as out:
+        out.setnchannels(1)
+        out.setsampwidth(2)
+        out.setframerate(timeline.sample_rate)
+        out.writeframes(master.tobytes())
+    dependency = hashlib.sha256(json.dumps({
+        "revisionId": revision_id,
+        "units": [{"id": u.id, "asset": u.adopted_audio_asset_id, "offset": timeline.unit_offsets.get(u.id, 0)} for u in timeline.units],
+        "gaps": timeline.transition_gap_ms, "leadIn": timeline.lead_in_ms, "tailOut": timeline.tail_out_ms,
+    }, sort_keys=True, ensure_ascii=False).encode("utf-8")).hexdigest()
+    artifact_store.register(asset_id, "mixed", str(path), dependency,
+                            params_snapshot={"revisionId": revision_id, "sampleCount": timeline.sample_count})
+    return asset_id

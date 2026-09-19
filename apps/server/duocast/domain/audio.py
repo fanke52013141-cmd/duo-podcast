@@ -54,3 +54,5 @@ class AudioTimeline(BaseModel):
     lead_in_ms: int = 0
     tail_out_ms: int = 0
     annotation_version: str = ""
+    # 关口 A：真实引擎产出的整期拼接母轨（PCM16/48k mono）资产 id；mock 模式恒为 None
+    master_audio_asset_id: Optional[str] = None
