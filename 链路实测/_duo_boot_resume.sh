@@ -1,6 +1,6 @@
 #!/bin/bash
 # 重启后自动续跑：swap=32（昨日验证稳定且 8~10min/段）渲染 4 个裁窗并合成双人同框成片。
-# 由计划任务 DuoCastBootResume（SYSTEM，开机触发）调用；跑完或放弃时自行注销任务。
+# 由开始菜单 Startup 里的 DuoCastResume.bat 在用户登录后调用；跑完自行删除该 bat。
 LOG_DIR="C:/Users/Administrator/Desktop/双人播客项目/链路实测/_video"
 PY_CLIENT="C:/Users/Administrator/AppData/Local/Programs/Python/Python313/python.exe"
 PY_SERVER="D:/PPT_Studio_Assets/InfiniteTalk_TTS/InfiniteTalk_Runtime/venv/Scripts/python.exe"
@@ -26,4 +26,5 @@ else
     SWAP_BLOCKS=32 PYTHONIOENCODING=utf-8 "$PY_CLIENT" make_video_duo_auto.py >> "$LOG_DIR/duo_boot.log" 2>&1
   done
 fi
-schtasks //delete //tn DuoCastBootResume //f >> "$LOG_DIR/duo_boot.log" 2>&1
+rm -f "/c/Users/Administrator/AppData/Roaming/Microsoft/Windows/Start Menu/Programs/Startup/DuoCastResume.bat"
+echo "== boot resume finished $(date +%F_%H:%M:%S)" >> "$LOG_DIR/duo_boot.log"
