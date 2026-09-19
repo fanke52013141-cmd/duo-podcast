@@ -12,6 +12,7 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
+from duocast.adapters.comfyui_tts import ComfyUITTSProvider
 from duocast.main import app, settings
 
 
@@ -121,3 +122,62 @@ def test_audition_job_produces_playable_asset(tmp_path, monkeypatch):
         aid = job['result']['artifactIds'][0]
         assert client.get(f'/api/artifacts/{aid}/file').status_code == 200
         assert client.post(base + '/voice/audition', json={'speaker': 'C'}).status_code == 422
+
+
+def test_synthesize_passes_authoritative_speaker_per_turn(tmp_path, monkeypatch):
+    """回归：绑定 id 形如 VB-A/VB-B 时，B 话轮不得被误判为 A（声线串台）。"""
+    captured = []
+
+    class RecordingTTS(FakeRealTTS):
+        async def synthesize(self, payload):
+            captured.append(dict(payload))
+            return self._make_wav()
+
+    monkeypatch.setattr('duocast.main.settings', replace(
+        settings, storage_root=tmp_path, tts_provider='comfyui'))
+    monkeypatch.setattr('duocast.main.ComfyUITTSProvider', RecordingTTS)
+    with TestClient(app) as client:
+        project_id = client.post('/api/projects', json={'title': '说话人路由'}).json()['id']
+        base = f'/api/projects/{project_id}'
+        gen = client.post(base + '/script/generate', json={
+            'sourceInput': {'kind': 'article', 'content': '你好。\n欢迎来聊一聊。'},
+            'clientToken': 's1'})
+        wait_job(client, gen.json()['jobId'])
+        proj = client.get(base).json()
+        rev = next(r for r in proj['scriptRevisions'] if r['id'] == proj['currentDraftRevision'])
+        speakers = [t['speaker'] for t in rev['turns']]
+        assert 'B' in speakers
+        wait_job(client, client.post(base + '/voice/synthesize', json={
+            'voiceBindings': {
+                'A': {'id': 'VB-A', 'characterId': 'A', 'providerProfileId': 'mock-tts', 'modelId': 'm'},
+                'B': {'id': 'VB-B', 'characterId': 'B', 'providerProfileId': 'mock-tts', 'modelId': 'm'},
+            }}).json()['jobId'])
+    assert len(captured) == len(speakers)
+    assert [p['speaker'] for p in captured] == speakers
+
+    so = ComfyUITTSProvider._speaker_of
+    inst = object.__new__(ComfyUITTSProvider)
+    assert so(inst, {'speaker': 'b'}) == 'B'
+    assert so(inst, {'voiceBindingId': 'VB-B'}) == 'B'
+    assert so(inst, {'voiceBindingId': 'VB-A-audition'}) == 'A'
+    assert so(inst, {}) == 'A'
+    assert so(inst, {'voiceBindingId': 'VB-B', 'speaker': 'A'}) == 'A'
+
+
+def test_synthesize_rejects_empty_turn_with_turn_id(tmp_path):
+    """空文本话轮应带话轮 ID 报错，让用户知道去脚本页修哪一轮。"""
+    import asyncio
+
+    import pytest
+
+    from duocast.domain.project import Line, Project, ScriptRevision, Turn
+    from duocast.services.voice_svc import synthesize_timeline
+
+    proj = Project(id="EPX", title="空话轮")
+    rev = ScriptRevision(id="R9", turns=[
+        Turn(id="T01", speaker="A", lines=[Line(id="L01", display_text="", spoken_text="   ")]),
+        Turn(id="T02", speaker="B", lines=[Line(id="L02", display_text="你好", spoken_text="你好")]),
+    ])
+    tts = FakeRealTTS(artifacts_root=tmp_path, artifact_store=None)
+    with pytest.raises(ValueError, match=r"INVALID_AUDIO: 话轮 T01"):
+        asyncio.run(synthesize_timeline(None, tts, proj, rev, {}))

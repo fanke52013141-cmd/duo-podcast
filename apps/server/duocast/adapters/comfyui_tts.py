@@ -125,7 +125,11 @@ class ComfyUITTSProvider:
 
     # ---- 同步实现 ----
     def _speaker_of(self, req: dict[str, Any]) -> str:
-        m = re.search(r"-(A|B)-", str(req.get("voiceBindingId", "")))
+        # 权威来源是调用方显式传入的 speaker；绑定 id 形如 VB-A 时旧正则匹配不到。
+        spk = str(req.get("speaker", "")).upper()
+        if spk in ("A", "B"):
+            return spk
+        m = re.search(r"-(A|B)(?:-|$)", str(req.get("voiceBindingId", "")))
         return m.group(1) if m else "A"
 
     def _ensure_ref_in_input(self, speaker: str) -> str:

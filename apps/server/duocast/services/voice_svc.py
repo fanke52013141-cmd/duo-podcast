@@ -95,10 +95,14 @@ async def synthesize_timeline(
     )
     offset = lead_in_ms * 48
     unit_paths: dict[str, str] = {}
+    turn_speaker = {t.id: t.speaker for t in revision.turns}
     for index, unit in enumerate(units):
         line_texts = [ln.spoken_text for ln in revision_turn_lines(revision, unit)]
+        if not "".join(line_texts).strip():
+            raise ValueError(f"INVALID_AUDIO: 话轮 {unit.turn_id} 没有可朗读文本，请在脚本中删除或补全后重试")
         res = await tts.synthesize({
             "lineTexts": line_texts, "voiceBindingId": unit.voice_binding_id,
+            "speaker": turn_speaker.get(unit.turn_id, "A"),
             "providerProfileId": unit.provider_profile_id, "modelId": unit.model_id,
             "emotion": unit.emotion, "speedRatio": unit.speed_ratio,
         })

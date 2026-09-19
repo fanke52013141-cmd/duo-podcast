@@ -21,7 +21,17 @@ function stageTone(state: StageState | undefined): Tone {
 export function TopBar({ project }: { project: Project | null }) {
   const { setView, view, leaveProject } = useProjectStore();
   const capabilities = useServiceStore((s) => s.capabilities);
-  const simulated = capabilities && Object.values(capabilities).some((p) => p.mode === 'mock');
+  // 通道级真实/模拟：只有全部通道为 mock 才配得上「不生成真实媒体」。
+  const MOCK_LABELS: Record<string, string> = { textApi: '文本', imageApi: '图片', tts: '语音', video: '视频' };
+  const mockChannels = capabilities
+    ? Object.entries(capabilities).filter(([, p]) => p.mode === 'mock').map(([k]) => MOCK_LABELS[k] ?? k)
+    : [];
+  const simulated = mockChannels.length > 0;
+  const banner = !simulated
+    ? '显存：尚未测定'
+    : mockChannels.length === Object.keys(MOCK_LABELS).length
+      ? '演示模式 · 不生成真实媒体'
+      : `演示模式 · ${mockChannels.join('/')}模拟，其余真实引擎`;
   return (
     <header className="hf-top">
       <button type="button" className="hf-brand" onClick={leaveProject}>
@@ -29,7 +39,7 @@ export function TopBar({ project }: { project: Project | null }) {
       </button>
       {project && <span className="hf-proj">{project.id} · {project.title}</span>}
       <span className="hf-spacer" />
-      <span className="hf-vram">{simulated ? '演示模式 · 不生成真实媒体' : '显存：尚未测定'}</span>
+      <span className="hf-vram">{banner}</span>
       <button
         type="button"
         className="wu-btn"

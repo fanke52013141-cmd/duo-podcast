@@ -95,6 +95,7 @@ def _job_runner(manager: JobManager, store: ProjectStore, artifacts: ArtifactSto
             res = await tts_provider.audition({
                 "lineTexts": [snap.get("text") or "你好，这是一段音色试听。"],
                 "voiceBindingId": f"VB-{speaker}-audition",
+                "speaker": speaker,
                 "providerProfileId": "tts-audition", "modelId": "",
                 "emotion": {"label": "自然"}, "speedRatio": snap.get("speedRatio", 1.0),
             })

@@ -45,6 +45,14 @@ export const useJob = (jobId: string | null) =>
     queryKey: ['job', jobId],
     queryFn: () => getJson<Job>(`/jobs/${jobId}`),
     enabled: !!jobId,
+    // SSE 只失效 ['jobs'] 列表键；单任务查询需自轮询到终态，否则永远停在 running。
+    // refetchIntervalInBackground：react-query 默认在窗口失焦时跳过轮询，最小化/后台页需要照常更新。
+    refetchInterval: (q) => {
+      if (q.state.status === 'error') return false;
+      const s = q.state.data?.status;
+      return s === 'succeeded' || s === 'failed' || s === 'cancelled' ? false : 1500;
+    },
+    refetchIntervalInBackground: true,
   });
 
 export const useJobs = (projectId?: string) =>
