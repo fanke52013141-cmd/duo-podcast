@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Query, Request
 
 from ..jobs.manager import JobManager
 
@@ -14,7 +14,7 @@ def _manager(request: Request) -> JobManager:
 
 
 @router.get("")
-async def list_jobs(request: Request, project_id: str | None = None) -> list[dict]:
+async def list_jobs(request: Request, project_id: str | None = Query(None, alias="projectId")) -> list[dict]:
     manager = _manager(request)
     jobs = manager.list(project_id)
     out = []

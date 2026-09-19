@@ -28,10 +28,22 @@ const TOOLBAR_ACTIONS: { id: 'rewrite' | 'casual' | 'probe' | 'dedupe' | 'trim';
   { id: 'trim', label: '精简至目标时长' },
 ];
 
-interface QaHint { kind: 'local' | 'ai'; level: 'warn' | 'info'; title: string; detail: string; }
+interface QaHint { kind: 'local' | 'ai'; level: 'warn' | 'info'; title: string; detail: string; turnId?: string; }
 
 function turnText(t: Turn): string {
   return t.lines.map((l) => l.displayText).join('');
+}
+
+/** 最靠近中点的句边界（不含末尾句号）；找不到返回 -1 */
+function pickSplitOffset(text: string): number {
+  const mid = text.length / 2;
+  let best = -1;
+  for (const m of text.matchAll(/[。！？；.!?;]/g)) {
+    const pos = (m.index ?? 0) + m[0].length;
+    if (pos <= 0 || pos >= text.length) continue;
+    if (best < 0 || Math.abs(pos - mid) < Math.abs(best - mid)) best = pos;
+  }
+  return best;
 }
 
 function countHints(turns: Turn[]): { hints: QaHint[]; pronCount: number } {
@@ -49,7 +61,7 @@ function countHints(turns: Turn[]): { hints: QaHint[]; pronCount: number } {
     openings.set(`${t.speaker}:${open}`, arr);
     if (text.length > 90) {
       hints.push({
-        kind: 'local', level: 'warn', title: '连续独白较长',
+        kind: 'local', level: 'warn', title: '连续独白较长', turnId: t.id,
         detail: `本地计算：${t.id} 单条 ${text.length} 字，建议拆分或插问`,
       });
     }
@@ -229,6 +241,43 @@ export function EditScriptPage({ projectId }: { projectId: string }) {
     }]);
   };
 
+  /** 拆分长独白：优先在句子边界把单行话轮切成两条；多行话轮按行分界切。 */
+  const splitTurn = (id: string) => {
+    const i = turns.findIndex((t) => t.id === id);
+    if (i < 0) return;
+    const src = turns[i];
+    const full = turnText(src);
+    if (!full) return;
+    let headLines: Turn['lines'];
+    let tailLines: Turn['lines'];
+    if (src.lines.length === 1) {
+      const l = src.lines[0];
+      const cut = pickSplitOffset(l.displayText);
+      if (cut <= 0 || cut >= l.displayText.length) return;
+      const maxLine = Math.max(0, ...turns.flatMap((t) => t.lines.map((x) => Number(x.id.replace(/\D/g, '')) || 0)));
+      const newLineId = `L${String(maxLine + 1).padStart(3, '0')}`;
+      const spokenCut = l.spokenText.length === l.displayText.length ? cut : Math.round(cut * (l.spokenText.length / l.displayText.length));
+      headLines = [{ ...l, displayText: l.displayText.slice(0, cut), spokenText: l.spokenText.slice(0, spokenCut) }];
+      tailLines = [{ ...l, id: newLineId, displayText: l.displayText.slice(cut), spokenText: l.spokenText.slice(spokenCut) }];
+    } else {
+      const half = full.length / 2;
+      let k = 1;
+      let acc = 0;
+      for (; k < src.lines.length; k++) {
+        acc += src.lines[k - 1].displayText.length;
+        if (acc >= half) break;
+      }
+      if (k >= src.lines.length) return;
+      headLines = src.lines.slice(0, k);
+      tailLines = src.lines.slice(k);
+    }
+    const newId = `T${String(Math.max(1, ...turns.map((t) => Number(t.id.replace(/\D/g, '')) || 0)) + 1).padStart(2, '0')}`;
+    const next = [...turns];
+    next.splice(i + 1, 0, { ...src, id: newId, lines: tailLines });
+    next[i] = { ...src, lines: headLines };
+    applyTurns(next);
+  };
+
   const removeTurns = (ids: string[]) => {
     applyTurns(turns.filter((t) => !ids.includes(t.id)));
     setSelected((s) => s.filter((x) => !ids.includes(x)));
@@ -376,8 +425,8 @@ export function EditScriptPage({ projectId }: { projectId: string }) {
                   {h.kind === 'ai' && <span className="hf-ai" style={{ margin: '4px 0', display: 'inline-flex' }}>AI 建议</span>}
                   {' '}{h.detail}
                 </span>
-                {h.title === '连续独白较长' && (
-                  <Button variant="ghost" size="sm" onClick={() => setView('script')}>拆分</Button>
+                {h.title === '连续独白较长' && h.turnId && (
+                  <Button variant="ghost" size="sm" onClick={() => splitTurn(h.turnId!)}>拆分</Button>
                 )}
               </div>
             ))}

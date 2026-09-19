@@ -96,7 +96,12 @@ export function VoicePage({ projectId }: { projectId: string }) {
     );
   }, [bs]);
 
-  const defaultGaps = timeline?.transitionGapMs ?? (turnCount > 1 ? Array(turnCount - 1).fill(320) : []);
+  // 时间轨可能来自旧话轮数的草稿；间隔数组必须重采样到当前 turnCount-1，
+  // 否则增删话轮后合成被服务端 INVALID_GAPS 拒绝（保留已调值，新相邻位补 320）。
+  const baseGaps = timeline?.transitionGapMs ?? [];
+  const defaultGaps = turnCount > 1
+    ? Array.from({ length: turnCount - 1 }, (_, i) => baseGaps[i] ?? 320)
+    : [];
   // gapMs 的覆盖逻辑在 gapIdx 计算之后（11 报告 P2-10：按所选单元真实相邻区间写入）。
 
   // 时间轨过期 = 脚本草稿版本 ≠ 时间轨对应版本。此时允许（且应当）重新合成；
