@@ -43,14 +43,20 @@ def render(tid, spk):
     wf = copy.deepcopy(WF)
     wf["133"]["inputs"]["image"] = f"duocast_win_{spk}.png"
     wf["218"]["inputs"]["audio"] = f"duocast_{tid}.wav"
+    wf["134"]["inputs"]["blocks_to_swap"] = int(os.environ.get("SWAP_BLOCKS", "32"))
     wf["229"]["inputs"]["filename_prefix"] = f"duocast_linktest/win_{tid}"
     req = urllib.request.Request(BASE + "/prompt", data=json.dumps({"prompt": wf, "client_id": "duocast-win"}).encode(),
                                  headers={"Content-Type": "application/json"})
     prompt_id = json.loads(opener.open(req, timeout=60).read())["prompt_id"]
     print(f"[{tid}] submitted {prompt_id}", flush=True)
     t0 = time.time()
-    while time.time() - t0 < 2400:
-        hist = json.loads(opener.open(BASE + f"/history/{prompt_id}", timeout=30).read())
+    while time.time() - t0 < 14400:
+        try:
+            hist = json.loads(opener.open(BASE + f"/history/{prompt_id}", timeout=30).read())
+        except Exception as e:
+            print(f"[{tid}] poll err {type(e).__name__}; waiting for server", flush=True)
+            time.sleep(60)
+            continue
         if prompt_id in hist:
             h = hist[prompt_id]
             if h.get("status", {}).get("status_str") == "error":
