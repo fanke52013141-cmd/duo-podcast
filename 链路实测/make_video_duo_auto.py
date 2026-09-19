@@ -76,18 +76,21 @@ segs = [render(t, s) for t, s, _ in TURNS]
 
 # 合成：每段 = 底图(循环) + 动画窗回贴(羽化) → 1536x864；拼接后统一缩到 864x480 并配母轨音轨
 built = []
-for (tid, spk, _), seg in zip(TURNS, segs):
+for idx, (tid, spk, _) in enumerate(TURNS):
+    seg = segs[idx]
     dur = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", seg],
                          capture_output=True, text=True).stdout.strip()
     x0, y0, x1, y1 = BOXES[spk]
+    gap = 0.0 if idx == len(TURNS) - 1 else 0.32  # 话轮间保留母轨 0.32s 停顿，末帧克隆补齐防口型漂移
     outp = os.path.join(OUT_DIR, f"winb_{tid}.mp4")
     if not os.path.exists(outp):
+        tpad = f",tpad=stop_mode=clone:stop_duration={gap}" if gap else ""
         cmd = ["ffmpeg", "-y", "-v", "error",
-               "-loop", "1", "-t", str(float(dur) + 0.08), "-i", os.path.join(D, "duo_stage.png"),
+               "-loop", "1", "-t", str(float(dur) + gap + 0.08), "-i", os.path.join(D, "duo_stage.png"),
                "-i", seg,
                "-i", os.path.join(D, f"win_{spk}_mask.png"),
                "-filter_complex",
-               f"[1:v]scale={x1-x0}:{y1-y0}:flags=lanczos[ov];[2:v]format=gray[mk];"
+               f"[1:v]scale={x1-x0}:{y1-y0}:flags=lanczos{tpad}[ov];[2:v]format=gray[mk];"
                f"[0:v]format=rgba[base];[ov][mk]alphamerge[ova];"
                f"[base][ova]overlay={x0}:{y0}:shortest=1:format=auto,format=yuv420p[v]",
                "-map", "[v]", "-an", "-r", "25", "-c:v", "libx264", "-preset", "medium", "-crf", "19", outp]
