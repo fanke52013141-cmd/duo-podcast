@@ -12,8 +12,8 @@ OUT_DIR = os.path.join(ROOT, "链路实测", "_video")
 WF = json.load(open(os.path.join(ROOT, "本地引擎工作流", "infinitetalk-数字人_api_windows兼容.json"), encoding="utf-8"))
 opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 
-CLIP_S = 5.0 if MODE == "test" else None
-tag = f"duo_mt_{MODE}"
+CLIP_S = float(os.environ.get("MT_CLIP_SECONDS", "5")) if MODE == "test" else None
+tag = os.environ.get("MT_TAG", f"duo_mt_{MODE}")
 
 def prep_audio(src, dst):
     if CLIP_S is None:
@@ -28,23 +28,46 @@ def prep_audio(src, dst):
     o.writeframes(frames)
     o.close()
 
-shutil.copyfile(os.path.join(D, "duo_stage.png"), os.path.join(COMFY_IN, "duocast_duo_stage.png"))
+SOURCE_IMAGE = os.environ.get("MT_SOURCE_IMAGE", "duo_stage.png")
+MASK_PREFIX = os.environ.get("MT_MASK_PREFIX", "mask")
+TRACK_A = os.environ.get("MT_TRACK_A", "track_a.wav")
+TRACK_B = os.environ.get("MT_TRACK_B", "track_b.wav")
+MASTER_AUDIO = os.environ.get("MT_MASTER_AUDIO", "_master_4sent.wav")
+shutil.copyfile(os.path.join(D, SOURCE_IMAGE), os.path.join(COMFY_IN, "duocast_duo_stage.png"))
 mdir = os.path.join(COMFY_IN, "duocast_masks")
 os.makedirs(mdir, exist_ok=True)
 for spk in ("a", "b"):
-    shutil.copyfile(os.path.join(D, f"mask_{spk}_480.png"), os.path.join(mdir, f"mask_{spk}.png"))
-    prep_audio(os.path.join(D, f"track_{spk}.wav"), os.path.join(COMFY_IN, f"duocast_{tag}_track_{spk}.wav"))
-prep_audio(os.path.join(ROOT, "链路实测", "_master_4sent.wav"), os.path.join(COMFY_IN, f"duocast_{tag}_master.wav"))
+    shutil.copyfile(os.path.join(D, f"{MASK_PREFIX}_{spk}_480.png"), os.path.join(mdir, f"mask_{spk}.png"))
+    source_track = TRACK_A if spk == "a" else TRACK_B
+    prep_audio(os.path.join(D, source_track), os.path.join(COMFY_IN, f"duocast_{tag}_track_{spk}.wav"))
+prep_audio(os.path.join(D, MASTER_AUDIO), os.path.join(COMFY_IN, f"duocast_{tag}_master.wav"))
 
 wf = copy.deepcopy(WF)
 wf["120"]["inputs"]["model"] = os.environ.get(
     "MT_MODEL", r"InfiniteTalk\Wan2_1-InfiniteTalk-Multi_fp8_e4m3fn_scaled_KJ.safetensors")  # 多人权重：Single 权重跑 multitalk 模式会原生崩溃
-AUTO = os.environ.get("MT_AUTO", "1") == "1"  # infinitetalk 模式 + Multi 权重 + 混合音轨：模型自动识别说话人，绕开 mask 路径
+# 默认走真正的多人双轨路径：两条等长音轨 + A/B mask 绑定。
+# MT_AUTO=1 仅作对照试验；它会改用混合单轨并移除 mask，无法验证双人轮流倾听。
+AUTO = os.environ.get("MT_AUTO", "0") == "1"
 wf["133"]["inputs"]["image"] = "duocast_duo_stage.png"
 wf["192"]["inputs"]["mode"] = "infinitetalk" if AUTO else "multitalk"
-wf["192"]["inputs"]["colormatch"] = "reinhard"  # 合法枚举：disabled/mkl/hm/reinhard/mvgd/...；mkl 在全黑 letterbox 边上协方差奇异
+wf["192"]["inputs"]["colormatch"] = "disabled"  # Reinhard 对生成帧出现 log10 NaN，会把有效视频转成全黑。
+wf["192"]["inputs"]["frame_window_size"] = int(os.environ.get("MT_FRAME_WINDOW_SIZE", "81"))
 wf["213"]["inputs"]["fit"] = "crop"             # 裁边不留黑条，避免色匹配退化
 wf["218"]["inputs"]["audio"] = f"duocast_{tag}_master.wav"
+default_prompt = (
+    "Two podcast hosts sit naturally at a table in a fixed medium-wide shot. "
+    "The active speaker talks with accurate lip movement and restrained head motion. "
+    "The silent host keeps the mouth closed, breathes naturally, blinks, watches the speaker, "
+    "and gives an occasional subtle nod. Stable identities, stable background, subtle realistic motion."
+)
+wf["135"]["inputs"]["positive_prompt"] = os.environ.get("MT_POSITIVE_PROMPT", default_prompt)
+steps = int(os.environ.get("MT_STEPS", "4"))
+if steps != 4:
+    raise SystemExit(
+        "The current flowmatch_distill workflow only supports MT_STEPS=4. "
+        "Use a matching non-distilled workflow before changing the step count."
+    )
+wf["199"]["inputs"]["steps"] = steps
 del wf["197"]  # 弃用声源分离：双轨由 300/301 直接提供
 wf["300"] = {"class_type": "VHS_LoadAudioUpload", "inputs": {"audio": f"duocast_{tag}_track_a.wav"}}
 wf["301"] = {"class_type": "VHS_LoadAudioUpload", "inputs": {"audio": f"duocast_{tag}_track_b.wav"}}
@@ -88,7 +111,7 @@ while time.time() - t0 < 5400:
         h = hist[prompt_id]
         if h.get("status", {}).get("status_str") == "error":
             print(f"COMFY ERROR after {time.time()-t0:.0f}s")
-            print(json.dumps(h, ensure_ascii=False)[:6000])
+            print(json.dumps(h, ensure_ascii=True)[:6000])
             sys.exit(1)
         outs = h.get("outputs", {})
         if outs:
