@@ -40,6 +40,8 @@ class SynthesisUnit(BaseModel):
     pronunciation_revision: str = ""
     adopted_audio_asset_id: Optional[str] = None
     candidate_audio_asset_ids: list[str] = Field(default_factory=list)
+    # 候选资产的权威时长。旧工程没有该字段时按空字典读取；采用候选时据此重建时间线。
+    candidate_sample_counts: dict[str, int] = Field(default_factory=dict)
     sample_count: int = 0  # 引擎返回的权威时长（样本数，48kHz 母轨口径）
 
 

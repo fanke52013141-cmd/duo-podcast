@@ -78,10 +78,11 @@ def _job_runner(manager: JobManager, store: ProjectStore, artifacts: ArtifactSto
                 transition_gap_ms=job.input_snapshot.get("transitionGapMs"),
                 lead_in_ms=job.input_snapshot.get("leadInMs", 0),
                 tail_out_ms=job.input_snapshot.get("tailOutMs", 0),
+                target_turn_ids=job.input_snapshot.get("turnIds"),
                 artifact_store=artifacts,
                 artifacts_root=artifacts.root,
             )
-            unit_ids = [u.adopted_audio_asset_id for u in timeline.units if u.adopted_audio_asset_id]
+            unit_ids = [asset_id for u in timeline.units for asset_id in u.candidate_audio_asset_ids]
             master_ids = [timeline.master_audio_asset_id] if timeline.master_audio_asset_id else []
             return {
                 "artifactIds": [*unit_ids, *master_ids],

@@ -281,6 +281,8 @@ export interface VoiceSynthInput {
   revisionId: string;
   voiceBindings: Record<string, { id: string; characterId: string; providerProfileId: string; modelId?: string }>;
   transitionGapMs?: number[];
+  /** Omit for a full pass; pass one or more current-script turns to make candidates only. */
+  turnIds?: string[];
 }
 
 export const useVoiceSynthesize = () => {
@@ -292,8 +294,30 @@ export const useVoiceSynthesize = () => {
         revisionId: input.revisionId,
         voiceBindings: input.voiceBindings,
         transitionGapMs: input.transitionGapMs ?? [],
+        ...(input.turnIds ? { turnIds: input.turnIds } : {}),
       }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['jobs'] }),
+  });
+};
+
+export interface VoiceAdoptInput {
+  projectId: string;
+  unitId: string;
+  candidateAudioAssetId: string;
+}
+
+/** Make one immutable candidate the adopted audio for a unit and rebuild the master track. */
+export const useVoiceAdopt = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: VoiceAdoptInput) =>
+      sendJson(`/projects/${input.projectId}/voice/units/${input.unitId}/adopt`, 'POST', {
+        candidateAudioAssetId: input.candidateAudioAssetId,
+      }),
+    onSuccess: (_data, input) => {
+      qc.invalidateQueries({ queryKey: ['project', input.projectId] });
+      qc.invalidateQueries({ queryKey: ['jobs', input.projectId] });
+    },
   });
 };
 

@@ -6,7 +6,7 @@
    ========================================================================== */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  useConfirm, useJob, useJobs, useProject, useVoiceAudition, useVoiceSynthesize,
+  useConfirm, useJob, useJobs, useProject, useVoiceAdopt, useVoiceAudition, useVoiceSynthesize,
 } from '../lib/api';
 import type { AudioTimeline, Job, Project, ScriptRevision, SynthesisUnit, Turn, VoiceBinding } from '../lib/types';
 import { Alert, Badge, Button, Choice, Icon } from '../components/wu';
@@ -55,6 +55,7 @@ export function VoicePage({ projectId }: { projectId: string }) {
   const project = useProject(projectId);
   const jobs = useJobs(projectId);
   const synth = useVoiceSynthesize();
+  const adopt = useVoiceAdopt();
   const audition = useVoiceAudition();
   const confirm = useConfirm();
   const setView = useProjectStore((s) => s.setView);
@@ -176,6 +177,31 @@ export function VoicePage({ projectId }: { projectId: string }) {
     }, { onError: (e) => setError((e as Error).message) });
   };
 
+  const handleUnitSynthesize = (turnId: string) => {
+    if (!proj || !revision || !bs) return;
+    setError(null);
+    synth.mutate({
+      projectId, clientToken: crypto.randomUUID(), revisionId: revision.id,
+      voiceBindings: bindingsPayload, transitionGapMs: gapMs, turnIds: [turnId],
+    }, { onError: (e) => setError((e as Error).message) });
+  };
+
+  const playAsset = (assetId: string | null | undefined) => {
+    if (!assetId) {
+      setError('此音频来自模拟引擎，未生成可播放的文件。');
+      return;
+    }
+    new Audio(`/api/artifacts/${assetId}/file`).play()
+      .catch(() => setError('浏览器阻止了自动播放，请再试一次。'));
+  };
+
+  const adoptCandidate = (unitId: string, assetId: string) => {
+    setError(null);
+    adopt.mutate({ projectId, unitId, candidateAudioAssetId: assetId }, {
+      onError: (e) => setError(`采纳候选失败：${(e as Error).message}`),
+    });
+  };
+
   const handleConfirm = () => {
     if (!proj || !timeline) return;
     confirm.mutate({ projectId, expectedRevision: proj.revision, kind: 'voice', inputRevisionId: timeline.revisionId }, {
@@ -184,7 +210,30 @@ export function VoicePage({ projectId }: { projectId: string }) {
   };
 
   // ---- 时间轨派生 ----
-  const units = timeline?.units ?? [];
+  // 局部重生成不会覆盖权威母轨，候选保存在 audioHistory；将同一脚本的候选
+  // 投影到当前单元上，才能在不误替换播放版本的前提下让用户立即比较和采纳。
+  const units = useMemo(() => {
+    const base = (timeline?.units ?? []).map((unit) => ({
+      ...unit,
+      candidateAudioAssetIds: [...unit.candidateAudioAssetIds],
+      candidateSampleCounts: { ...(unit.candidateSampleCounts ?? {}) },
+    }));
+    const byId = new Map(base.map((unit) => [unit.id, unit]));
+    for (const history of proj?.audioHistory ?? []) {
+      if (history.revisionId !== revision?.id) continue;
+      for (const saved of history.units) {
+        const current = byId.get(saved.id);
+        if (!current) continue;
+        for (const assetId of saved.candidateAudioAssetIds ?? []) {
+          if (!current.candidateAudioAssetIds.includes(assetId)) current.candidateAudioAssetIds.push(assetId);
+        }
+        current.candidateSampleCounts = {
+          ...current.candidateSampleCounts, ...(saved.candidateSampleCounts ?? {}),
+        };
+      }
+    }
+    return base;
+  }, [timeline, proj?.audioHistory, revision?.id]);
   const unitByTurn = useMemo(() => {
     const m = new Map<string, SynthesisUnit>();
     units.forEach((u) => { if (!m.has(u.turnId)) m.set(u.turnId, u); });
@@ -247,12 +296,30 @@ export function VoicePage({ projectId }: { projectId: string }) {
                   <span className="wu-caption">{selectedUnit.lineIds.length} 个句子</span>
                 </div>
                 <div className="hf-playrow" style={{ borderTop: 'none', paddingTop: 4 }}>
-                  <Button variant="secondary" size="sm" disabled>重新生成</Button>
+                  <Button variant="secondary" size="sm" busy={synthesizing} disabled={synthesizing}
+                    onClick={() => handleUnitSynthesize(selectedUnit.turnId)}>重新生成本条</Button>
+                  <Button variant="secondary" size="sm" disabled={!selectedUnit.adoptedAudioAssetId}
+                    onClick={() => playAsset(selectedUnit.adoptedAudioAssetId)}>播放已采纳</Button>
                   <Button variant="secondary" size="sm" disabled>拆出一句</Button>
-                  <Button variant="secondary" size="sm" disabled>新旧对比</Button>
                 </div>
+                {selectedUnit.candidateAudioAssetIds.length > 0 && (
+                  <div className="hf-unit" style={{ alignItems: 'flex-start' }}>
+                    <span className="wu-caption">候选版本</span>
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                      {selectedUnit.candidateAudioAssetIds.map((assetId, index) => (
+                        <span className="wu-row" style={{ gap: 4 }} key={assetId}>
+                          <Button variant="secondary" size="sm" icon="play" onClick={() => playAsset(assetId)}>候选 {index + 1}</Button>
+                          <Button size="sm" busy={adopt.isPending} disabled={adopt.isPending || selectedUnit.adoptedAudioAssetId === assetId}
+                            onClick={() => adoptCandidate(selectedUnit.id, assetId)}>
+                            {selectedUnit.adoptedAudioAssetId === assetId ? '已采纳' : '采纳'}
+                          </Button>
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 <p className="wu-caption" style={{ marginTop: 8, lineHeight: 1.6 }}>
-                  重新生成<b>默认只重生成对应单元</b>；相邻句受影响时直接显示范围。
+                  重新生成只会创建<b>本条候选版本</b>；采纳后重建整期时间轴并撤销配音确认。
                   <a className="hf-link" href="#" onClick={(e) => e.preventDefault()}>拆出一句</a>不承诺与原段完全一致的音色表现。
                 </p>
               </>
@@ -452,8 +519,15 @@ export function VoicePage({ projectId }: { projectId: string }) {
                     <span className="hf-turn-text">{turnText(t)}</span>
                     {dur && <Badge tone="success">✓ {dur}</Badge>}
                     {generating && <Badge tone="info">生成中 {genDone}/{turnCount}</Badge>}
+                    {u?.candidateAudioAssetIds.length ? <Badge tone="info">候选 {u.candidateAudioAssetIds.length}</Badge> : null}
                   </div>
                   {generating && <div className="hf-prog" style={{ marginTop: 6 }}><i style={{ width: `${Math.round((genDone / Math.max(1, turnCount)) * 100)}%` }} /></div>}
+                  <div className="hf-playrow" style={{ paddingTop: 6 }} onClick={(e) => e.stopPropagation()}>
+                    <Button variant="secondary" size="sm" busy={synthesizing} disabled={synthesizing}
+                      onClick={() => handleUnitSynthesize(t.id)}>重生成本条</Button>
+                    {u?.adoptedAudioAssetId && <Button variant="ghost" size="sm" icon="play"
+                      onClick={() => playAsset(u.adoptedAudioAssetId)}>播放</Button>}
+                  </div>
                   {pronTerms(t).length > 0 && (
                     <div className="hf-turn-meta">
                       <span className="hf-meta-warn">

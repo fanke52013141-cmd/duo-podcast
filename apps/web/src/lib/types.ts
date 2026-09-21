@@ -81,6 +81,8 @@ export interface SynthesisUnit {
   pronunciationRevision: string;
   adoptedAudioAssetId: string | null;
   candidateAudioAssetIds: string[];
+  /** Candidate duration returned by TTS; absent on projects created before per-unit regeneration. */
+  candidateSampleCounts?: Record<string, number>;
   sampleCount: number;
 }
 
