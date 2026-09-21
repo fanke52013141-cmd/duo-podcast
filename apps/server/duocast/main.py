@@ -108,12 +108,20 @@ def _job_runner(manager: JobManager, store: ProjectStore, artifacts: ArtifactSto
             res = await image_provider.generate({
                 "aspect": job.input_snapshot.get("aspect", "landscape"),
                 "prompt": job.input_snapshot.get("prompt", ""),
+                "mode": job.input_snapshot.get("mode", "twoShot"),
+                "subjectSpeaker": job.input_snapshot.get("subjectSpeaker"),
+                "foregroundSpeaker": job.input_snapshot.get("foregroundSpeaker"),
             })
             project = store.load(job.project_id)
             if project is None:
                 raise RuntimeError("project vanished")
             variants = apply_visual_variant(store, project, {
                 "aspect": job.input_snapshot.get("aspect", "landscape"),
+                "mode": job.input_snapshot.get("mode", "twoShot"),
+                "cameraGroupId": job.input_snapshot.get("cameraGroupId"),
+                "cameraAssetId": job.input_snapshot.get("cameraAssetId"),
+                "subjectSpeaker": job.input_snapshot.get("subjectSpeaker"),
+                "foregroundSpeaker": job.input_snapshot.get("foregroundSpeaker"),
                 **{k: res.get(k) for k in ("artifactId", "path", "fileHash", "provider") if res.get(k)},
             })
             artifact_ids = [variants[0].master_image.artifact_id] if res.get("artifactId") else []

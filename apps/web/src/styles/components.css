@@ -87,3 +87,32 @@ textarea.wu-input { min-height:104px; resize:vertical; }
 .wu-code { display:block; overflow:auto; padding:16px; border-radius:var(--wu-global-radius-sm); background:var(--wu-semantic-muted); color:var(--wu-semantic-text); font-family:var(--wu-global-mono); font-size:12px; white-space:pre; }
 @keyframes wu-spin { to { transform:rotate(360deg); } }
 @media (prefers-reduced-motion:reduce) { .wu *, .wu *::before, .wu *::after { animation:none !important; transition:none !important; scroll-behavior:auto !important; } }
+
+/* 阶段④ · 过肩正反打预览（页面级组合，保留同框模式的既有布局） */
+.wu .hf-visual-mode { display:inline-flex; overflow:hidden; border:1px solid var(--wu-semantic-control-border); border-radius:var(--wu-global-radius-sm); }
+.wu .hf-visual-mode button { min-height:28px; padding:4px 10px; border:0; border-right:1px solid var(--wu-semantic-border); background:var(--wu-semantic-raised); color:var(--wu-semantic-secondary); font-size:12px; cursor:pointer; }
+.wu .hf-visual-mode button:last-child { border-right:0; }
+.wu .hf-visual-mode button[aria-pressed="true"] { background:var(--wu-semantic-primary); color:var(--wu-semantic-on-primary); font-weight:var(--wu-global-semibold); }
+.wu .hf-ots-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+.wu .hf-ots-card { overflow:hidden; border:1px solid var(--wu-semantic-border); border-radius:var(--wu-global-radius-md); background:var(--wu-semantic-raised); }
+.wu .hf-ots-preview { position:relative; display:flex; align-items:flex-end; height:168px; padding:12px; overflow:hidden; background:linear-gradient(135deg,var(--wu-semantic-muted),var(--wu-semantic-surface)); }
+.wu .hf-ots-preview::before { content:""; position:absolute; inset:18px 25% 18px 28%; border:1px solid color-mix(in srgb,var(--wu-semantic-info) 35%,transparent); border-radius:48% 48% 16px 16px; background:color-mix(in srgb,var(--wu-semantic-info-bg) 72%,transparent); }
+.wu .hf-ots-preview[data-camera="B"]::before { right:28%; left:25%; border-color:color-mix(in srgb,var(--hf-speaker-b) 35%,transparent); background:color-mix(in srgb,var(--hf-speaker-b-bg) 76%,transparent); }
+.wu .hf-ots-foreground { position:absolute; z-index:1; left:-10px; bottom:-8px; width:38%; min-height:70%; padding:12px 10px; border-radius:50% 50% 0 0; background:color-mix(in srgb,var(--wu-global-ink) 72%,var(--wu-semantic-secondary)); color:transparent; transform:rotate(-6deg); }
+.wu .hf-ots-preview[data-camera="B"] .hf-ots-foreground { right:-10px; left:auto; transform:rotate(6deg); }
+.wu .hf-ots-subject { position:relative; z-index:2; max-width:55%; margin-left:auto; padding:4px 7px; border-radius:5px; background:color-mix(in srgb,var(--wu-semantic-raised) 84%,transparent); color:var(--wu-semantic-text); font-size:11px; text-align:right; }
+.wu .hf-ots-preview[data-camera="B"] .hf-ots-subject { margin-right:auto; margin-left:0; text-align:left; }
+.wu .hf-ots-preview > .wu-badge { position:absolute; z-index:3; top:10px; right:10px; }
+.wu .hf-ots-card-body { display:flex; align-items:flex-start; gap:10px; padding:10px 12px; }
+.wu .hf-ots-card-body > div:first-child { flex:1; min-width:0; }
+.wu .hf-ots-card-body b { display:block; font-size:12.8px; }
+.wu .hf-ots-card-body p { margin:4px 0 0; color:var(--wu-semantic-caption); font-size:11.5px; line-height:1.5; }
+.wu .hf-ots-actions { display:flex; justify-content:flex-end; gap:5px; flex-wrap:wrap; }
+.wu .hf-ots-actions .wu-btn { padding-inline:8px; }
+.wu .hf-ots-route { display:flex; align-items:center; gap:8px; flex-wrap:wrap; min-height:34px; }
+.wu .hf-ots-route-label { color:var(--wu-semantic-secondary); font-size:12.5px; }
+.wu .hf-ots-route-step { display:inline-flex; align-items:center; gap:4px; padding:4px 8px; border-radius:var(--wu-global-pill); background:var(--wu-semantic-info-bg); color:var(--wu-semantic-info); font-size:11.5px; font-weight:var(--wu-global-semibold); }
+.wu .hf-ots-route-step.b { background:var(--hf-speaker-b-bg); color:var(--hf-speaker-b); }
+.wu .hf-ots-ins-status { display:grid; gap:7px; }
+.wu .hf-ots-ins-row { display:flex; align-items:center; justify-content:space-between; gap:8px; color:var(--wu-semantic-secondary); font-size:12.5px; }
+@container (max-width:760px) { .wu .hf-ots-grid { grid-template-columns:1fr; } .wu .hf-ots-card-body { flex-direction:column; } .wu .hf-ots-actions { justify-content:flex-start; } }

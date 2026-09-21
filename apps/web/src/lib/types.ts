@@ -105,6 +105,28 @@ export interface VisualVariant {
   modelInputTransform: { scale: number; offsetX: number; offsetY: number; crop?: unknown; pad: string };
   personRegions: Record<string, unknown>;
   imageApiConfigRef: string | null;
+  mode?: 'twoShot' | 'overShoulder';
+  cameraGroups?: DialogueCameraGroup[];
+}
+
+/** 过肩正反打可复用的一组匹配机位；旧工程可以不包含这些字段。 */
+export interface CameraAsset {
+  id: string;
+  masterImage: { artifactId: string; path: string; fileHash: string };
+  mode: 'twoShot' | 'overShoulder';
+  subjectSpeaker: Speaker | null;
+  foregroundSpeaker: Speaker | null;
+  subjectRegion: Record<string, unknown>;
+  foregroundMask?: { artifactId: string; path: string; fileHash: string } | null;
+}
+
+export interface DialogueCameraGroup {
+  id: string;
+  visualVariantId?: string | null;
+  mode: 'twoShot' | 'overShoulder';
+  characterReferenceImages?: Record<string, { artifactId: string; path: string; fileHash: string }>;
+  sceneReferenceImage?: { artifactId: string; path: string; fileHash: string } | null;
+  cameraAssets: CameraAsset[];
 }
 
 /* ---- 资产清单（06 §7.2 manifest） ---- */

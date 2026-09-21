@@ -319,6 +319,11 @@ export interface VisualGenInput {
   clientToken: string;
   aspect: 'landscape' | 'portrait';
   prompt?: string;
+  mode?: 'twoShot' | 'overShoulder';
+  cameraGroupId?: string;
+  cameraAssetId?: string;
+  subjectSpeaker?: 'A' | 'B';
+  foregroundSpeaker?: 'A' | 'B';
 }
 
 export const useVisualGenerate = () => {
@@ -329,6 +334,11 @@ export const useVisualGenerate = () => {
         clientToken: input.clientToken,
         aspect: input.aspect,
         prompt: input.prompt ?? '',
+        mode: input.mode ?? 'twoShot',
+        cameraGroupId: input.cameraGroupId,
+        cameraAssetId: input.cameraAssetId,
+        subjectSpeaker: input.subjectSpeaker,
+        foregroundSpeaker: input.foregroundSpeaker,
       }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['jobs'] }),
   });
