@@ -4,7 +4,8 @@
    ========================================================================== */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
-  ArtifactEntry, Capabilities, Job, MachineSettings, Project, ScriptRevision, SourceKind, Turn,
+  ArtifactEntry, Capabilities, Job, MachineSettings, ProgramTemplate, Project,
+  PronunciationEntry, ScriptRevision, SourceKind, Turn,
 } from './types';
 
 const BASE = '/api';
@@ -19,11 +20,11 @@ async function getJson<T>(path: string): Promise<T> {
   return res.json() as Promise<T>;
 }
 
-async function sendJson<T>(path: string, method: 'POST' | 'PATCH', body: unknown): Promise<T> {
+async function sendJson<T>(path: string, method: 'POST' | 'PATCH' | 'DELETE', body?: unknown): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
     method,
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
+    headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
+    body: body === undefined ? undefined : JSON.stringify(body),
   });
   if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
   return res.json() as Promise<T>;
@@ -76,8 +77,8 @@ export const useMachine = () =>
 export const useSaveMachine = () => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (patch: { providerProfiles?: Record<string, { credentialRef?: string }>; vramAllocation?: Record<string, number> }) =>
-      sendJson<{ providerProfiles: Record<string, { credentialRef?: string }>; vramAllocation: Record<string, number> }>('/machine', 'PATCH', patch),
+    mutationFn: (patch: { providerProfiles?: Record<string, { credentialRef?: string }>; vramAllocation?: Record<string, number>; pronunciationDict?: PronunciationEntry[] }) =>
+      sendJson<{ providerProfiles: Record<string, { credentialRef?: string }>; vramAllocation: Record<string, number>; pronunciationDict?: PronunciationEntry[] }>('/machine', 'PATCH', patch),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['machine'] }),
   });
 };
@@ -90,7 +91,7 @@ export const useTestProvider = () =>
   });
 
 // ---------- 变更 ----------
-export interface CreateProjectInput { id?: string; title: string; }
+export interface CreateProjectInput { id?: string; title: string; templateId?: string; }
 
 export const useCreateProject = () => {
   const qc = useQueryClient();
@@ -100,6 +101,27 @@ export const useCreateProject = () => {
       qc.setQueryData(['projects'], (old: Project[] | undefined) => [proj, ...(old ?? [])]);
       qc.setQueryData(['project', proj.id], proj);
     },
+  });
+};
+
+/* ---------- 节目模板库（01 §1.5：GET/POST /api/templates） ---------- */
+export const useTemplates = () =>
+  useQuery({ queryKey: ['templates'], queryFn: () => getJson<ProgramTemplate[]>('/templates') });
+
+export const useCreateTemplate = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { name: string; desc?: string; projectId?: string; config?: ProgramTemplate['config'] }) =>
+      sendJson<ProgramTemplate>('/templates', 'POST', input),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['templates'] }),
+  });
+};
+
+export const useDeleteTemplate = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (templateId: string) => sendJson<{ deleted: string }>(`/templates/${templateId}`, 'DELETE'),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['templates'] }),
   });
 };
 

@@ -27,7 +27,23 @@ def find_revision(project: Project, revision_id: str | None) -> ScriptRevision:
     raise KeyError(f"revision not found: {rid}")
 
 
-def build_units(project: Project, revision: ScriptRevision, bindings: dict[str, dict]) -> list[SynthesisUnit]:
+def apply_pronunciation(texts: list[str], pronunciation: list[dict] | None) -> list[str]:
+    """读音词典替换（01 §4.2）：按词条顺序把 term 替换为 read。空词条与空读法跳过。"""
+    entries = [(str(e.get("term", "")), str(e.get("read", "")))
+               for e in (pronunciation or []) if isinstance(e, dict)]
+    entries = [(t, r) for t, r in entries if t]
+    if not entries:
+        return texts
+    out = []
+    for text in texts:
+        for term, read in entries:
+            text = text.replace(term, read)
+        out.append(text)
+    return out
+
+
+def build_units(project: Project, revision: ScriptRevision, bindings: dict[str, dict],
+                pronunciation: list[dict] | None = None) -> list[SynthesisUnit]:
     """按话轮生成合成单元；绑定取 bindings[A|B]，缺省为占位绑定。"""
     units: list[SynthesisUnit] = []
     for turn in revision.turns:
@@ -43,20 +59,20 @@ def build_units(project: Project, revision: ScriptRevision, bindings: dict[str, 
             emotion={"label": turn.tone or "自然"},
             speed_ratio=turn.speed_ratio,
         )
-        unit.pronunciation_revision = _unit_fingerprint(turn, unit)
+        unit.pronunciation_revision = _unit_fingerprint(turn, unit, pronunciation)
         units.append(unit)
     return units
 
 
-def _unit_fingerprint(turn, unit: SynthesisUnit) -> str:
+def _unit_fingerprint(turn, unit: SynthesisUnit, pronunciation: list[dict] | None = None) -> str:
     """确定某个已采用单元还能否服务当前话轮。
 
     版本 ID 本身不足以判断：用户可在同一草稿内编辑一条台词。把会影响音频的
-    文本和请求参数写入单元，局部合成才不会错误复用旧声音。
+    文本（含读音词典应用结果）和请求参数写入单元，局部合成才不会错误复用旧声音。
     """
     payload = {
         "turnId": turn.id, "speaker": turn.speaker,
-        "lineTexts": [line.spoken_text for line in turn.lines],
+        "lineTexts": apply_pronunciation([line.spoken_text for line in turn.lines], pronunciation),
         "voiceBindingId": unit.voice_binding_id,
         "providerProfileId": unit.provider_profile_id, "modelId": unit.model_id,
         "emotion": unit.emotion, "speedRatio": unit.speed_ratio,
@@ -105,13 +121,15 @@ async def synthesize_timeline(
     artifact_store=None,
     artifacts_root: Path | None = None,
     target_turn_ids: list[str] | None = None,
+    pronunciation: list[dict] | None = None,
 ) -> AudioTimeline:
     """逐单元请求 TTS，累积整数样本偏移，构造并写回 AudioTimeline。
 
     真实引擎（返回 audioPath）时在写回前拼接整期母轨（关口 A：③页直接试听）。
+    pronunciation 为提交时冻结的读音词典（全局 + 本工程合并），合成前应用替换。
     """
     bindings = _effective_bindings(project, bindings)
-    units = build_units(project, revision, bindings)
+    units = build_units(project, revision, bindings, pronunciation)
     if not units:
         raise ValueError("EMPTY_SCRIPT: 没有可合成的发言")
     valid_turn_ids = {unit.turn_id for unit in units}
@@ -143,7 +161,8 @@ async def synthesize_timeline(
     unit_paths: dict[str, str] = {}
     turn_speaker = {t.id: t.speaker for t in revision.turns}
     for index, unit in enumerate(units):
-        line_texts = [ln.spoken_text for ln in revision_turn_lines(revision, unit)]
+        line_texts = apply_pronunciation(
+            [ln.spoken_text for ln in revision_turn_lines(revision, unit)], pronunciation)
         if not "".join(line_texts).strip():
             raise ValueError(f"INVALID_AUDIO: 话轮 {unit.turn_id} 没有可朗读文本，请在脚本中删除或补全后重试")
         previous_adopted = adopted_by_unit.get(unit.id)

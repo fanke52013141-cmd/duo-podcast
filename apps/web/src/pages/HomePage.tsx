@@ -13,27 +13,15 @@
      .wu-btn      → 默认(primary) sm 实心「继续制作」，撑满卡片宽度
    ========================================================================== */
 import { useState } from 'react';
-import { useCreateProject, useJobs, usePatchProject, useProjects } from '../lib/api';
 import {
-  currentStageOf, formatEditedAt, outputVersionLabel, SPEAKERS, type Job, type Project,
+  useCreateProject, useCreateTemplate, useJobs, usePatchProject, useProjects, useTemplates,
+} from '../lib/api';
+import {
+  currentStageOf, formatEditedAt, outputVersionLabel, SPEAKERS, type Job, type ProgramTemplate,
+  type Project,
 } from '../lib/types';
-import { Badge, Button, Card, Empty, Icon, Input, Modal } from '../components/wu';
+import { Badge, Button, Card, Choice, Empty, Icon, Input, Modal } from '../components/wu';
 import { useProjectStore } from '../stores';
-
-const TEMPLATES = [
-  {
-    id: 'tech-weekly',
-    name: '科技周报',
-    desc: 'A·李雷（主持）/ B·韩梅梅（嘉宾）· 演播室同框 · 每周更新节奏',
-    tags: ['轻松对谈', '横屏 16:9', '本地引擎', '3 确认点'],
-  },
-  {
-    id: 'interview',
-    name: '人物访谈',
-    desc: 'A·主持（追问）/ B·嘉宾（观点输出）· 深度问答结构 · 可绑定 MiniMax 音色',
-    tags: ['深度问答', '横屏 16:9', '本地 + MiniMax', '3 确认点'],
-  },
-];
 
 /** 工程的后台任务口径：排队/执行中计为「后台任务 N」，渲染类另给「渲染中」文案。 */
 function jobSummary(jobs: Job[] | undefined, projectId: string) {
@@ -101,27 +89,58 @@ export function HomePage() {
   const { data: jobs } = useJobs();
   const createProject = useCreateProject();
   const patchProject = usePatchProject();
+  const createTemplate = useCreateTemplate();
+  const templates = useTemplates();
+  const tplList: ProgramTemplate[] = templates.data ?? [];
   const openProject = useProjectStore((s) => s.openProject);
   const [modalOpen, setModalOpen] = useState(false);
   const [templateId, setTemplateId] = useState<string>('blank');
   const [opsTarget, setOpsTarget] = useState<Project | null>(null);
   const [renameTo, setRenameTo] = useState('');
+  // 保存为模板：从既有工程提取配置（画幅 + A/B 声线引用）
+  const [saveTplOpen, setSaveTplOpen] = useState(false);
+  const [saveTplProjectId, setSaveTplProjectId] = useState<string>('');
+  const [saveTplName, setSaveTplName] = useState('');
+  const [saveTplDesc, setSaveTplDesc] = useState('');
+  // 新建空模板
+  const [newTplOpen, setNewTplOpen] = useState(false);
+  const [newTplName, setNewTplName] = useState('');
+  const [newTplDesc, setNewTplDesc] = useState('');
+  const [newTplAspect, setNewTplAspect] = useState<'landscape' | 'portrait'>('landscape');
 
   const handleCreate = async () => {
     // 失败时 Modal 内已有 createProject.isError 告警（见下方渲染），
     // 这里捕获以避免未处理 rejection（11 报告 P2-14）
     try {
-      // 模板当前真正带入的是节目名前缀（画幅等可复用配置待模板库后端就绪后接入），
-      // 不让「用此模板新建」沦为与空白工程完全相同的无效果。
-      const tpl = TEMPLATES.find((t) => t.id === templateId);
+      // 模板在服务端创建时套用（画幅 + A/B 声线引用）；标题带模板名前缀便于区分。
+      const tpl = tplList.find((t) => t.id === templateId);
       const proj = await createProject.mutateAsync({
         title: tpl ? `${tpl.name} · 未命名节目` : '未命名节目',
+        templateId: tpl ? tpl.id : undefined,
       });
       setModalOpen(false);
       openProject(proj.id);
     } catch {
       /* 提示由 Modal 内的 isError 告警承担 */
     }
+  };
+
+  const handleSaveTemplate = () => {
+    const name = saveTplName.trim();
+    if (!saveTplProjectId || !name) return;
+    createTemplate.mutate(
+      { projectId: saveTplProjectId, name, desc: saveTplDesc.trim() },
+      { onSuccess: () => setSaveTplOpen(false) },
+    );
+  };
+
+  const handleNewTemplate = () => {
+    const name = newTplName.trim();
+    if (!name) return;
+    createTemplate.mutate(
+      { name, desc: newTplDesc.trim(), config: { aspect: newTplAspect } },
+      { onSuccess: () => setNewTplOpen(false) },
+    );
   };
 
   const openOps = (p: Project) => {
@@ -196,22 +215,30 @@ export function HomePage() {
             <section>
               <div className="hf-sec-head">
                 <h2>节目模板</h2>
-                <span className="wu-caption">{TEMPLATES.length + 1} 个</span>
+                <span className="wu-caption">{tplList.length} 个</span>
                 <span className="hf-spacer" />
                 <Button
-                  variant="secondary" size="sm"
-                  onClick={() => alert('保存为模板：暂未开放（需后端提供模板持久化 API）')}
+                  variant="secondary" size="sm" icon="save"
+                  disabled={projects.length === 0}
+                  title={projects.length === 0 ? '先创建工程后，可将它的画幅与声线配置存为模板' : '从既有工程提取画幅与 A/B 声线配置'}
+                  onClick={() => {
+                    setSaveTplProjectId(projects[0]?.id ?? '');
+                    setSaveTplName('');
+                    setSaveTplDesc('');
+                    setSaveTplOpen(true);
+                  }}
                 >
                   保存为模板
                 </Button>
               </div>
               <div className="hf-grid3">
-                {TEMPLATES.map((t) => (
+                {tplList.map((t) => (
                   <Card key={t.id} className="hf-tcard">
-                    <h3>{t.name}</h3>
-                    <p>{t.desc}</p>
+                    <h3>{t.name}{t.builtin && <span className="wu-caption">（内置）</span>}</h3>
+                    <p>{t.desc || '（无简介）'}</p>
                     <div className="wu-row">
-                      {t.tags.map((tag) => <span key={tag} className="wu-badge">{tag}</span>)}
+                      {(t.tags ?? []).map((tag) => <span key={tag} className="wu-badge">{tag}</span>)}
+                      {t.config?.aspect && <span className="wu-badge">{t.config.aspect === 'portrait' ? '竖屏' : '横屏 16:9'}</span>}
                     </div>
                     <Button size="sm" variant="secondary" onClick={() => { setTemplateId(t.id); setModalOpen(true); }}>
                       用此模板新建
@@ -220,7 +247,7 @@ export function HomePage() {
                 ))}
                 <button
                   type="button" className="wu-card hf-new-tpl" aria-label="新建模板"
-                  onClick={() => { setTemplateId('blank'); setModalOpen(true); }}
+                  onClick={() => { setNewTplName(''); setNewTplDesc(''); setNewTplAspect('landscape'); setNewTplOpen(true); }}
                 >
                   <Icon name="plus" size={20} />
                   <span className="t">新建模板</span>
@@ -242,17 +269,17 @@ export function HomePage() {
           </>
         }
       >
-        <p className="wu-muted hf-hint">从模板开始，或创建空白工程——模板当前带入节目名与角色配置摘要，其余可复用配置待模板库后端就绪后接入。</p>
+        <p className="wu-muted hf-hint">从模板开始，或创建空白工程——选择模板会带入模板名前缀、画幅与 A/B 声线引用，内容从零开始。</p>
         <fieldset className="hf-fieldset">
           <legend>选择起点</legend>
           <label className="wu-choice">
             <input type="radio" name="tpl" checked={templateId === 'blank'} onChange={() => setTemplateId('blank')} />
             <span><b>空白工程</b> <span className="wu-caption">从话题 / 文章 / 已有脚本开始</span></span>
           </label>
-          {TEMPLATES.map((t) => (
+          {tplList.map((t) => (
             <label key={t.id} className="wu-choice">
               <input type="radio" name="tpl" checked={templateId === t.id} onChange={() => setTemplateId(t.id)} />
-              <span><b>{t.name}</b> <span className="wu-caption">{t.desc}</span></span>
+              <span><b>{t.name}</b> <span className="wu-caption">{t.desc || '模板将带入画幅与声线配置'}</span></span>
             </label>
           ))}
         </fieldset>
@@ -260,6 +287,75 @@ export function HomePage() {
           <div className="wu-alert" data-tone="danger">
             创建失败：{(createProject.error as Error)?.message}
           </div>
+        )}
+      </Modal>
+
+      <Modal
+        open={saveTplOpen}
+        onClose={() => setSaveTplOpen(false)}
+        title="保存为模板"
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setSaveTplOpen(false)}>取消</Button>
+            <Button
+              variant="brand" busy={createTemplate.isPending}
+              disabled={!saveTplProjectId || !saveTplName.trim()} onClick={handleSaveTemplate}
+            >保存</Button>
+          </>
+        }
+      >
+        <p className="wu-muted hf-hint">从所选工程提取可复用配置：画幅与 A/B 声线引用；脚本与产物不进入模板。</p>
+        <label className="wu-field">
+          <span className="wu-label">来源工程</span>
+          <select className="wu-input" aria-label="来源工程" value={saveTplProjectId} onChange={(e) => setSaveTplProjectId(e.target.value)}>
+            {projects.map((p) => <option key={p.id} value={p.id}>{p.id} · {p.title}</option>)}
+          </select>
+        </label>
+        <label className="wu-field">
+          <span className="wu-label">模板名称</span>
+          <Input value={saveTplName} onChange={(e) => setSaveTplName(e.target.value)} aria-label="模板名称" placeholder="如：科技周报 · 竖屏版" />
+        </label>
+        <label className="wu-field">
+          <span className="wu-label">简介（可选）</span>
+          <Input value={saveTplDesc} onChange={(e) => setSaveTplDesc(e.target.value)} aria-label="模板简介" />
+        </label>
+        {createTemplate.isError && (
+          <div className="wu-alert" data-tone="danger">保存失败：{(createTemplate.error as Error)?.message}</div>
+        )}
+      </Modal>
+
+      <Modal
+        open={newTplOpen}
+        onClose={() => setNewTplOpen(false)}
+        title="新建模板"
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setNewTplOpen(false)}>取消</Button>
+            <Button
+              variant="brand" busy={createTemplate.isPending}
+              disabled={!newTplName.trim()} onClick={handleNewTemplate}
+            >创建</Button>
+          </>
+        }
+      >
+        <p className="wu-muted hf-hint">先建一个只含名称与画幅的空模板；声线引用可稍后从其他工程「保存为模板」补充。</p>
+        <label className="wu-field">
+          <span className="wu-label">模板名称</span>
+          <Input value={newTplName} onChange={(e) => setNewTplName(e.target.value)} aria-label="新模板名称" placeholder="如：读书圈精读" />
+        </label>
+        <label className="wu-field">
+          <span className="wu-label">简介（可选）</span>
+          <Input value={newTplDesc} onChange={(e) => setNewTplDesc(e.target.value)} aria-label="新模板简介" />
+        </label>
+        <div className="wu-field">
+          <span className="wu-label">画幅</span>
+          <div className="wu-row">
+            <Choice type="radio" name="new-tpl-aspect" checked={newTplAspect === 'landscape'} onChange={() => setNewTplAspect('landscape')} label="横屏 16:9" />
+            <Choice type="radio" name="new-tpl-aspect" checked={newTplAspect === 'portrait'} onChange={() => setNewTplAspect('portrait')} label="竖屏" />
+          </div>
+        </div>
+        {createTemplate.isError && (
+          <div className="wu-alert" data-tone="danger">创建失败：{(createTemplate.error as Error)?.message}</div>
         )}
       </Modal>
 

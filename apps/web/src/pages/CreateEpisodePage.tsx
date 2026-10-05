@@ -158,6 +158,10 @@ export function CreateEpisodePage({ projectId }: { projectId: string }) {
                 <div className="wu-row">
                   <span className="wu-caption">结果进入阶段②为候选脚本，不自动覆盖已用版本。</span>
                   <span className="hf-spacer" />
+                  {/* 内容仍在本页输入框中，允许就地重新生成（否则只能绕道阶段②的「重新生成」） */}
+                  <Button variant="secondary" size="sm" icon="refresh" disabled={!canGenerate} onClick={handleGenerate}>
+                    重新生成
+                  </Button>
                   <Button variant="secondary" size="sm" onClick={() => setView('script')}>
                     前往编辑对话<Icon name="arrowRight" size={14} />
                   </Button>

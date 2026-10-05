@@ -12,6 +12,19 @@ from ..services.voice_svc import adopt_unit_candidate, find_revision
 router = APIRouter(prefix="/api/projects/{project_id}/voice", tags=["voice"])
 
 
+def _merged_pronunciation(request: Request, project) -> list[dict]:
+    """合成用读音词典：先全局（machine.json）后本工程，同词条工程级覆盖全局。"""
+    merged: dict[str, str] = {}
+    for entry in request.app.state.machine.get_global_pronunciation():
+        term = str(entry.get("term", "")).strip()
+        if term:
+            merged[term] = str(entry.get("read", ""))
+    for entry in project.pronunciation_dict:
+        if entry.term.strip():
+            merged[entry.term.strip()] = entry.read
+    return [{"term": k, "read": v} for k, v in merged.items()]
+
+
 @router.post("/synthesize")
 async def synthesize(project_id: str, payload: dict, request: Request) -> dict:
     manager: JobManager = request.app.state.job_manager
@@ -41,6 +54,8 @@ async def synthesize(project_id: str, payload: dict, request: Request) -> dict:
         "leadInMs": payload.get("leadInMs", 0),
         "tailOutMs": payload.get("tailOutMs", 0),
         "turnIds": turn_ids,
+        # 读音词典在提交时冻结进快照（01 §4.2：读音在合成阶段读取）
+        "pronunciation": _merged_pronunciation(request, project),
         "projectId": project_id,
     }
     job = manager.submit(

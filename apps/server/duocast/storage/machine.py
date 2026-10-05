@@ -18,10 +18,21 @@ class MachineSettings:
     def _data(self) -> dict:
         if self._file.exists():
             return json.loads(self._file.read_text(encoding="utf-8"))
-        return {"providerProfiles": {}}
+        return {"providerProfiles": {}, "pronunciationDict": []}
 
     def save(self, data: dict) -> None:
         self._file.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    def get_global_pronunciation(self) -> list[dict]:
+        """全局读音词典（01 §4.2 scope=全局）：[{term, read}]，跨工程生效。"""
+        return self._data().get("pronunciationDict", [])
+
+    def set_global_pronunciation(self, entries: list) -> None:
+        clean = [{"term": str(e.get("term", "")), "read": str(e.get("read", ""))}
+                 for e in entries if isinstance(e, dict) and str(e.get("term", "")).strip()]
+        data = self._data()
+        data["pronunciationDict"] = clean
+        self.save(data)
 
     def get_profile(self, profile_id: str) -> dict:
         return self._data().get("providerProfiles", {}).get(profile_id, {})

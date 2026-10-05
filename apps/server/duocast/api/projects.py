@@ -20,7 +20,7 @@ router = APIRouter(prefix="/api/projects", tags=["projects"])
 
 # 客户端可修改的字段（11 报告 P2-5：拒绝注入 revision/id/audioTimeline 等内部字段）
 ALLOWED_PATCH_FIELDS = {"title", "aspect", "scriptRevisions", "currentDraftRevision",
-                        "approvals", "voiceBindings"}
+                        "approvals", "voiceBindings", "pronunciationDict"}
 # 三个默认确认点必须绑定当前草稿（11 报告 P1-6；stage_svc 的推导口径与此一致）
 CONFIRM_KINDS = {"script", "voice", "sample"}
 # 工程 id 白名单：字母/数字/下划线/连字符/空格/中文，不含路径分隔符与点号（P1-4 路径穿越）
@@ -80,6 +80,21 @@ async def create_project(request: Request, payload: dict) -> dict:
         raise HTTPException(422, detail=exc.errors(
             include_url=False, include_context=False, include_input=False,
         )) from exc
+    # 模板套用（01 §1.5：模板只带可复用配置，不带内容）：创建即套用，免前端二次 PATCH。
+    template_id = payload.get("templateId")
+    if isinstance(template_id, str) and template_id:
+        tpl = request.app.state.template_store.get(template_id)
+        if tpl is None:
+            raise HTTPException(422, f"模板不存在: {template_id}")
+        config = tpl.get("config") or {}
+        patch: dict = {}
+        if config.get("aspect") in ("landscape", "portrait"):
+            patch["aspect"] = config["aspect"]
+        bindings = config.get("voiceBindings")
+        if isinstance(bindings, list) and bindings:
+            patch["voiceBindings"] = bindings
+        if patch:
+            proj = store.apply(proj.id, patch, expected_revision=proj.revision)
     return _inject_states(request, proj)
 
 

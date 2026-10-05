@@ -109,7 +109,8 @@ export function TasksPage() {
     return {
       running: all.filter((j) => RUNNING.includes(j.status)),
       queued: all.filter((j) => QUEUED.includes(j.status)),
-      finished: all.filter((j) => FINISHED.includes(j.status) && new Date(j.createdAt).toDateString() === today),
+      // 「已结束（今日）」按完成时刻过滤：按 createdAt 会让跨零点完成的任务从列表消失
+      finished: all.filter((j) => FINISHED.includes(j.status) && new Date(j.finishedAt ?? j.createdAt).toDateString() === today),
     };
   }, [all]);
 

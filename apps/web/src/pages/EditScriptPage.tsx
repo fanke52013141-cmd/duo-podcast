@@ -6,11 +6,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import {
-  upsertDraftTurns, useConfirm, useGenerateScript, useJobs, useProject, useSaveDraft,
-  useScriptRewrite,
+  upsertDraftTurns, useConfirm, useGenerateScript, useJobs, useMachine, useProject, useSaveDraft,
+  useSaveMachine, useScriptRewrite,
 } from '../lib/api';
-import { type Job, type Project, type ScriptRevision, type Turn } from '../lib/types';
-import { Alert, Badge, Button, Icon, Input, Modal, Textarea } from '../components/wu';
+import { type Job, type Project, type PronunciationEntry, type ScriptRevision, type Turn } from '../lib/types';
+import { Alert, Badge, Button, Choice, Icon, Input, Modal, Textarea } from '../components/wu';
 import { AppShell, FootBar, StageHead } from '../components/AppShell';
 import { useProjectStore } from '../stores';
 
@@ -664,48 +664,112 @@ export function EditScriptPage({ projectId }: { projectId: string }) {
         </span>
       </div>
 
-      {/* ---- 读音词典（01 §4.2 全局面板） ---- */}
+      {/* ---- 读音词典（01 §4.2 全局面板；工程级/全局级均已持久化） ---- */}
       <DictModal
         open={dictOpen}
         onClose={() => setDictOpen(false)}
         hintPron={pronCount}
+        project={proj ?? null}
       />
     </AppShell>
   );
 }
 
-function DictModal({ open, onClose, hintPron }: { open: boolean; onClose: () => void; hintPron: number }) {
-  const [rows, setRows] = useState<{ term: string; read: string; scope: '全局' | '本工程' }[]>([
-    { term: 'KV 缓存', read: '读作「K-V 缓存」', scope: '全局' },
-    { term: 'MiniMax', read: '英文原音', scope: '全局' },
-  ]);
+function DictModal({ open, onClose, hintPron, project }: {
+  open: boolean; onClose: () => void; hintPron: number; project: Project | null;
+}) {
+  const machine = useMachine();
+  const saveMachine = useSaveMachine();
+  const saveDraft = useSaveDraft();
   const [term, setTerm] = useState('');
   const [read, setRead] = useState('');
+  const [scope, setScope] = useState<'全局' | '本工程'>('本工程');
+  const [error, setError] = useState<string | null>(null);
+
+  const globalEntries: PronunciationEntry[] = machine.data?.pronunciationDict ?? [];
+  const projectEntries: PronunciationEntry[] = project?.pronunciationDict ?? [];
+
+  const saveProjectEntries = (next: PronunciationEntry[]) => {
+    if (!project) return;
+    saveDraft.mutate(
+      { projectId: project.id, patch: { pronunciationDict: next }, expectedRevision: project.revision },
+      { onError: (e) => setError(`保存本工程词典失败：${(e as Error).message}`) },
+    );
+  };
+  const saveGlobalEntries = (next: PronunciationEntry[]) => {
+    saveMachine.mutate(
+      { pronunciationDict: next },
+      { onError: (e) => setError(`保存全局词典失败：${(e as Error).message}`) },
+    );
+  };
+
+  const addEntry = () => {
+    setError(null);
+    if (!term.trim() || !read.trim()) return;
+    if ([...globalEntries, ...projectEntries].some((e) => e.term === term.trim())) {
+      setError(`词条「${term.trim()}」已存在，请先删除原条目再修改。`);
+      return;
+    }
+    const entry = { term: term.trim(), read: read.trim() };
+    if (scope === '全局') saveGlobalEntries([...globalEntries, entry]);
+    else saveProjectEntries([...projectEntries, entry]);
+    setTerm('');
+    setRead('');
+  };
+  const removeEntry = (entryScope: '全局' | '本工程', entryTerm: string) => {
+    setError(null);
+    if (entryScope === '全局') saveGlobalEntries(globalEntries.filter((e) => e.term !== entryTerm));
+    else saveProjectEntries(projectEntries.filter((e) => e.term !== entryTerm));
+  };
+
   return (
     <Modal
-      open={open} onClose={onClose} title="读音词典" width={520}
+      open={open} onClose={onClose} title="读音词典" width={560}
       footer={
         <div className="wu-row" style={{ gap: 8 }}>
-          <Button variant="secondary" size="sm" onClick={() => { if (term && read) { setRows([...rows, { term, read, scope: '本工程' }]); setTerm(''); setRead(''); } }}>新增</Button>
+          <span className="wu-caption">词条在提交配音时冻结进任务快照，合成前按顺序替换</span>
           <span className="hf-spacer" />
           <Button size="sm" onClick={onClose}>完成</Button>
         </div>
       }
     >
-      <div className="hf-dict-row" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: 8 }}>
-        <Input placeholder="词条（如 3:12）" value={term} onChange={(e) => setTerm(e.target.value)} aria-label="词条" />
+      <div className="hf-dict-row" style={{ display: 'grid', gridTemplateColumns: '1.2fr 1.2fr auto', gap: 8 }}>
+        <Input placeholder="词条（如 3:12 / KV）" value={term} onChange={(e) => setTerm(e.target.value)} aria-label="词条" />
         <Input placeholder="读法（如 三分十二秒）" value={read} onChange={(e) => setRead(e.target.value)} aria-label="读法" />
-        <span className="wu-caption" style={{ alignSelf: 'center' }}>本工程</span>
+        <Button variant="secondary" size="sm" disabled={!term.trim() || !read.trim()} onClick={addEntry}>新增</Button>
       </div>
-      {hintPron > 0 && <p className="wu-caption">当前草稿检出读音提示 {hintPron} 处，可在下方维护后由合成阶段读取。</p>}
-      {rows.map((r) => (
-        <div className="hf-dict-row" key={r.term + r.read}>
-          <span className="term">{r.term}</span>
-          <span className="read">{r.read}</span>
+      <div className="wu-row" style={{ gap: 14, margin: '8px 0 4px' }}>
+        <Choice type="radio" name="dict-scope" checked={scope === '本工程'} onChange={() => setScope('本工程')}
+          label={<span>存入本工程{project ? `（${project.id}）` : ''}</span>} />
+        <Choice type="radio" name="dict-scope" checked={scope === '全局'} onChange={() => setScope('全局')}
+          label="存入全局（所有工程生效）" />
+      </div>
+      {error && <Alert tone="danger">{error}</Alert>}
+      {hintPron > 0 && <p className="wu-caption">当前草稿检出读音提示 {hintPron} 处，可在上方维护后由合成阶段读取。</p>}
+
+      <div style={{ marginTop: 8 }}>
+        <div className="hf-dict-row" style={{ fontWeight: 600 }}>
+          <span className="term">词条</span>
+          <span className="read">读法</span>
           <span className="hf-spacer" />
-          <span className="wu-caption">{r.scope}</span>
+          <span className="wu-caption">范围</span>
         </div>
-      ))}
+        {[...projectEntries.map((e) => ({ ...e, scope: '本工程' as const })),
+          ...globalEntries.map((e) => ({ ...e, scope: '全局' as const }))].map((r) => (
+          <div className="hf-dict-row" key={`${r.scope}-${r.term}`}>
+            <span className="term">{r.term}</span>
+            <span className="read">{r.read}</span>
+            <span className="hf-spacer" />
+            <span className="wu-caption">{r.scope}</span>
+            <Button variant="ghost" size="sm" aria-label={`删除 ${r.term}`} onClick={() => removeEntry(r.scope, r.term)}>
+              删除
+            </Button>
+          </div>
+        ))}
+        {projectEntries.length === 0 && globalEntries.length === 0 && (
+          <p className="wu-caption">还没有词条。新增后立即保存：本工程随工程落盘，全局存机器设置。</p>
+        )}
+      </div>
     </Modal>
   );
 }

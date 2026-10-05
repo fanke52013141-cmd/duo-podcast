@@ -203,13 +203,19 @@ def test_restore_queued_history_and_unknown(tmp_path):
 
 
 def test_voice_api_freezes_revision_at_submission(tmp_path):
+    from duocast.storage.machine import MachineSettings
     store, project, revision = project_fixture(tmp_path)
     manager = manager_fixture(tmp_path)
-    request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(project_store=store, job_manager=manager)))
+    machine = MachineSettings(tmp_path / 'machine')
+    machine.set_global_pronunciation([{'term': '你好', 'read': 'nǐ hǎo'}])
+    request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(
+        project_store=store, job_manager=manager, machine=machine)))
     result = asyncio.run(synthesize(project.id, {}, request))
     job = manager.get(result['jobId'])
     assert job.input_snapshot['revisionId'] == 'R1'
     assert job.input_snapshot['projectSnapshot']['scriptRevisions'][0]['id'] == 'R1'
+    # 读音词典在提交时冻结进快照（全局 machine + 工程级合并）
+    assert job.input_snapshot['pronunciation'] == [{'term': '你好', 'read': 'nǐ hǎo'}]
 
 
 @pytest.mark.parametrize('seconds,expected', [(300, None), (301, 422)])

@@ -31,6 +31,7 @@ from .services.voice_svc import find_revision, synthesize_timeline
 from .storage.artifacts import ArtifactStore
 from .storage.machine import CacheStore, MachineSettings
 from .storage.project_store import InvalidProjectInput, ProjectStore
+from .storage.templates import TemplateStore
 
 setup_logging()
 
@@ -79,6 +80,7 @@ def _job_runner(manager: JobManager, store: ProjectStore, artifacts: ArtifactSto
                 lead_in_ms=job.input_snapshot.get("leadInMs", 0),
                 tail_out_ms=job.input_snapshot.get("tailOutMs", 0),
                 target_turn_ids=job.input_snapshot.get("turnIds"),
+                pronunciation=job.input_snapshot.get("pronunciation"),
                 artifact_store=artifacts,
                 artifacts_root=artifacts.root,
             )
@@ -225,6 +227,7 @@ async def lifespan(app: FastAPI):
     app.state.artifacts = artifacts
     app.state.machine = machine
     app.state.cache = cache
+    app.state.template_store = TemplateStore(settings.storage_root / "templates")
     app.state.event_bus = event_bus
     app.state.job_manager = job_manager
     app.state.capabilities = capabilities
@@ -271,12 +274,14 @@ from .api import projects as projects_api
 from .api import providers as providers_api
 from .api import render as render_api
 from .api import script as script_api
+from .api import templates as templates_api
 from .api import visual as visual_api
 from .api import voice as voice_api
 
 app.include_router(projects_api.router)
 app.include_router(providers_api.router)
 app.include_router(script_api.router)
+app.include_router(templates_api.router)
 app.include_router(voice_api.router)
 app.include_router(visual_api.router)
 app.include_router(render_api.router)

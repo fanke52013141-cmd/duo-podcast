@@ -142,6 +142,9 @@ export interface ArtifactEntry {
   workflowVersion: string | null;
 }
 
+/* ---- 读音词典条目（01 §4.2）：工程级随工程存，全局级存 machine.json ---- */
+export interface PronunciationEntry { term: string; read: string; }
+
 export interface Project {
   schemaVersion: number;
   id: string;
@@ -156,6 +159,8 @@ export interface Project {
   audioHistory?: AudioTimeline[];
   visualVariants: VisualVariant[];
   outputVersion: string | null;
+  /** 本工程读音词典（全局词典在 machine 设置） */
+  pronunciationDict?: PronunciationEntry[];
   stageProgress: Partial<Record<StageId, StageState>>;
   approvals: Approval[];
   revision: number;
@@ -210,8 +215,23 @@ export interface ServerEvent {
 export interface MachineSettings {
   providerProfiles: Record<string, { credentialRef?: string }>;
   vramAllocation: Record<string, number>;
+  /** 全局读音词典（01 §4.2 scope=全局），跨工程生效 */
+  pronunciationDict?: PronunciationEntry[];
   queueCaps: Record<string, number>;
   capabilities: Capabilities;
+}
+
+/* ---- 节目模板（01 §1.5：只带可复用配置，不带内容） ---- */
+export interface ProgramTemplate {
+  id: string;
+  name: string;
+  desc: string;
+  tags: string[];
+  builtin?: boolean;
+  config: {
+    aspect?: Aspect;
+    voiceBindings?: { characterId: string; providerProfileId: string; modelId: string }[];
+  };
 }
 
 /** 服务提供方展示元数据（能力徽章中文名，01 §1.6.4） */

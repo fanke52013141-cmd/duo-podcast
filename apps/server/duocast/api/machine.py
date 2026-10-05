@@ -34,6 +34,7 @@ async def get_machine(request: Request) -> dict:
     return {
         "providerProfiles": data.get("providerProfiles", {}),
         "vramAllocation": data.get("vramAllocation", {}),
+        "pronunciationDict": data.get("pronunciationDict", []),
         "queueCaps": {
             "gpu": settings.queue_cap_gpu,
             "api": settings.queue_cap_api,
@@ -51,8 +52,12 @@ async def patch_machine(payload: dict, request: Request) -> dict:
         data["providerProfiles"] = _sanitize_profiles(payload["providerProfiles"])
     if isinstance(payload.get("vramAllocation"), dict):
         data["vramAllocation"] = payload["vramAllocation"]
+    if isinstance(payload.get("pronunciationDict"), list):
+        m.set_global_pronunciation(payload["pronunciationDict"])
+        data = m._data()
     m.save(data)
     return {
         "providerProfiles": data.get("providerProfiles", {}),
         "vramAllocation": data.get("vramAllocation", {}),
+        "pronunciationDict": data.get("pronunciationDict", []),
     }

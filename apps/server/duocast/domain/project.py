@@ -40,6 +40,15 @@ class SourceAnchor(BaseModel):
     quote: str = ""
 
 
+class PronunciationEntry(BaseModel):
+    """读音词典条目（01 §4.2）：term 按原文匹配，read 为朗读替换文本。
+    工程级词典随工程持久化；全局词典存 machine.json，合成时合并生效。"""
+
+    model_config = dc_config()
+    term: str
+    read: str
+
+
 class Line(BaseModel):
     model_config = dc_config()
     id: str  # L019
@@ -92,6 +101,8 @@ class Project(BaseModel):
     audio_history: list[AudioTimeline] = Field(default_factory=list)
     visual_variants: list[VisualVariant] = Field(default_factory=list)  # 阶段④产物
     output_version: Optional[str] = None  # 阶段⑤产物版本（OUT-Rn-vN）
+    # 本工程读音词典（01 §4.2）；全局词典在 machine.json，合成时按「先全局后本工程」合并
+    pronunciation_dict: list[PronunciationEntry] = Field(default_factory=list)
     stage_progress: dict[StageId, StageState] = Field(default_factory=dict)
     approvals: list[Approval] = Field(default_factory=list)
     revision: int = 0  # expectedRevision 冲突保护（01 §12.1）
