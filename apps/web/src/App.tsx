@@ -7,7 +7,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useCapabilities, useProject } from './lib/api';
 import { startSse } from './lib/sse';
 import { useJobStore, useProjectStore, useServiceStore } from './stores';
-import { AppShell, FootBar } from './components/AppShell';
+import { AppShell } from './components/AppShell';
 import { Empty, Button } from './components/wu';
 import { HomePage } from './pages/HomePage';
 import { CreateEpisodePage } from './pages/CreateEpisodePage';
@@ -49,7 +49,6 @@ function WorkspacePage({ projectId, view }: { projectId: string; view: string })
               action={<Button variant="secondary" onClick={() => setView('create')}>返回创建本期</Button>}
             />
           </div>
-          <FootBar />
         </AppShell>
       );
   }

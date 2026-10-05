@@ -8,7 +8,7 @@ import {
 } from '../lib/api';
 import { STAGE_META, type SourceKind } from '../lib/types';
 import { Alert, Badge, Button, Choice, Field, Icon, Input, SegControl, Tabs, Textarea } from '../components/wu';
-import { AppShell, FootBar, StageHead } from '../components/AppShell';
+import { AppShell, StageHead } from '../components/AppShell';
 import { useProjectStore } from '../stores';
 
 type DurationMode = 'auto' | 'approx';
@@ -99,7 +99,7 @@ export function CreateEpisodePage({ projectId }: { projectId: string }) {
     <AppShell
       project={proj ?? null}
       onNavigate={setView}
-      footer={<FootBar hint={proj ? `${proj.id} · ${proj.title}` : undefined} />}
+      footer={null}
     >
       <StageHead title="创建本期">
         {stageState && stageState !== 'ready' && <Badge tone={STAGE_META[stageState].tone}>{STAGE_META[stageState].label}</Badge>}

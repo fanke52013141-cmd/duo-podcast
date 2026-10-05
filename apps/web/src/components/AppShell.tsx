@@ -93,7 +93,6 @@ export function StageRail({ project, onNavigate }: { project: Project | null; on
           {e.label}
         </button>
       ))}
-      <div className="hf-note">工程保存在本机；文本 / 图片请求发送到所选 API。</div>
     </nav>
   );
 }
@@ -173,13 +172,9 @@ export function TimelineBar({
 }
 
 export function FootBar({ hint }: { hint?: React.ReactNode }) {
-  return (
-    <footer className="hf-foot">
-      {hint}
-      <span className="hf-spacer" />
-      <span className="wu-caption">双声播客工坊 v0.1</span>
-    </footer>
-  );
+  // 底栏只承载功能性内容（上一步/下一步、确认点徽章）；纯展示信息（工程名重复、版本号）一律不放。
+  if (!hint) return null;
+  return <footer className="hf-foot">{hint}</footer>;
 }
 
 export function AppShell({
@@ -209,7 +204,7 @@ export function AppShell({
           实测设计稿 .hf-app 子元素顺序 = [hf-top, hf-mid, hf-timeline, hf-foot]；
           此前实现两者都塞进 .hf-main，导致底栏起点右移 208px（阶段轨宽度）。 */}
       {timeline}
-      {footer === undefined ? <FootBar /> : footer}
+      {footer === undefined ? null : footer}
     </div>
   );
 }
