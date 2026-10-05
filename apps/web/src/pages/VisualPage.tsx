@@ -256,9 +256,7 @@ export function VisualPage({ projectId }: { projectId: string }) {
                   <Button variant="secondary" size="sm" busy={generating} disabled={!canGenerate} onClick={handleGenerate}>生成</Button>
                   <Button variant="secondary" size="sm" icon="upload" disabled>上传</Button>
                 </div>
-                <p className="wu-caption" style={{ marginTop: 8, lineHeight: 1.6 }}>
-                  生成时明确引用 A/B 身份图、场景、目标比例；候选图需由人检查身份和遮挡。不支持多参考图编辑时提供上传替代，<b>不默默丢掉人物参考图</b>。
-                </p>
+                <p className="wu-caption" style={{ marginTop: 8 }}>候选底图需人工检查身份与遮挡。</p>
               </>
             ) : (
               <>
@@ -301,8 +299,8 @@ export function VisualPage({ projectId }: { projectId: string }) {
             )}
             <p className="wu-caption" style={{ lineHeight: 1.6 }}>
               {visualMode === 'twoShot'
-                ? <>在<b>最终送入视频工作流的图</b>上标注；矩形框为首版，精细笔刷后置。修改构图后需重新生成人物区域与样片，原图和旧样片保留作比较。</>
-                : <>更换机位素材会使对应视频片段失效；只改已有视频内的切点时，可以复用有效片段重新拼接。</>}
+                ? <>修改构图后需重新生成人物区域与样片。</>
+                : <>更换机位素材会使对应视频片段失效。</>}
             </p>
           </div>
 
@@ -449,7 +447,7 @@ export function VisualPage({ projectId }: { projectId: string }) {
                     <select className="hf-mini-select" aria-label="角色 B"><option>韩梅梅 · 资产库</option></select>
                   </span>
                   <span className="hf-spacer" />
-                  <span className="wu-caption">不要求每期重新生成；失败时保存提示词与引用关系可重试</span>
+                  
                 </div>
               </>
             ) : (
@@ -506,8 +504,6 @@ export function VisualPage({ projectId }: { projectId: string }) {
                   />
                 ))}
                 <span className="hf-spacer" />
-                <Button variant="secondary" size="sm" icon="play" disabled={!selected}>轻量预览</Button>
-                <span className="wu-caption">构图预览，无动态口型</span>
               </div>
             ) : (
               <div className="hf-ots-route" aria-label="正反打镜头安排">

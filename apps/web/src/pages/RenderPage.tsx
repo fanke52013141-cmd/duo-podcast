@@ -184,7 +184,7 @@ export function RenderPage({ projectId }: { projectId: string }) {
           <div className="hf-ins-sec">
             <h4>竖屏导出</h4>
             <p className="wu-caption" style={{ lineHeight: 1.8 }}>
-              先展示裁切预览；人物无法同时保留时提供上下双窗或整幅嵌入竖屏画布；能后期实现的只重跑后处理。
+              人物无法同框保留时，提供双窗或整幅嵌入竖屏画布。
             </p>
           </div>
 
@@ -246,7 +246,7 @@ export function RenderPage({ projectId }: { projectId: string }) {
         <div className="hf-s5">
           {/* 开始生成前确认（01 §7.1） */}
           <section className="hf-summary">
-            <div className="hf-summary-t">开始生成前确认 <span className="wu-caption">输入快照将在点击「开始生成」时冻结</span></div>
+            <div className="hf-summary-t">开始生成前确认 <span className="wu-caption">点击「开始生成」时冻结输入快照</span></div>
             <div className="hf-summary-grid">
               <div className="hf-kv"><div className="k">{simulated ? '演示估算时长' : '实际时长'}</div><div className="v hf-mono">{timeline ? fmtT(totalSecs) : '—'}</div></div>
               <div className="hf-kv"><div className="k">画布</div><div className="v">{proj?.aspect === 'portrait' ? '竖屏 9:16' : '横屏 16:9'} · {resolution} 导出画布</div></div>
@@ -264,7 +264,7 @@ export function RenderPage({ projectId }: { projectId: string }) {
 
           {/* 分段进度网格（01 §7.2） */}
           <section>
-            <div className="hf-zone-t">分段进度 <span className="wu-caption">基础视频 → 保留区间合成 → 镜头裁切与版式 → 可选补帧 → 可选烧录字幕 → 合并音轨 → 编码 → 校验（02 §6.5）</span></div>
+            <div className="hf-zone-t">分段进度</div>
             {segments.length === 0 ? (
               <Alert tone="muted">合成时间轨后在此展示分段计划。</Alert>
             ) : (
@@ -290,7 +290,7 @@ export function RenderPage({ projectId }: { projectId: string }) {
 
           {/* 导出区（01 §7.3） */}
           <section className="hf-export">
-            <div className="hf-zone-t">导出 <span className="wu-caption">正式产物使用不可变版本路径，不覆盖同名 final.mp4</span></div>
+            <div className="hf-zone-t">导出</div>
             <div className="hf-export-item">
               <b>MP4</b>
               <span className="hf-spacer" />
@@ -299,7 +299,7 @@ export function RenderPage({ projectId }: { projectId: string }) {
             <div className="hf-export-item">
               <b>混音 WAV</b>
               <span className="hf-spacer" />
-              <span className="wu-caption">{timeline?.sampleRate ?? 48000}Hz 主轨 · 样本次数权威</span>
+              <span className="wu-caption">{timeline?.sampleRate ?? 48000}Hz 主轨</span>
             </div>
             <div className="hf-export-item">
               <b>A/B 分轨</b>
@@ -308,9 +308,7 @@ export function RenderPage({ projectId }: { projectId: string }) {
             </div>
             <div className="hf-export-item">
               <b>SRT 字幕</b>
-              <Choice type="checkbox" checked={burnSubtitle} onChange={setBurnSubtitle} label="烧录字幕（可选，仅影响对应后处理）" />
               <span className="hf-spacer" />
-              <span className="wu-caption">显示文本不含引擎专用标签</span>
             </div>
             <div style={{ display: 'flex', gap: 8, marginTop: 10, alignItems: 'center' }}>
               <Button variant="secondary" size="sm" disabled title="接入桌面集成后可打开输出目录">打开输出目录</Button>

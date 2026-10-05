@@ -174,7 +174,7 @@ export function TasksPage() {
           {inQueue && (
             <div className="hf-que-note">
               <span className="ph-wait" />
-              等待 {j.queueClass} 队列 · 第 {j.queuePosition ?? '—'} 位（按优先级与提交顺序）
+              等待 {j.queueClass} 队列 · 第 {j.queuePosition ?? '—'} 位
             </div>
           )}
 
@@ -252,16 +252,7 @@ export function TasksPage() {
               <Button variant="secondary" size="sm" disabled={!canPause} busy={pause.isPending || resume.isPending} onClick={() => handlePause()}>{selected?.status === 'paused' ? '继续' : '当前任务完成后暂停'}</Button>
               <Button variant="ghost" size="sm" disabled={!canCancel} busy={cancel.isPending} onClick={() => handleCancel()}>取消</Button>
             </div>
-            <p className="wu-caption" style={{ marginTop: 8, lineHeight: 1.65 }}>
-              「正在取消」与「已取消」分开呈现；没有可验证的定向取消能力时显示「取消待生效」。取消后当前段已落盘内容保留，可续跑。
-            </p>
-          </div>
-
-          <div className="hf-ins-sec">
-            <h4>连接与一致性</h4>
-            <p className="wu-caption" style={{ lineHeight: 1.7 }}>
-              事件带序号；断线后从服务端<b>读取完整状态</b>（补发或读快照），不依赖浏览器此前收到的进度。任务详情随列表状态实时刷新。
-            </p>
+            <p className="wu-caption" style={{ marginTop: 8 }}>取消后已落盘内容保留，可续跑。</p>
           </div>
 
           {selected?.result && (
@@ -322,7 +313,7 @@ export function TasksPage() {
         </section>
 
         <div className="hf-foot-note">
-          <span>GPU / API / CPU 三队列各自并发上限；暂停为协作式（当前段完成后生效），取消保留已落盘内容。</span>
+          <span>暂停在当前段完成后生效；取消保留已落盘内容。</span>
         </div>
       </div>
     </AppShell>

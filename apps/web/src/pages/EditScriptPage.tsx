@@ -55,7 +55,7 @@ function countHints(turns: Turn[]): { hints: QaHint[]; pronCount: number } {
     if (!text) {
       hints.push({
         kind: 'local', level: 'warn', title: '存在空话轮', turnId: t.id,
-        detail: `本地计算：${t.id} 没有台词，确认前请补全或删除（空话轮会导致合成失败）`,
+        detail: `${t.id} 没有台词，确认前请补全或删除（空话轮会导致合成失败）`,
       });
       return;
     }
@@ -68,13 +68,13 @@ function countHints(turns: Turn[]): { hints: QaHint[]; pronCount: number } {
     if (text.length > 90) {
       hints.push({
         kind: 'local', level: 'warn', title: '连续独白较长', turnId: t.id,
-        detail: `本地计算：${t.id} 单条 ${text.length} 字，建议拆分或插问`,
+        detail: `${t.id} 单条 ${text.length} 字，建议拆分或插问`,
       });
     }
     if (/[\d]/.test(text) && !(t.sourceAnchors?.length)) {
       hints.push({
         kind: 'local', level: 'info', title: '这一段缺少来源',
-        detail: `本地计算：${t.id} 断言无来源锚点`,
+        detail: `${t.id} 断言无来源锚点`,
       });
     }
   });
@@ -417,20 +417,19 @@ export function EditScriptPage({ projectId }: { projectId: string }) {
                     <button type="button" aria-label="加快" onClick={() => updateTurn(selectedTurn.id, { speedRatio: Math.min(1.5, +(selectedTurn.speedRatio + 0.05).toFixed(2)) })}>+</button>
                   </span>
                 </div>
-                <p className="wu-caption" style={{ marginTop: 8, lineHeight: 1.6 }}>
-                  显示文本与朗读文本分别保存（displayText / spokenText）；读法见
-                  <a className="hf-link" onClick={() => setDictOpen(true)}>读音词典</a>。
+                <p className="wu-caption" style={{ marginTop: 8 }}>
+                  读法见<a className="hf-link" onClick={() => setDictOpen(true)}>读音词典</a>。
                 </p>
               </>
             ) : (
-              <p className="wu-caption">点击话轮卡片查看其发音属性；Ctrl/⌘ 多选后可用选区工具条。</p>
+              <p className="wu-caption">点击话轮查看属性；Ctrl/⌘ 多选。</p>
             )}
           </div>
 
           <div className="hf-ins-sec">
             <h4>质量提示</h4>
             {hints.length === 0 ? (
-              <p className="wu-caption">本地计算与语义建议均无异常。</p>
+              <p className="wu-caption">无异常。</p>
             ) : hints.map((h, i) => (
               <div className="hf-qa" key={i} style={{ marginBottom: 8 }}>
                 <span className="q">
@@ -446,7 +445,7 @@ export function EditScriptPage({ projectId }: { projectId: string }) {
             ))}
             {pronCount > 0 && (
               <div className="hf-qa" style={{ marginTop: 8 }}>
-                <span className="q"><b>读音：{pronCount} 处</b><br />本地计算：专名 / 缩写 / 数字，可在读音词典中维护</span>
+                <span className="q"><b>读音：{pronCount} 处</b><br />可在读音词典中维护</span>
               </div>
             )}
           </div>
@@ -457,7 +456,6 @@ export function EditScriptPage({ projectId }: { projectId: string }) {
           <span className="wu-row" style={{ gap: 12 }}>
             <Button variant="ghost" size="sm" icon="arrowLeft" onClick={() => navigateAfterFlush('create')}>上一步</Button>
             <Badge tone="warning" icon="alert">确认点 · 脚本确认</Badge>
-            <span className="wu-caption">确认后可选自动启动配音</span>
             <span className="hf-spacer" />
             <Button size="sm" disabled={!revision || saving} onClick={() => navigateAfterFlush('voice')}>下一步<Icon name="arrowRight" size={14} /></Button>
           </span>
@@ -539,7 +537,6 @@ export function EditScriptPage({ projectId }: { projectId: string }) {
                   </Button>
                 ))}
                 <span className="hf-spacer" />
-                <span className="hf-ai">AI 建议</span>
               </div>
             )}
 
@@ -638,11 +635,11 @@ export function EditScriptPage({ projectId }: { projectId: string }) {
 
             <div className="wu-row" style={{ gap: 12, margin: '2px 0 8px' }}>
               <Button variant="secondary" size="sm" icon="plus" onClick={addTurn}>发言</Button>
-              <span className="wu-caption">拖动发言左侧手柄排序 · 稳定 ID（{turns[0]?.id}）不随显示序号改变</span>
+              
             </div>
             <div className="wu-row" style={{ gap: 12, marginBottom: 6 }}>
               <Button variant="secondary" size="sm" icon="edit" onClick={() => setDictOpen(true)}>读音词典</Button>
-              <span className="wu-caption">专名 · 数字 · 缩写；显示文本与朗读文本分别保存</span>
+              
             </div>
           </div>
         </div>

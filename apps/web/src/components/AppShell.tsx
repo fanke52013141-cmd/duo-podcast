@@ -93,7 +93,7 @@ export function StageRail({ project, onNavigate }: { project: Project | null; on
           {e.label}
         </button>
       ))}
-      <div className="hf-note">工程与成片保存在本机；文本 / 图片请求发送到所选 API。</div>
+      <div className="hf-note">工程保存在本机；文本 / 图片请求发送到所选 API。</div>
     </nav>
   );
 }
@@ -175,9 +175,7 @@ export function TimelineBar({
 export function FootBar({ hint }: { hint?: React.ReactNode }) {
   return (
     <footer className="hf-foot">
-      <span className="hf-pos">阶段导航</span>
-      <span>·</span>
-      <span>{hint ?? '选择左侧阶段进入对应制作页'}</span>
+      {hint}
       <span className="hf-spacer" />
       <span className="wu-caption">双声播客工坊 v0.1</span>
     </footer>

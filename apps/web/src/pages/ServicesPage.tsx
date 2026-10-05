@@ -7,7 +7,7 @@
 import { useEffect, useState } from 'react';
 import { useCapabilities, useMachine, useSaveMachine, useTestProvider } from '../lib/api';
 import { PROVIDER_META } from '../lib/types';
-import { Badge, Button, Choice, Icon, Input, type Tone } from '../components/wu';
+import { Badge, Button, Choice, Input, type Tone } from '../components/wu';
 import { AppShell } from '../components/AppShell';
 import { useProjectStore } from '../stores';
 
@@ -167,9 +167,7 @@ export function ServicesPage() {
                 </select>
                 <Button variant="secondary" size="sm" busy={test.isPending && testResult.imageApi === null} onClick={() => handleTest('imageApi')}>测试连接</Button>
               </div>
-              <p className="wu-caption" style={{ lineHeight: 1.7 }}>
-                测试按钮区分<b>付费试听</b>与<b>只读连通检查</b>；有费用时标注「此测试会产生费用」。连接成功不代表具备人物一致性或多参考图能力。
-              </p>
+              <p className="wu-caption" style={{ lineHeight: 1.7 }}>连接成功不代表具备人物一致性或多参考图能力。</p>
             </section>
 
             {/* 本地引擎（01 §9.1） */}
@@ -193,7 +191,7 @@ export function ServicesPage() {
                 <Button variant="ghost" size="sm" busy={test.isPending && testResult.tts === null} onClick={() => handleTest('tts')}>自检</Button>
               </div>
               <p className="wu-caption" style={{ lineHeight: 1.7 }}>
-                分配合计 {totalVram} GB（人工预算门控，实际以关口 A 实测为准）。{testNote('tts')}
+                分配合计 {totalVram} GB（人工预算）。{testNote('tts')}
               </p>
             </section>
 
@@ -209,7 +207,7 @@ export function ServicesPage() {
                 </span>
                 <Button variant="secondary" size="sm" disabled title="接入密钥库后可管理">管理绑定</Button>
               </div>
-              <p className="wu-caption" style={{ lineHeight: 1.7 }}>付费试听与只读连通检查区分；音色可用性在能力面板单独登记。</p>
+              
             </section>
 
             {/* 显存分配（本机真实设置） */}
@@ -246,10 +244,7 @@ export function ServicesPage() {
                 <Badge tone={r.tone}>{r.badge}{r.note ? `（${r.note}）` : ''}</Badge>
               </div>
             ))}
-            <p className="wu-caption" style={{ marginTop: 10, lineHeight: 1.7, display: 'flex', gap: 6 }}>
-              <Icon name="info" size={12} />
-              能力门控来自 GET /providers/capabilities；测试连接调用各适配器。
-            </p>
+
           </aside>
         </div>
       </div>

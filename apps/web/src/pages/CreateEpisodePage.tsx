@@ -99,7 +99,7 @@ export function CreateEpisodePage({ projectId }: { projectId: string }) {
     <AppShell
       project={proj ?? null}
       onNavigate={setView}
-      footer={<FootBar hint={proj ? `${proj.id} · ${proj.title} · 阶段① 无确认点，脚本在阶段②收口` : undefined} />}
+      footer={<FootBar hint={proj ? `${proj.id} · ${proj.title}` : undefined} />}
     >
       <StageHead title="创建本期">
         {stageState && stageState !== 'ready' && <Badge tone={STAGE_META[stageState].tone}>{STAGE_META[stageState].label}</Badge>}
@@ -147,7 +147,6 @@ export function CreateEpisodePage({ projectId }: { projectId: string }) {
                     onClick={() => genJob && cancelJob.mutate(genJob.id)}>取消</Button>
                 </div>
                 <div className="hf-prog"><i style={{ width: '46%', animation: 'wu-prog 1.2s ease-in-out infinite alternate' }} /></div>
-                <span className="wu-caption">两次生成：先内容结构，再直接生成双人对话；完成后进入阶段②为候选脚本。</span>
               </div>
             ) : genDone ? (
               <div className="wu-alert" data-tone="success" style={{ display: 'grid', gap: 8 }}>
@@ -156,7 +155,7 @@ export function CreateEpisodePage({ projectId }: { projectId: string }) {
                   {draftRev && <span className="hf-mono">{draftRev}</span>}
                 </div>
                 <div className="wu-row">
-                  <span className="wu-caption">结果进入阶段②为候选脚本，不自动覆盖已用版本。</span>
+                  <span className="wu-caption">已进入阶段②为候选脚本。</span>
                   <span className="hf-spacer" />
                   {/* 内容仍在本页输入框中，允许就地重新生成（否则只能绕道阶段②的「重新生成」） */}
                   <Button variant="secondary" size="sm" icon="refresh" disabled={!canGenerate} onClick={handleGenerate}>
@@ -174,7 +173,7 @@ export function CreateEpisodePage({ projectId }: { projectId: string }) {
                   <span className="wu-caption">{genJob?.error || '未知错误'}</span>
                 </div>
                 <div className="wu-row">
-                  <span className="wu-caption">任务已记入任务中心，可直接重试；详情可到任务中心查看。</span>
+                  <span className="wu-caption">详情见任务中心。</span>
                   <span className="hf-spacer" />
                   <Button variant="secondary" size="sm" onClick={() => setView('tasks')}>查看任务中心</Button>
                   <Button variant="brand" size="sm" disabled={!canGenerate} onClick={handleGenerate}>重试生成</Button>
@@ -199,10 +198,7 @@ export function CreateEpisodePage({ projectId }: { projectId: string }) {
 
         {/* ---- 右：内容要求（45%） ---- */}
         <section className="wu-card hf-panel req">
-          <h3 className="hf-panel-t">
-            内容要求
-            <span className="wu-caption">通用默认值，可按本期调整</span>
-          </h3>
+          <h3 className="hf-panel-t">内容要求</h3>
 
           <div style={{ display: 'grid', gap: 6 }}>
           <Field label="节目名">
@@ -220,7 +216,7 @@ export function CreateEpisodePage({ projectId }: { projectId: string }) {
               <Choice
                 checked={durationMode === 'auto'}
                 onChange={() => setDurationMode('auto')}
-                label={<span>根据内容，最多 5 分钟 <span className="wu-caption">（上限 300 秒，含片头片尾与首尾停顿）</span></span>}
+                label={<span>根据内容，最多 5 分钟</span>}
               />
               <div className="wu-row" style={{ gap: 8 }}>
                 <Choice checked={durationMode === 'approx'} onChange={() => setDurationMode('approx')} label="大约" />
@@ -229,7 +225,6 @@ export function CreateEpisodePage({ projectId }: { projectId: string }) {
                   value={String(approxMinutes)}
                   onChange={(v) => setApproxMinutes(Number(v))}
                 />
-                <span className="wu-caption">偏好不是承诺</span>
               </div>
             </div>
           </Field>
@@ -249,7 +244,6 @@ export function CreateEpisodePage({ projectId }: { projectId: string }) {
               <div className="t"><Icon name="image" size={16} /> 角色图</div>
               <div className="s">资产库选择或 API 生成</div>
             </div>
-            <span className="wu-caption">形象与声音未就绪不阻塞生成对话。</span>
           </Field>
           </div>
         </section>

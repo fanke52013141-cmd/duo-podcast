@@ -11,7 +11,7 @@ import {
 import type { AudioTimeline, Job, Project, ScriptRevision, SynthesisUnit, Turn, VoiceBinding } from '../lib/types';
 import { Alert, Badge, Button, Choice, Icon } from '../components/wu';
 import { AppShell, FootBar, StageHead, TimelineBar, fmtDur as sharedFmtDur } from '../components/AppShell';
-import { useProjectStore } from '../stores';
+import { useProjectStore, useServiceStore } from '../stores';
 
 const SPEAKERS: { id: 'A' | 'B'; name: string; role: string }[] = [
   { id: 'A', name: '李雷', role: '主持' },
@@ -59,6 +59,9 @@ export function VoicePage({ projectId }: { projectId: string }) {
   const audition = useVoiceAudition();
   const confirm = useConfirm();
   const setView = useProjectStore((s) => s.setView);
+  // 语音通道仍是模拟时，试听 / 参考音频 / MiniMax / 音色下拉都只会产生错误或空操作，
+  // 一律不渲染（真实引擎接入后 capability 变 live 自动恢复）。
+  const ttsSimulated = useServiceStore((s) => s.capabilities?.tts.mode !== 'live');
 
   const proj = project.data;
   const [bindings, setBindings] = useState<Record<'A' | 'B', VoiceBinding> | null>(null);
@@ -304,7 +307,6 @@ export function VoicePage({ projectId }: { projectId: string }) {
                     onClick={() => handleUnitSynthesize(selectedUnit.turnId)}>重新生成本条</Button>
                   <Button variant="secondary" size="sm" disabled={!selectedUnit.adoptedAudioAssetId}
                     onClick={() => playAsset(selectedUnit.adoptedAudioAssetId)}>播放已采纳</Button>
-                  <Button variant="secondary" size="sm" disabled>拆出一句</Button>
                 </div>
                 {selectedUnit.candidateAudioAssetIds.length > 0 && (
                   <div className="hf-unit" style={{ alignItems: 'flex-start' }}>
@@ -323,13 +325,12 @@ export function VoicePage({ projectId }: { projectId: string }) {
                   </div>
                 )}
                 <p className="wu-caption" style={{ marginTop: 8, lineHeight: 1.6 }}>
-                  重新生成只会创建<b>本条候选版本</b>；采纳后重建整期时间轴并撤销配音确认。
-                  <a className="hf-link" href="#" onClick={(e) => e.preventDefault()}>拆出一句</a>不承诺与原段完全一致的音色表现。
+                  重新生成只产出本条候选；采纳后重建整期时间轴并撤销配音确认。
                 </p>
               </>
             ) : (
               <p className="wu-caption" style={{ lineHeight: 1.6 }}>
-                点击右侧配音清单中的话轮，查看其合成单元与引擎请求属性；候选音频在合成时登记为不可变资产。
+                点击话轮查看其合成单元。
               </p>
             )}
           </div>
@@ -352,25 +353,8 @@ export function VoicePage({ projectId }: { projectId: string }) {
               <span className="hf-mono" style={{ color: 'var(--wu-semantic-text)' }}>{gapValue}ms</span>
             </div>
             <p className="wu-caption" style={{ lineHeight: 1.6 }}>
-              拖动改变 <code>transitionGapMs</code> → 重排时间轴，<b>通常不重新合成声音</b>；显式间隔是额外静音，与模型自然停顿的关系见说明。
+              拖动调整话轮间停顿（毫秒），通常不重新合成声音。
             </p>
-            <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-              <Button variant="secondary" size="sm" disabled>插入句内停顿</Button>
-              <span className="wu-caption">引擎支持时用已验证语法；否则拆分单元后本地插入静音</span>
-            </div>
-          </div>
-
-          <div className="hf-ins-sec">
-            <details className="hf-adv">
-              <summary>
-                <Icon name="chevronRight" size={16} className="chev" />高级（折叠）
-              </summary>
-              <div className="hf-adv-body">
-                <Choice type="checkbox" checked={false} onChange={() => {}} label="引擎参数（本地采样率 / 增强）" />
-                <Choice type="checkbox" checked={false} onChange={() => {}} label="对齐设置（按句子边界切分）" />
-                <a className="hf-link" href="#" style={{ fontSize: 12.5 }} onClick={(e) => e.preventDefault()}>混用语音引擎入口 →</a>
-              </div>
-            </details>
           </div>
 
           <div className="hf-ins-sec">
@@ -378,7 +362,6 @@ export function VoicePage({ projectId }: { projectId: string }) {
             <ul className="hf-ins-list">
               <li>阶段② 脚本确认：{proj?.approvals.some((a) => a.kind === 'script' && a.decision === 'accepted') ? '已通过' : '未确认'}</li>
               <li>时间轨过期：{timelineStale ? '是 · 脚本话轮改动后需重新合成' : '否 · 时间轨与当前草稿一致'}</li>
-              <li>音频资产不可变：每次合成为新 artifactId</li>
             </ul>
           </div>
         </aside>
@@ -403,7 +386,6 @@ export function VoicePage({ projectId }: { projectId: string }) {
         {revision && <Badge tone="info">脚本 {revision.id} · {turnCount} 条话轮</Badge>}
         {timeline && <Badge tone={voiceApproved ? 'success' : 'warning'}>{timeline.revisionId} · {totalSecs}</Badge>}
         <span className="hf-spacer" />
-        <span className="wu-caption">时间轨随合成实时写回 · 无需手动保存</span>
         {/* 确认点按钮在阶段标题栏右侧（设计稿 HF-03 位置），不在检查器内。
             时间轨过期时禁用：确认绑定当前时间轨，服务端会因绑定非当前草稿而 422。 */}
         <Button
@@ -440,7 +422,7 @@ export function VoicePage({ projectId }: { projectId: string }) {
           <section className="wu-card hf-eng">
             <h3>语音引擎</h3>
             <div className="hf-engine">
-              {ENGINES.map((e) => (
+              {ENGINES.filter((e) => e.id === 'local' || !ttsSimulated).map((e) => (
                 <Choice
                   key={e.id} type="radio" name="engine" value={e.id}
                   checked={engine === e.id} onChange={() => pickEngine(e.id)}
@@ -456,35 +438,41 @@ export function VoicePage({ projectId }: { projectId: string }) {
                   <Badge tone={spk.id === 'A' ? 'info' : 'speaker-b'}>{spk.id}</Badge>
                   <div>
                     <div className="nm">{spk.name} · {spk.role}</div>
-                    <select
-                      className="wu-input" aria-label={`${spk.id} 音色`} style={{ marginTop: 4 }}
-                      value={b.modelId}
-                      onChange={(e) => updateBinding(spk.id, { modelId: e.target.value })}
-                    >
-                      {VOICE_OPTIONS[spk.id].map((o) => <option key={o} value={o}>{o}</option>)}
-                    </select>
-                    <div className="wu-row" style={{ gap: 8, marginTop: 4, minWidth: 0, alignItems: 'center' }}>
-                      <button
-                        type="button" className="hf-link"
-                        style={{ background: 'none', border: 'none', padding: 0, fontSize: 11.5 }}
-                        onClick={() => fileInput.current[spk.id]?.click()}
-                      >{refNames[spk.id] || '选择参考音频'}</button>
-                      <input
-                        ref={(el) => { fileInput.current[spk.id] = el; }}
-                        type="file" accept="audio/*" hidden
-                        onChange={(e) => handleRefFile(spk.id, e.target.files?.[0])}
-                      />
-                      <span className="wu-caption" style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {b.localRefAudio ? '已绑定（本地引用）' : '未绑定 · 用提供方默认音色'}
-                      </span>
-                    </div>
+                    {!ttsSimulated && (
+                      <select
+                        className="wu-input" aria-label={`${spk.id} 音色`} style={{ marginTop: 4 }}
+                        value={b.modelId}
+                        onChange={(e) => updateBinding(spk.id, { modelId: e.target.value })}
+                      >
+                        {VOICE_OPTIONS[spk.id].map((o) => <option key={o} value={o}>{o}</option>)}
+                      </select>
+                    )}
+                    {!ttsSimulated && (
+                      <div className="wu-row" style={{ gap: 8, marginTop: 4, minWidth: 0, alignItems: 'center' }}>
+                        <button
+                          type="button" className="hf-link"
+                          style={{ background: 'none', border: 'none', padding: 0, fontSize: 11.5 }}
+                          onClick={() => fileInput.current[spk.id]?.click()}
+                        >{refNames[spk.id] || '选择参考音频'}</button>
+                        <input
+                          ref={(el) => { fileInput.current[spk.id] = el; }}
+                          type="file" accept="audio/*" hidden
+                          onChange={(e) => handleRefFile(spk.id, e.target.files?.[0])}
+                        />
+                        <span className="wu-caption" style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {b.localRefAudio ? '已绑定（本地引用）' : '未绑定 · 用提供方默认音色'}
+                        </span>
+                      </div>
+                    )}
                   </div>
-                  <Button
-                    variant="secondary" size="sm" icon="play"
-                    busy={auditionJob?.spk === spk.id} disabled={!!auditionJob}
-                    title="合成一句话试听当前参考音色"
-                    onClick={() => startAudition(spk.id)}
-                  >{bs?.[spk.id].auditionState === 'passed' ? '再试听' : '试听'}</Button>
+                  {!ttsSimulated && (
+                    <Button
+                      variant="secondary" size="sm" icon="play"
+                      busy={auditionJob?.spk === spk.id} disabled={!!auditionJob}
+                      title="合成一句话试听当前参考音色"
+                      onClick={() => startAudition(spk.id)}
+                    >{bs?.[spk.id].auditionState === 'passed' ? '再试听' : '试听'}</Button>
+                  )}
                 </div>
               );
             })}
@@ -497,9 +485,6 @@ export function VoicePage({ projectId }: { projectId: string }) {
                 {synthesizing ? '合成中…' : voiceApproved ? '重新生成整期配音' : timelineStale ? '重新合成（脚本已改动）' : '生成整期配音'}
               </Button>
             </div>
-            <p className="wu-caption" style={{ marginTop: 8, lineHeight: 1.6 }}>
-              生成整期配音需先为双方绑定音色并做短试听；本地引擎默认，可切 MiniMax，切换后要求重新试听。
-            </p>
           </section>
 
           {/* ---- 右：配音清单（话轮级） ---- */}
@@ -550,17 +535,17 @@ export function VoicePage({ projectId }: { projectId: string }) {
               <p className="wu-caption">尚无话轮。请先在阶段② 编辑对话中生成脚本。</p>
             )}
 
-            {turns.length > 0 && (
+            {/* 整期母轨 / 分轨试听只在真实引擎产出音频后出现；模拟通道不放只会失败的按钮 */}
+            {!ttsSimulated && turns.length > 0 && (
               <div className="hf-playrow">
-            {timeline?.masterAudioAssetId ? (
-              <audio controls preload="none" style={{ width: '100%', height: 32 }}
-                     src={`/api/artifacts/${timeline.masterAudioAssetId}/file`} />
-            ) : (
-              <Button variant="secondary" size="sm" icon="play" disabled title="演示模式合成不产出音频文件；真实引擎（关口 A）接入后可在此试听整期母轨">连续试听</Button>
-            )}
-            <Button variant="secondary" size="sm" disabled title="A 独听分轨需真实引擎按说话人分轨产出；演示模式无音频产物" >独听 A</Button>
-            <Button variant="secondary" size="sm" disabled title="B 独听分轨需真实引擎按说话人分轨产出；演示模式无音频产物">独听 B</Button>
-                <span className="wu-caption">点击台词跳到对应位置</span>
+                {timeline?.masterAudioAssetId ? (
+                  <audio controls preload="none" style={{ width: '100%', height: 32 }}
+                         src={`/api/artifacts/${timeline.masterAudioAssetId}/file`} />
+                ) : (
+                  <Button variant="secondary" size="sm" icon="play" disabled title="整期合成后可在此试听母轨">连续试听</Button>
+                )}
+                <Button variant="secondary" size="sm" disabled title="分轨需真实引擎按说话人产出">独听 A</Button>
+                <Button variant="secondary" size="sm" disabled title="分轨需真实引擎按说话人产出">独听 B</Button>
                 <span className="hf-spacer" />
                 <span className="wu-caption">{timeline ? `${units.length} 个合成单元` : '尚未合成'}</span>
               </div>
@@ -575,8 +560,7 @@ export function VoicePage({ projectId }: { projectId: string }) {
         <Badge tone={voiceApproved ? 'success' : synthesizing ? 'info' : timelineStale ? 'warning' : 'muted'}>
           {voiceApproved ? '已确认' : synthesizing ? '生成中' : timelineStale ? '时间轨过期' : '待确认'}
         </Badge>
-        <span className="hf-spacer" />
-        <span className="wu-caption">配音时长含片头片尾发言及显式首尾停顿；后续新增片尾需重新检查总时长</span>
+        {timeline && <span className="wu-caption">{units.length} 个合成单元</span>}
       </div>
     </AppShell>
   );

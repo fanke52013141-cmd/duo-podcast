@@ -101,9 +101,7 @@ export function AssetsPage({ project }: { project: Project | null }) {
                 <span className="hf-spacer" />
                 <Button variant="ghost" size="sm" disabled>试听</Button>
               </div>
-              <p className="wu-caption" style={{ marginTop: 8, lineHeight: 1.6 }}>
-                本地参考音绑定与 MiniMax voice_id 绑定可并存；切换引擎时保留脚本、形象、场景，只重新生成受影响角色音频。
-              </p>
+              <p className="wu-caption" style={{ marginTop: 8 }}>切换引擎只重做受影响角色的音频。</p>
             </div>
           )}
 
@@ -132,7 +130,7 @@ export function AssetsPage({ project }: { project: Project | null }) {
           <div className="hf-ins-sec">
             <h4>工程引用</h4>
             <p className="wu-caption" style={{ lineHeight: 1.7 }}>
-              工程复制角色的<b>已选版本</b>；资产库更新<b>不追溯改变历史工程</b>。双人素材优先清晰可见的脸部、少遮挡嘴部的麦克风与可分离的人物区域，背景适度简化。
+              资产库更新不追溯改变历史工程；双人素材优先清晰正脸、少遮挡。
             </p>
           </div>
         </aside>
