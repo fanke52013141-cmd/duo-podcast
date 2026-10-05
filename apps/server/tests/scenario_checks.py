@@ -75,14 +75,20 @@ def s01_root_html():
         shutil.rmtree(tmp, ignore_errors=True)
 
 
-@check("S02 PATCH 缺 expectedRevision 一律 409")
+@check("S02 PATCH 缺 expectedRevision 一律 422；过期 revision 仍 409")
 def s02_patch_no_rev():
+    # 契约更新：test_project_safety.py::test_invalid_expected_revision_returns_422_not_conflict
+    # 已把「缺/非法 expectedRevision」固化为 422（请求本身不合法），409 专指
+    # 「携带合法 expectedRevision 但与当前 revision 冲突」；两者语义分开，不混用。
     tmp = Path(tempfile.mkdtemp(prefix="duocast-s02-"))
     try:
         client = next(make_client(tmp))
         pid = client.post("/api/projects", json={"id": "EP-NOREV", "title": "t"}).json()["id"]
         r = client.patch(f"/api/projects/{pid}", json={"title": "x"})
-        assert r.status_code == 409, r.text
+        assert r.status_code == 422, r.text
+        # 合法字段 + 过期 revision 仍是 409（真正的冲突保护未被削弱）
+        r2 = client.patch(f"/api/projects/{pid}", json={"title": "x", "expectedRevision": 999})
+        assert r2.status_code == 409, r2.text
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 

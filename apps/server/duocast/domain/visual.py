@@ -85,7 +85,13 @@ class VisualVariant(BaseModel):
     master_image: AssetRef = Field(default_factory=AssetRef)
     aspect: Literal["landscape", "portrait"] = "landscape"
     model_input_transform: Transform = Field(default_factory=Transform)
-    person_regions: dict = Field(default_factory=lambda: {"A": Rect(), "B": Rect()})
+    # mock 默认人物区域：A 左半幅 / B 右半幅（README 技术事实 #2：InfiniteTalk 多人物
+    # 模式未提供 bbox 时默认左右各半）。此前默认 A/B 均为全画布，画布上两个全幅框
+    # 完全重叠，演示语义失真。
+    person_regions: dict = Field(default_factory=lambda: {
+        "A": Rect(x=0.0, y=0.0, width=0.5, height=1.0).model_dump(by_alias=True),
+        "B": Rect(x=0.5, y=0.0, width=0.5, height=1.0).model_dump(by_alias=True),
+    })
     image_api_config_ref: Optional[str] = None
     # 旧工程未提供该字段时仍是同框模式，继续使用 master_image/person_regions。
     mode: VisualMode = "twoShot"

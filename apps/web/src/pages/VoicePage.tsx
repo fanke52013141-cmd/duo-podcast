@@ -83,12 +83,7 @@ export function VoicePage({ projectId }: { projectId: string }) {
     (j) => j.kind === 'tts.synthesize' && ['queued', 'running', 'recovering'].includes(j.status),
   );
   const synthesizing = !!synthJob;
-  // 已确认 = 对当前时间轨版本的 voice 确认记录。仅用于展示确认状态；
-  // 不再作为「生成整期配音」的禁用条件（旧实现 !voiceApproved 造成死锁：
-  // 脚本回改后时间轨过期却仍禁止重新合成，用户无路可走）。
-  const voiceApproved = proj?.approvals.some(
-    (a) => a.kind === 'voice' && a.decision === 'accepted' && timeline && a.inputRevisionId === timeline.revisionId,
-  ) ?? false;
+  // voiceApproved 的推导放在 timelineStale 之后（见下方注释：过期时间轨上的历史确认不算）。
 
   const bindingsPayload = useMemo(() => {
     if (!bs) return {};
@@ -111,6 +106,13 @@ export function VoicePage({ projectId }: { projectId: string }) {
   // 阶段状态由后端 stage_svc 权威推导为 stale，前端只展示。
   const timelineStale = !!timeline && !!proj && timeline.revisionId !== proj.currentDraftRevision;
 
+  // 已确认 = 对**当前**时间轨版本的 voice 确认记录。过期时间轨上的历史确认不算
+  // （此前把旧时间轨的确认当作已确认：阶段轨显示「已过期」的同时按钮显示「已确认」、
+  // 下一步放行，两条口径互相矛盾）。
+  const voiceApproved = !timelineStale && !!proj?.approvals.some(
+    (a) => a.kind === 'voice' && a.decision === 'accepted' && timeline && a.inputRevisionId === timeline.revisionId,
+  );
+
   // 合成许可：有工程、有话轮、没有正在进行的合成任务即可。
   // 已确认的配音也允许重做（11 报告 P2-16 + v3.1 死锁解除：重合成会替换当前时间轨
   // 并撤销 voice/sample 确认，voice_svc 写回规则）。
@@ -121,7 +123,9 @@ export function VoicePage({ projectId }: { projectId: string }) {
     setBindings({ ...bs, [spk]: { ...bs[spk], ...patch } });
   };
 
-  // 试听 Job 完成 → 播放产物一句话并登记 audition_state（真实 TTS 通道）
+  // 试听 Job 完成 → 播放产物并登记 audition_state（真实 TTS 通道）。
+  // 仅在真的拿到音频产物时标记 passed；模拟通道无产物时保持 none，
+  // 不让按钮伪装成「已试听通过」。
   const audJob = useJob(auditionJob?.id ?? null);
   useEffect(() => {
     const j = audJob.data;
@@ -131,10 +135,10 @@ export function VoicePage({ projectId }: { projectId: string }) {
       if (aid) {
         const el = new Audio(`/api/artifacts/${aid}/file`);
         el.play().catch(() => setError('浏览器阻止了自动播放，请稍候再点试听'));
+        updateBinding(auditionJob.spk, { auditionState: 'passed' });
       } else {
-        setError('试听未产出音频（模拟通道无真实产物）');
+        setError('试听未产出音频（模拟通道无真实产物，接入真实 TTS 后可试听）');
       }
-      updateBinding(auditionJob.spk, { auditionState: 'passed' });
     } else if (j.status === 'failed') {
       setError(`试听失败：${j.error ?? '引擎不可用'}`);
     } else return;
@@ -400,10 +404,13 @@ export function VoicePage({ projectId }: { projectId: string }) {
         {timeline && <Badge tone={voiceApproved ? 'success' : 'warning'}>{timeline.revisionId} · {totalSecs}</Badge>}
         <span className="hf-spacer" />
         <span className="wu-caption">时间轨随合成实时写回 · 无需手动保存</span>
-        {/* 确认点按钮在阶段标题栏右侧（设计稿 HF-03 位置），不在检查器内 */}
+        {/* 确认点按钮在阶段标题栏右侧（设计稿 HF-03 位置），不在检查器内。
+            时间轨过期时禁用：确认绑定当前时间轨，服务端会因绑定非当前草稿而 422。 */}
         <Button
           variant="brand" size="sm" icon="check"
-          disabled={voiceApproved || !timeline} onClick={handleConfirm}
+          disabled={voiceApproved || !timeline || timelineStale}
+          title={timelineStale ? '脚本已改动，请先重新生成整期配音再确认' : undefined}
+          onClick={handleConfirm}
         >{voiceApproved ? '已确认' : '确认配音'}</Button>
       </StageHead>
 
@@ -545,14 +552,14 @@ export function VoicePage({ projectId }: { projectId: string }) {
 
             {turns.length > 0 && (
               <div className="hf-playrow">
-                {timeline?.masterAudioAssetId ? (
-                  <audio controls preload="none" style={{ width: '100%', height: 32 }}
-                         src={`/api/artifacts/${timeline.masterAudioAssetId}/file`} />
-                ) : (
-                  <Button variant="secondary" size="sm" icon="play" disabled title="合成整期配音后可试听">连续试听</Button>
-                )}
-                <Button variant="secondary" size="sm" disabled={!timeline}>独听 A</Button>
-                <Button variant="secondary" size="sm" disabled={!timeline}>独听 B</Button>
+            {timeline?.masterAudioAssetId ? (
+              <audio controls preload="none" style={{ width: '100%', height: 32 }}
+                     src={`/api/artifacts/${timeline.masterAudioAssetId}/file`} />
+            ) : (
+              <Button variant="secondary" size="sm" icon="play" disabled title="演示模式合成不产出音频文件；真实引擎（关口 A）接入后可在此试听整期母轨">连续试听</Button>
+            )}
+            <Button variant="secondary" size="sm" disabled title="A 独听分轨需真实引擎按说话人分轨产出；演示模式无音频产物" >独听 A</Button>
+            <Button variant="secondary" size="sm" disabled title="B 独听分轨需真实引擎按说话人分轨产出；演示模式无音频产物">独听 B</Button>
                 <span className="wu-caption">点击台词跳到对应位置</span>
                 <span className="hf-spacer" />
                 <span className="wu-caption">{timeline ? `${units.length} 个合成单元` : '尚未合成'}</span>

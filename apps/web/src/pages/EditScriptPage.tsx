@@ -52,7 +52,13 @@ function countHints(turns: Turn[]): { hints: QaHint[]; pronCount: number } {
   const openings = new Map<string, Turn[]>();
   turns.forEach((t) => {
     const text = turnText(t);
-    if (!text) return;
+    if (!text) {
+      hints.push({
+        kind: 'local', level: 'warn', title: '存在空话轮', turnId: t.id,
+        detail: `本地计算：${t.id} 没有台词，确认前请补全或删除（空话轮会导致合成失败）`,
+      });
+      return;
+    }
     const prons = text.match(/[A-Z]{2,}|[\d]+(?=[%％:]|(?:个|分|秒|亿|万|元|张|倍))/g);
     if (prons) pronCount += prons.length;
     const open = text.slice(0, 6);
@@ -348,6 +354,14 @@ export function EditScriptPage({ projectId }: { projectId: string }) {
   const selectedTurn = turns.find((t) => t.id === selected[selected.length - 1]);
   const viewIsDraft = !!revision && !!proj && revision.id === proj.currentDraftRevision;
 
+  /** 底部导航先过保存屏障：2s 防抖窗口内离开会让下游读到旧草稿（甚至合成旧文案）。 */
+  const navigateAfterFlush = (view: 'create' | 'voice') => {
+    flushDraft().then((ok) => {
+      if (ok || saveState !== 'error') setView(view);
+      // 保存失败时停留本页，错误提示已由 error Alert 承担
+    });
+  };
+
   return (
     <AppShell
       project={proj ?? null}
@@ -441,11 +455,11 @@ export function EditScriptPage({ projectId }: { projectId: string }) {
       footer={
         <FootBar hint={
           <span className="wu-row" style={{ gap: 12 }}>
-            <Button variant="ghost" size="sm" icon="arrowLeft" onClick={() => setView('create')}>上一步</Button>
+            <Button variant="ghost" size="sm" icon="arrowLeft" onClick={() => navigateAfterFlush('create')}>上一步</Button>
             <Badge tone="warning" icon="alert">确认点 · 脚本确认</Badge>
             <span className="wu-caption">确认后可选自动启动配音</span>
             <span className="hf-spacer" />
-            <Button size="sm" disabled={!revision || saving} onClick={() => setView('voice')}>下一步<Icon name="arrowRight" size={14} /></Button>
+            <Button size="sm" disabled={!revision || saving} onClick={() => navigateAfterFlush('voice')}>下一步<Icon name="arrowRight" size={14} /></Button>
           </span>
         }
       />
@@ -645,8 +659,8 @@ export function EditScriptPage({ projectId }: { projectId: string }) {
         <span className="wu-caption">
           {saveState === 'saving' ? '保存中…'
             : saveState === 'error' ? <span style={{ color: 'var(--wu-semantic-danger)' }}>保存失败 · 再编辑可重试</span>
-            : saveState === 'saved' ? '已保存 · Ctrl+Z 撤销'
-            : '自动保存 2s 防抖 · Ctrl+Z 撤销'}
+            : saveState === 'saved' ? '已保存'
+            : '自动保存 · 2s 防抖'}
         </span>
       </div>
 

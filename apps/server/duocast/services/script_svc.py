@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import uuid
 from typing import Any
 
 from ..adapters.base import TextProvider
@@ -23,10 +22,22 @@ def _turn_from_dict(data: dict[str, Any]) -> Turn:
     )
 
 
+def next_revision_id(project: Project) -> str:
+    """顺序版本号（与前端 nextRevisionId 同一口径）：R 后缀数值 + 1。
+    此前服务端用十六进制随机 id、前端编辑用 R1/R2，同一工程出现两套版本号口径
+    （用户看到 R39A0258285A3 → R1 跳变）；统一为 R1、R2、R3…。"""
+    max_num = 0
+    for r in project.script_revisions:
+        digits = r.id[1:] if r.id.startswith("R") else ""
+        if digits.isdigit():
+            max_num = max(max_num, int(digits))
+    return f"R{max_num + 1}"
+
+
 def build_script_revision(project: Project, provider: TextProvider, result: dict[str, Any]) -> ScriptRevision:
     source_input = result.get("sourceInput", {})
     rev = ScriptRevision(
-        id=f"R{uuid.uuid4().hex[:12].upper()}",
+        id=next_revision_id(project),
         # 三入口（topic/article/script）的 kind 由提供方结果透传，不再硬编码（11 报告 P2-6）
         source_input={"kind": source_input.get("kind", "article"),
                       "content": source_input.get("content", "")},

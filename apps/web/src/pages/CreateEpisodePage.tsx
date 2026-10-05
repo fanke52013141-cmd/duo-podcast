@@ -197,7 +197,7 @@ export function CreateEpisodePage({ projectId }: { projectId: string }) {
         <section className="wu-card hf-panel req">
           <h3 className="hf-panel-t">
             内容要求
-            <span className="wu-caption">模板「科技周报」提供默认值</span>
+            <span className="wu-caption">通用默认值，可按本期调整</span>
           </h3>
 
           <div style={{ display: 'grid', gap: 6 }}>

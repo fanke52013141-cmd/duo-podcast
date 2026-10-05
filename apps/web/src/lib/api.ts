@@ -368,6 +368,30 @@ export const useVisualGenerate = () => {
   });
 };
 
+export interface SampleGenInput {
+  projectId: string;
+  clientToken: string;
+  revisionId: string;
+  rangeStartSec: number;
+  rangeEndSec: number;
+  aspect: 'landscape' | 'portrait';
+}
+
+export const useSampleGenerate = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: SampleGenInput) =>
+      sendJson<JobAccepted>(`/projects/${input.projectId}/visual/sample`, 'POST', {
+        clientToken: input.clientToken,
+        revisionId: input.revisionId,
+        rangeStartSec: input.rangeStartSec,
+        rangeEndSec: input.rangeEndSec,
+        aspect: input.aspect,
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['jobs'] }),
+  });
+};
+
 export interface RenderGenInput {
   projectId: string;
   clientToken: string;

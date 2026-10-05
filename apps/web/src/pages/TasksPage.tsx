@@ -33,7 +33,8 @@ const PHASE_HINT: Record<Job['stage'], string> = {
 function kindLabel(kind: string): string {
   const map: Record<string, string> = {
     'script.generate': '脚本生成', 'script.rewrite': '脚本改写',
-    'tts.synthesize': '整期配音', 'visual.generate': '画面生成', renders: '视频渲染',
+    'tts.synthesize': '整期配音', 'tts.audition': '音色试听',
+    'visual.generate': '画面生成', 'sample.generate': '样片生成', renders: '视频渲染',
   };
   return map[kind] ?? kind;
 }

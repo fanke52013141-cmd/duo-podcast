@@ -111,7 +111,12 @@ export function HomePage() {
     // 失败时 Modal 内已有 createProject.isError 告警（见下方渲染），
     // 这里捕获以避免未处理 rejection（11 报告 P2-14）
     try {
-      const proj = await createProject.mutateAsync({ title: '未命名节目' });
+      // 模板当前真正带入的是节目名前缀（画幅等可复用配置待模板库后端就绪后接入），
+      // 不让「用此模板新建」沦为与空白工程完全相同的无效果。
+      const tpl = TEMPLATES.find((t) => t.id === templateId);
+      const proj = await createProject.mutateAsync({
+        title: tpl ? `${tpl.name} · 未命名节目` : '未命名节目',
+      });
       setModalOpen(false);
       openProject(proj.id);
     } catch {
@@ -237,7 +242,7 @@ export function HomePage() {
           </>
         }
       >
-        <p className="wu-muted hf-hint">从模板开始，或创建空白工程——模板只带入可复用配置与素材引用。</p>
+        <p className="wu-muted hf-hint">从模板开始，或创建空白工程——模板当前带入节目名与角色配置摘要，其余可复用配置待模板库后端就绪后接入。</p>
         <fieldset className="hf-fieldset">
           <legend>选择起点</legend>
           <label className="wu-choice">

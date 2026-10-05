@@ -257,7 +257,7 @@ export function RenderPage({ projectId }: { projectId: string }) {
               <div className="hf-kv"><div className="k">磁盘预算</div><div className="v">尚未测定</div></div>
               <div className="hf-kv">
                 <div className="k">当前版本</div>
-                <div className="v hf-mono">{timeline?.revisionId ?? 'R—'} / {latestVariant?.id ?? 'V—'} / {segments.length ? 'S2' : 'S—'}</div>
+                <div className="v hf-mono">{timeline?.revisionId ?? 'R—'} / {latestVariant?.id ?? 'V—'} / {segments.length ? `S${segments.length}` : 'S—'}</div>
               </div>
             </div>
           </section>

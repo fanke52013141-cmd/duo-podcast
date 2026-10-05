@@ -162,6 +162,8 @@ body { margin:0; background:var(--wu-semantic-canvas); color:var(--wu-semantic-t
 .hf-qa { display:flex; gap:10px; align-items:flex-start; margin-top:8px; }
 .hf-qa .q { font-size:12px; color:var(--wu-semantic-secondary); line-height:1.6; }
 .hf-qa .q b { color:var(--wu-semantic-text); font-weight:600; }
+/* 质量提示内的操作按钮（如「拆分」）不吃弹性收缩，否则被压成竖排两字 */
+.hf-qa .wu-btn { flex:none; white-space:nowrap; }
 .hf-cand { border:1px dashed var(--wu-semantic-brand); border-radius:var(--wu-global-radius-sm); background:var(--wu-semantic-muted); padding:10px 12px; margin-top:8px; }
 .hf-cand .t { font-size:11.5px; font-weight:600; color:var(--wu-semantic-brand-hover); margin-bottom:4px; }
 .hf-cand p { font-size:12.8px; line-height:1.7; color:var(--wu-semantic-text); margin:0 0 8px; }

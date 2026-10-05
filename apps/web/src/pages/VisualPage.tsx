@@ -6,12 +6,12 @@
    ========================================================================== */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  useConfirm, useJobs, useProject, useVisualGenerate,
+  useConfirm, useJobs, useProject, useSampleGenerate, useVisualGenerate,
 } from '../lib/api';
 import type { Job, ScriptRevision, VisualVariant } from '../lib/types';
 import { Alert, Badge, Button, Choice, Icon } from '../components/wu';
 import { AppShell, FootBar, StageHead, TimelineBar } from '../components/AppShell';
-import { useProjectStore } from '../stores';
+import { useProjectStore, useServiceStore } from '../stores';
 
 const ASPECTS: { id: 'landscape' | 'portrait'; label: string }[] = [
   { id: 'landscape', label: '横屏 16:9' },
@@ -59,8 +59,10 @@ export function VisualPage({ projectId }: { projectId: string }) {
   const project = useProject(projectId);
   const jobs = useJobs(projectId);
   const gen = useVisualGenerate();
+  const genSample = useSampleGenerate();
   const confirm = useConfirm();
   const setView = useProjectStore((s) => s.setView);
+  const videoSimulated = useServiceStore((s) => s.capabilities?.video.mode === 'mock');
 
   const proj = project.data;
   const [aspect, setAspect] = useState<'landscape' | 'portrait'>('landscape');
@@ -93,6 +95,12 @@ export function VisualPage({ projectId }: { projectId: string }) {
     (j) => j.kind === 'visual.generate' && ['queued', 'running', 'recovering'].includes(j.status),
   );
   const generating = !!genJob;
+  const sampleJob: Job | undefined = (jobs.data ?? []).find(
+    (j) => j.kind === 'sample.generate' && ['queued', 'running', 'recovering'].includes(j.status),
+  );
+  const sampleDone = (jobs.data ?? []).some(
+    (j) => j.kind === 'sample.generate' && j.status === 'succeeded',
+  );
   const voiceApproved = proj?.approvals.some((a) => a.kind === 'voice' && a.decision === 'accepted') ?? false;
   const sampleApproved = proj?.approvals.some(
     (a) => a.kind === 'sample' && a.decision === 'accepted' && proj.currentDraftRevision && a.inputRevisionId === proj.currentDraftRevision,
@@ -123,6 +131,12 @@ export function VisualPage({ projectId }: { projectId: string }) {
     }, { A: 'empty', B: 'empty' });
   }, [cameraGroupId, jobs.data, variants]);
   const otsReady = cameraStatus.A === 'ready' && cameraStatus.B === 'ready';
+  // 接受样片的真实门槛 = 已选主图变体 + 全部检查项（样片确认绑定当前草稿，服务端校验）。
+  const acceptHint = canAccept
+    ? '样片检查通过，可接受'
+    : !selected
+      ? (Object.values(checks).some(Boolean) ? '需先生成主图变体，并完成全部样片检查' : '需先生成主图变体（构图区）')
+      : '需完成全部样片检查项';
 
   const handleGenerate = () => {
     if (!proj) return;
@@ -132,6 +146,19 @@ export function VisualPage({ projectId }: { projectId: string }) {
       clientToken: crypto.randomUUID(),
       aspect,
       prompt: `主图：${proj.title}（${aspect === 'portrait' ? '竖屏' : '横屏'}）`,
+    }, { onError: (e) => setError((e as Error).message) });
+  };
+
+  const handleGenSample = () => {
+    if (!proj || !sampleRange) return;
+    setError(null);
+    genSample.mutate({
+      projectId,
+      clientToken: crypto.randomUUID(),
+      revisionId: proj.currentDraftRevision,
+      rangeStartSec: Math.round(sampleRange.start * 10) / 10,
+      rangeEndSec: Math.round(sampleRange.end * 10) / 10,
+      aspect,
     }, { onError: (e) => setError((e as Error).message) });
   };
 
@@ -195,6 +222,13 @@ export function VisualPage({ projectId }: { projectId: string }) {
     }
     return null;
   }, [proj?.audioTimeline, revision]);
+
+  // 样片区间的真实前提：配音已确认 + 时间轨能选出 A→B→A 连续区间。
+  const rangeHint = sampleRange
+    ? sampleRange.label
+    : !voiceApproved
+      ? '待配音确认后自动选取'
+      : '未找到 A→B→A 连续区间（双方交替发言需 ≥3 条话轮），请回阶段②调整脚本';
 
   const goZone = (k: 'compose' | 'shot' | 'sample') => {
     setTab(k);
@@ -337,7 +371,7 @@ export function VisualPage({ projectId }: { projectId: string }) {
           ))}
         </span>
         <Button variant="secondary" size="sm" disabled={!canAccept} onClick={handleAccept}>接受样片</Button>
-        <span className="wu-caption">{canAccept ? '样片检查通过，可接受' : '需先生成样片并通过全部检查'}</span>
+        <span className="wu-caption">{acceptHint}</span>
       </StageHead>
 
       <div className="hf-body" ref={bodyRef}>
@@ -497,9 +531,16 @@ export function VisualPage({ projectId }: { projectId: string }) {
               <span
                 className="hf-mono"
                 style={{ color: 'var(--wu-semantic-text)', background: 'var(--wu-semantic-muted)', padding: '3px 10px', borderRadius: 6 }}
-              >{sampleRange ? sampleRange.label : '待配音确认后自动选取'}</span>
+              >{rangeHint}</span>
               <Button variant="ghost" size="sm" disabled>调整</Button>
-              <Button variant="brand" size="sm" icon="sparkle" disabled={!sampleRange || (visualMode === 'overShoulder' && !otsReady)}>生成样片</Button>
+              <Button
+                variant="brand" size="sm" icon="sparkle"
+                busy={genSample.isPending || !!sampleJob}
+                disabled={!sampleRange || genSample.isPending || !!sampleJob || (visualMode === 'overShoulder' && !otsReady)}
+                title={sampleRange ? '提交样片生成任务（gpu 队列）；演示模式无可播放片段' : '请先确认配音并保证话轮可组成 A→B→A 区间'}
+                onClick={handleGenSample}
+              >生成样片</Button>
+              {sampleDone && <Badge tone="success" icon="check">样片任务已完成</Badge>}
               <span className="hf-spacer" />
               <Button variant="ghost" size="sm" disabled={visualMode === 'twoShot' ? !selected : !otsReady}>边界预览</Button>
             </div>
@@ -513,6 +554,7 @@ export function VisualPage({ projectId }: { projectId: string }) {
             </div>
             <p className="wu-caption" style={{ marginTop: 8 }}>
               检查<b>不能只检查是否生成成功</b>；接受样片只证明已检查区间和配置，不保证整片无缺陷。
+              {sampleDone && videoSimulated && ' 当前为演示样片：无可播放片段，请对照区间对应的脚本与配音逐项核对。'}
             </p>
           </section>
         </div>

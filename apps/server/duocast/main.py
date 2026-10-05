@@ -37,7 +37,7 @@ setup_logging()
 
 def _job_runner(manager: JobManager, store: ProjectStore, artifacts: ArtifactStore,
                 text_provider: MockTextProvider, image_provider: MockImageProvider,
-                tts_provider: TTSProvider):
+                tts_provider: TTSProvider, video_provider: MockVideoProvider | None = None):
     """Job 执行分派：按 kind 路由到对应 service（06 §6.1 runner 装配）。"""
 
     async def runner(job):
@@ -138,12 +138,30 @@ def _job_runner(manager: JobManager, store: ProjectStore, artifacts: ArtifactSto
                          "resolution": job.input_snapshot.get("resolution"),
                          "fps": job.input_snapshot.get("fps")},
             }
+        if job.kind == "sample.generate":
+            # 样片演示任务（01 §6.4）：mock 阶段无可播放片段，但走完整任务链，
+            # 让「生成样片 → 任务中心 → 人工检查」的流程可操作（12 报告 P0 的演示侧落位）。
+            if video_provider is not None:
+                await video_provider.submit({
+                    "kind": "sample",
+                    "rangeStartSec": job.input_snapshot.get("rangeStartSec"),
+                    "rangeEndSec": job.input_snapshot.get("rangeEndSec"),
+                    "aspect": job.input_snapshot.get("aspect"),
+                })
+            return {
+                "artifactIds": [],
+                "meta": {"sampleRange": [job.input_snapshot.get("rangeStartSec"),
+                                          job.input_snapshot.get("rangeEndSec")],
+                         "revisionId": job.input_snapshot.get("revisionId"),
+                         "note": "演示样片：无可播放片段，真实引擎接入后此处产出 8–15s 片段"},
+            }
         raise RuntimeError(f"unknown job kind: {job.kind}")
 
     # kind → 通道：真实适配器的任务不标记 simulated（关口 A：TTS 已接 ComfyUI）
     kind_channel = {"script.generate": "text", "script.rewrite": "text",
                     "tts.synthesize": "tts", "tts.audition": "tts",
-                    "visual.generate": "image", "renders": "video"}
+                    "visual.generate": "image", "renders": "video",
+                    "sample.generate": "video"}
     channel_provider = {
         "text": text_provider, "image": image_provider,
         "tts": tts_provider, "video": None,
@@ -210,7 +228,7 @@ async def lifespan(app: FastAPI):
     app.state.event_bus = event_bus
     app.state.job_manager = job_manager
     app.state.capabilities = capabilities
-    job_manager.set_runner(_job_runner(job_manager, project_store, artifacts, text_api, image_api, local_tts))
+    job_manager.set_runner(_job_runner(job_manager, project_store, artifacts, text_api, image_api, local_tts, video))
 
     # ---- 启动自检（02 §7.4 最小版） ----
     recovered = recover_on_startup(settings.storage_root / "jobs")

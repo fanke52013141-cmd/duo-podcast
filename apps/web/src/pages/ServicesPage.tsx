@@ -139,7 +139,7 @@ export function ServicesPage() {
                     className="wu-input" style={{ width: 110 }} aria-label="每期上限金额"
                     value={budget} onChange={(e) => setBudget(e.target.value)} disabled={!budgetOn}
                   />
-                  <span className="wu-caption">元 · 超出提示不硬拦</span>
+                  <span className="wu-caption">元 · 超出提示不硬拦（用量统计待真实提供方接入后生效，当前仅本地记录）</span>
                 </div>
                 <span>{testNote('textApi')}</span>
               </div>

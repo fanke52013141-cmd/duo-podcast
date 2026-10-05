@@ -201,10 +201,10 @@ export function AssetsPage({ project }: { project: Project | null }) {
           ))}
           <div className="hf-asset" role="button" tabIndex={0} onClick={() => latestVariant && setSel({ kind: 'artifact', id: latestVariant.masterImage.artifactId })}>
             <div className="hf-thumb" data-tone="bg" style={{ fontSize: 13, letterSpacing: 1 }}>同框底图</div>
-            <div className="name">同框底图 · {latestVariant?.id ?? 'V3'}</div>
+            <div className="name">同框底图{latestVariant ? ` · ${latestVariant.id}` : ' · 尚未生成'}</div>
             <div className="desc">{latestVariant
               ? `${latestVariant.aspect === 'portrait' ? '9:16' : '16:9'} · ${latestVariant.imageApiConfigRef ?? '图片 API'}`
-              : '双人同框 · 16:9 · 图片 API'}</div>
+              : '在阶段④「生成同框底图」后在此登记'}</div>
           </div>
           <button type="button" className="hf-plus" disabled title="接入素材导入后可上传">
             <Icon name="upload" size={20} />
