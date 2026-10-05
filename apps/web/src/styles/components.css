@@ -29,6 +29,7 @@
 .wu-btn:disabled,.wu-btn[aria-disabled="true"] { opacity:.55; cursor:not-allowed; }
 .wu-btn[aria-busy="true"]::after { content:''; position:absolute; width:16px; height:16px; border:2px solid currentColor; border-right-color:transparent; border-radius:50%; animation:wu-spin .8s linear infinite; }
 .wu-btn[aria-busy="true"] .wu-btn-label { visibility:hidden; }
+.wu-btn-label { display:inline-flex; align-items:center; gap:var(--wu-global-space2); }
 .wu-icon-btn { width:var(--wu-size-md); padding:8px; flex-shrink:0; }
 .wu-icon { width:20px; height:20px; stroke:currentColor; stroke-width:1.75; stroke-linecap:round; stroke-linejoin:round; fill:none; flex-shrink:0; }
 .wu-field { display:grid; gap:var(--wu-global-space2); min-width:0; }

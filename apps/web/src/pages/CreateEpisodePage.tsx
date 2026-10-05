@@ -22,7 +22,7 @@ const SOURCE_TABS: { id: SourceKind; label: string }[] = [
 const SOURCE_HINTS: Record<SourceKind, string> = {
   topic: '一句话或一段话即可，建议 ≤200 字',
   article: '粘贴文章正文，≤8,000 字',
-  script: '粘贴已有双人对话脚本，只做结构解析与校验',
+  script: '每行一条发言，用 A: / B: 标记说话人，空行分段。例如：\nA: 大家好，欢迎回到本期节目。\nB: 今天我们聊点具体的。'
 };
 
 export function CreateEpisodePage({ projectId }: { projectId: string }) {
@@ -155,7 +155,6 @@ export function CreateEpisodePage({ projectId }: { projectId: string }) {
                   {draftRev && <span className="hf-mono">{draftRev}</span>}
                 </div>
                 <div className="wu-row">
-                  <span className="wu-caption">已进入阶段②为候选脚本。</span>
                   <span className="hf-spacer" />
                   {/* 内容仍在本页输入框中，允许就地重新生成（否则只能绕道阶段②的「重新生成」） */}
                   <Button variant="secondary" size="sm" icon="refresh" disabled={!canGenerate} onClick={handleGenerate}>
@@ -221,10 +220,11 @@ export function CreateEpisodePage({ projectId }: { projectId: string }) {
               <div className="wu-row" style={{ gap: 8 }}>
                 <Choice checked={durationMode === 'approx'} onChange={() => setDurationMode('approx')} label="大约" />
                 <SegControl
-                  options={[1, 2, 3, 4].map((n) => ({ value: String(n), label: `${n} 分钟` }))}
+                  options={[1, 2, 3, 4].map((n) => ({ value: String(n), label: String(n) }))}
                   value={String(approxMinutes)}
                   onChange={(v) => setApproxMinutes(Number(v))}
                 />
+                <span className="wu-caption">分钟</span>
               </div>
             </div>
           </Field>

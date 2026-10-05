@@ -73,7 +73,7 @@ export function StageRail({ project, onNavigate }: { project: Project | null; on
             aria-current={active ? 'page' : undefined}
           >
             <span className="hf-stg-no">{i + 1}</span>
-            <span className="hf-stg-tt"><b>{s.title}</b><small>{s.sub}</small></span>
+            <span className="hf-stg-tt"><b>{s.title}</b></span>
             {st && st !== 'ready' && (
               <span className="hf-stg-st"><Badge tone={stageTone(st)}>{STAGE_META[st].label}</Badge></span>
             )}

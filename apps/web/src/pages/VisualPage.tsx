@@ -11,7 +11,7 @@ import {
 import type { Job, ScriptRevision, VisualVariant } from '../lib/types';
 import { Alert, Badge, Button, Choice, Icon } from '../components/wu';
 import { AppShell, FootBar, StageHead, TimelineBar } from '../components/AppShell';
-import { useProjectStore, useServiceStore } from '../stores';
+import { useProjectStore } from '../stores';
 
 const ASPECTS: { id: 'landscape' | 'portrait'; label: string }[] = [
   { id: 'landscape', label: '横屏 16:9' },
@@ -20,7 +20,6 @@ const ASPECTS: { id: 'landscape' | 'portrait'; label: string }[] = [
 
 const SHOT_PRESETS = ['稳定同框（默认）', '轻微推拉', '发言人裁切'];
 
-const CHECKS = ['错误开口', '口型同步', '角色一致', '边界连续', '声音与清晰度'];
 
 type VisualMode = 'twoShot' | 'overShoulder';
 type CameraStatus = 'empty' | 'queued' | 'ready';
@@ -62,7 +61,6 @@ export function VisualPage({ projectId }: { projectId: string }) {
   const genSample = useSampleGenerate();
   const confirm = useConfirm();
   const setView = useProjectStore((s) => s.setView);
-  const videoSimulated = useServiceStore((s) => s.capabilities?.video.mode === 'mock');
 
   const proj = project.data;
   const [aspect, setAspect] = useState<'landscape' | 'portrait'>('landscape');
@@ -70,7 +68,6 @@ export function VisualPage({ projectId }: { projectId: string }) {
   const [tab, setTab] = useState<'compose' | 'shot' | 'sample'>('compose');
   const [preset, setPreset] = useState(SHOT_PRESETS[0]);
   const [shotOpts, setShotOpts] = useState<Record<string, boolean>>({ 轻微推拉: false, 发言人裁切: false });
-  const [checks, setChecks] = useState<Record<string, boolean>>({});
   const [error, setError] = useState<string | null>(null);
   const [visualMode, setVisualMode] = useState<VisualMode>('twoShot');
   const [lockedCameras, setLockedCameras] = useState<Record<'A' | 'B', boolean>>({ A: false, B: false });
@@ -107,7 +104,8 @@ export function VisualPage({ projectId }: { projectId: string }) {
   ) ?? false;
 
   const canGenerate = !!proj && !!proj.currentDraftRevision && !generating;
-  const canAccept = !!selected && Object.values(checks).filter(Boolean).length === CHECKS.length;
+  // 样片当前只承载「生成成功与否」：接受门槛 = 有主图变体 + 样片任务成功。
+  const canAccept = !!selected && sampleDone;
   const cameraGroupId = `CG-ots-${projectId}`;
   const cameraStatus = useMemo<Record<'A' | 'B', CameraStatus>>(() => {
     const persisted = new Set(
@@ -132,11 +130,16 @@ export function VisualPage({ projectId }: { projectId: string }) {
   }, [cameraGroupId, jobs.data, variants]);
   const otsReady = cameraStatus.A === 'ready' && cameraStatus.B === 'ready';
   // 接受样片的真实门槛 = 已选主图变体 + 全部检查项（样片确认绑定当前草稿，服务端校验）。
+  const sampleFailJob = (jobs.data ?? []).find((j) => j.kind === 'sample.generate' && j.status === 'failed');
   const acceptHint = canAccept
-    ? '样片检查通过，可接受'
+    ? '样片已生成，可接受'
     : !selected
-      ? (Object.values(checks).some(Boolean) ? '需先生成主图变体，并完成全部样片检查' : '需先生成主图变体（构图区）')
-      : '需完成全部样片检查项';
+      ? '需先生成主图变体（构图区）'
+      : genSample.isPending || sampleJob
+        ? '样片生成中…'
+        : sampleFailJob
+          ? `样片生成失败：${sampleFailJob.error ?? '未知错误'}`
+          : '需先生成样片';
 
   const handleGenerate = () => {
     if (!proj) return;
@@ -528,30 +531,16 @@ export function VisualPage({ projectId }: { projectId: string }) {
                 className="hf-mono"
                 style={{ color: 'var(--wu-semantic-text)', background: 'var(--wu-semantic-muted)', padding: '3px 10px', borderRadius: 6 }}
               >{rangeHint}</span>
-              <Button variant="ghost" size="sm" disabled>调整</Button>
               <Button
                 variant="brand" size="sm" icon="sparkle"
                 busy={genSample.isPending || !!sampleJob}
                 disabled={!sampleRange || genSample.isPending || !!sampleJob || (visualMode === 'overShoulder' && !otsReady)}
-                title={sampleRange ? '提交样片生成任务（gpu 队列）；演示模式无可播放片段' : '请先确认配音并保证话轮可组成 A→B→A 区间'}
+                title={sampleRange ? undefined : '请先确认配音并保证话轮可组成 A→B→A 区间'}
                 onClick={handleGenSample}
               >生成样片</Button>
-              {sampleDone && <Badge tone="success" icon="check">样片任务已完成</Badge>}
-              <span className="hf-spacer" />
-              <Button variant="ghost" size="sm" disabled={visualMode === 'twoShot' ? !selected : !otsReady}>边界预览</Button>
+              {sampleDone && <Badge tone="success" icon="check">样片生成成功</Badge>}
+              {(genSample.isPending || sampleJob) && <Badge tone="info">生成中…</Badge>}
             </div>
-            <div className="hf-check">
-              {CHECKS.map((c) => (
-                <Choice
-                  key={c} type="checkbox" checked={!!checks[c]}
-                  onChange={(v) => setChecks((s) => ({ ...s, [c]: v }))} label={c}
-                />
-              ))}
-            </div>
-            <p className="wu-caption" style={{ marginTop: 8 }}>
-              检查<b>不能只检查是否生成成功</b>；接受样片只证明已检查区间和配置，不保证整片无缺陷。
-              {sampleDone && videoSimulated && ' 当前为演示样片：无可播放片段，请对照区间对应的脚本与配音逐项核对。'}
-            </p>
           </section>
         </div>
       </div>

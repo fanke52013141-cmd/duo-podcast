@@ -312,10 +312,10 @@ export const JOB_LABEL: Record<JobStatus, string> = {
   unknown: '未知',
 };
 
-export const STAGE_ORDER: { id: StageId; title: string; sub: string }[] = [
-  { id: 'create', title: '创建本期', sub: '话题 / 文章 / 已有脚本' },
-  { id: 'script', title: '编辑对话', sub: '话轮级编辑' },
-  { id: 'voice', title: '试听配音', sub: '三层合成单元' },
-  { id: 'visual', title: '预览画面', sub: '构图 / 镜头 / 样片' },
-  { id: 'render', title: '生成导出', sub: '分段渲染与导出' },
+export const STAGE_ORDER: { id: StageId; title: string }[] = [
+  { id: 'create', title: '创建本期' },
+  { id: 'script', title: '编辑对话' },
+  { id: 'voice', title: '试听配音' },
+  { id: 'visual', title: '预览画面' },
+  { id: 'render', title: '生成导出' },
 ];
