@@ -57,7 +57,11 @@ def test_smoke() -> None:
         assert project["currentDraftRevision"].startswith("R")
         assert len(project["scriptRevisions"]) == 1
         turns = project["scriptRevisions"][0]["turns"]
-        assert len(turns) == 2 and turns[0]["speaker"] == "A" and turns[1]["speaker"] == "B"
+        # 契约（第四轮实测修复）：短输入补开场/收尾，≥3 轮、A 开场、含 A→B→A——不再固定 2 轮
+        seq = [t["speaker"] for t in turns]
+        assert len(turns) >= 3 and seq[0] == "A", turns
+        assert any(seq[i] == "A" and seq[i + 1] == "B" and seq[i + 2] == "A"
+                   for i in range(len(seq) - 2)), turns
 
         # 5. 幂等：相同 clientToken 只创建一项任务
         again = client.post("/api/projects/EP-SMOKE/script/generate", json={

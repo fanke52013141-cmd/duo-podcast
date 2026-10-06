@@ -45,8 +45,14 @@ def main() -> None:
     assert j["status"] == "succeeded", j
     proj = call("GET", f"/projects/{pid}")
     rev = proj["currentDraftRevision"]
-    assert len(proj["scriptRevisions"][-1]["turns"]) == 3, proj["scriptRevisions"][-1]["turns"]
-    print("[ok] script.generate:", rev, "turns=3 stage=", proj["stageProgress"]["script"])
+    # 契约（第四轮实测修复，见 mock._build_script）：短输入补开场/收尾模板，
+    # 产出 A/B 交替、≥3 轮、A 开场、含 A→B→A、以 A 收尾的对话——不再固定 3 轮。
+    turns = proj["scriptRevisions"][-1]["turns"]
+    spk_seq = [t["speaker"] for t in turns]
+    assert len(turns) >= 3 and spk_seq[0] == "A" and spk_seq[-1] == "A", turns
+    assert any(spk_seq[i] == "A" and spk_seq[i + 1] == "B" and spk_seq[i + 2] == "A"
+               for i in range(len(spk_seq) - 2)), turns
+    print("[ok] script.generate:", rev, "turns=", len(turns), "stage=", proj["stageProgress"]["script"])
 
     # 2) 确认脚本
     proj = call("PATCH", f"/projects/{pid}",
@@ -65,7 +71,8 @@ def main() -> None:
     assert j["status"] == "succeeded", j
     proj = call("GET", f"/projects/{pid}")
     tl = proj["audioTimeline"]
-    assert tl and tl["sampleCount"] > 0 and len(tl["units"]) == 3, tl
+    # 合成单元与话轮 1:1（render_inputs 按话轮校验），数量随脚本轮数走
+    assert tl and tl["sampleCount"] > 0 and len(tl["units"]) == len(turns), tl
     print("[ok] tts.synthesize:", tl["sampleCount"], "samples units=", len(tl["units"]))
 
     # 4) 确认配音
