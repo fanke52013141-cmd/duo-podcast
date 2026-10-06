@@ -1,14 +1,16 @@
 /* ============================================================================
    HF-06 · 资产库（01 §7 / 06 §7.2）
-   设计稿语义：素材库 = 角色（形象/性格/多提供方语音绑定）+ 场景 / 同框底图 / 上传素材。
-   角色语音绑定取自工程真实 voiceBindings（本地参考音 / MiniMax 可并存）；
-   场景与同框底图首版为几何占位，同框底图版本号在有真实变体时跟随后端数据。
-   检查器：所选资产 / 语音绑定 / 产物登记（真实 manifest）。
+   角色已接全局角色库（GET/POST /api/characters + 图片上传）：
+   卡片显示真实形象图；支持新建角色与上传/更换形象。
+   场景与同框底图区仍为占位（场景库后端未建）；产物登记 = 真实 manifest。
+   检查器：所选资产 / 语音绑定 / 产物登记。
    ========================================================================== */
-import { useMemo, useState } from 'react';
-import { useArtifacts } from '../lib/api';
-import type { ArtifactEntry, Project, VoiceBinding } from '../lib/types';
-import { Badge, Button, Icon, type IconName, type Tone } from '../components/wu';
+import { useMemo, useRef, useState } from 'react';
+import {
+  useArtifacts, useCharacters, useCreateCharacter, useUploadCharacterImage,
+} from '../lib/api';
+import type { ArtifactEntry, Character, Project, VoiceBinding } from '../lib/types';
+import { Badge, Button, Icon, Input, Modal, type IconName, type Tone } from '../components/wu';
 import { AppShell } from '../components/AppShell';
 import { useProjectStore } from '../stores';
 
@@ -20,34 +22,79 @@ const KIND_META: Record<ArtifactEntry['kind'], { label: string; icon: IconName; 
   mixed: { label: '合成', icon: 'sparkle', tone: 'success' },
 };
 
-interface RoleDef { id: 'A' | 'B'; name: string; desc: string; initial: string; tone: 'a' | 'b'; traits: string; avatar: string }
-
-const ROLES: RoleDef[] = [
-  { id: 'A', name: '李雷', desc: '主持 · 男 · 沉稳清晰', initial: '李', tone: 'a', traits: '沉稳 · 主持型 · 语速 1.0', avatar: 'avatar_li_v2.png' },
-  { id: 'B', name: '韩梅梅', desc: '嘉宾 · 女 · 温和有说服力', initial: '韩', tone: 'b', traits: '温和 · 嘉宾型 · 语速 1.0', avatar: 'avatar_han_v2.png' },
-];
-
 const SCENES = [
   { key: 'studio', name: '录音棚', desc: '16:9 · 主用场景', label: '录音棚', tone: 'studio', fs: 15 },
   { key: 'cafe', name: '咖啡馆', desc: '16:9 · 备用场景', label: '咖啡馆', tone: 'cafe', fs: 15 },
 ];
 
-type Selection = { kind: 'role'; id: 'A' | 'B' } | { kind: 'scene'; key: string } | { kind: 'artifact'; id: string } | null;
+type Selection = { kind: 'character'; id: string } | { kind: 'scene'; key: string } | { kind: 'artifact'; id: string } | null;
+
+function CharacterThumb({ c, big }: { c: Character; big?: boolean }) {
+  if (c.imagePath) {
+    return (
+      <img
+      src={c.imagePath} alt={c.name}
+      className={big ? 'hf-bigthumb' : 'hf-thumb'}
+      style={{ objectFit: 'cover', padding: 0 }}
+      onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+    />
+    );
+  }
+  return <div className={big ? 'hf-bigthumb' : 'hf-thumb'} data-tone={c.speaker === 'A' ? 'a' : 'b'}>{c.name.slice(0, 1)}</div>;
+}
 
 export function AssetsPage({ project }: { project: Project | null }) {
   const artifacts = useArtifacts();
+  const charactersQ = useCharacters();
+  const createCharacter = useCreateCharacter();
+  const uploadImage = useUploadCharacterImage();
   const setView = useProjectStore((s) => s.setView);
-  const [sel, setSel] = useState<Selection>({ kind: 'role', id: 'A' });
+  const [sel, setSel] = useState<Selection>({ kind: 'character', id: 'char-lilei' });
+  const [newOpen, setNewOpen] = useState(false);
+  const [newName, setNewName] = useState('');
+  const [newSpeaker, setNewSpeaker] = useState<'A' | 'B'>('A');
+  const [newRole, setNewRole] = useState('主持');
+  const [newTraits, setNewTraits] = useState('');
+  const [newError, setNewError] = useState<string | null>(null);
+  const inspectorFileRef = useRef<HTMLInputElement | null>(null);
 
+  const characters: Character[] = charactersQ.data ?? [];
   const list: ArtifactEntry[] = artifacts.data?.artifacts ?? [];
   const bindings: VoiceBinding[] = project?.voiceBindings ?? [];
   const latestVariant = project?.visualVariants?.[project.visualVariants.length - 1] ?? null;
 
-  const bindingOf = (id: 'A' | 'B') => bindings.find((b) => b.characterId === id) ?? null;
-
-  const selectedRole = sel?.kind === 'role' ? ROLES.find((r) => r.id === sel.id) ?? null : null;
+  const selectedCharacter = sel?.kind === 'character'
+    ? characters.find((c) => c.id === sel.id) ?? characters[0] ?? null
+    : null;
   const selectedArtifact = sel?.kind === 'artifact' ? list.find((a) => a.artifactId === sel.id) ?? null : null;
-  const selectedBindings = useMemo(() => (selectedRole ? bindings.filter((b) => b.characterId === selectedRole.id) : []), [selectedRole, bindings]);
+  const selectedBindings = useMemo(() => (selectedCharacter
+    ? bindings.filter((b) => b.characterId === selectedCharacter.speaker)
+    : []), [selectedCharacter, bindings]);
+
+  const handleCreate = async () => {
+    setNewError(null);
+    if (!newName.trim()) { setNewError('角色名称不能为空'); return; }
+    try {
+      const created = await createCharacter.mutateAsync({
+      name: newName.trim(), speaker: newSpeaker, role: newRole.trim(), traits: newTraits.trim(),
+      desc: `${newRole.trim()} · ${newSpeaker === 'A' ? '男' : '女'}`,
+      });
+      setSel({ kind: 'character', id: created.id });
+      setNewOpen(false);
+      setNewName(''); setNewTraits(''); setNewRole('主持'); setNewSpeaker('A');
+    } catch (e) {
+      setNewError((e as Error).message);
+    }
+  };
+
+  const handlePickImage = async (characterId: string, file: File | undefined) => {
+    if (!file) return;
+    try {
+      await uploadImage.mutateAsync({ characterId, file });
+    } catch (e) {
+      setNewError(`形象上传失败：${(e as Error).message}`);
+    }
+  };
 
   return (
     <AppShell
@@ -57,19 +104,30 @@ export function AssetsPage({ project }: { project: Project | null }) {
         <aside className="hf-inspector" aria-label="检查器">
           <div className="hf-ins-sec">
             <h4>所选资产 <span className="wu-caption" style={{ fontWeight: 400 }}>
-              {selectedRole ? selectedRole.name : selectedArtifact ? selectedArtifact.artifactId : sel?.kind === 'scene' ? '场景' : '未选'}
+              {selectedCharacter ? selectedCharacter.name : selectedArtifact ? selectedArtifact.artifactId : sel?.kind === 'scene' ? '场景' : '未选'}
             </span></h4>
-            {selectedRole ? (
+            {selectedCharacter ? (
               <>
-                <div className="hf-bigthumb" data-tone={selectedRole.tone}>{selectedRole.initial}</div>
+                <CharacterThumb c={selectedCharacter} big />
                 <div className="hf-fld">
                   <label>性格描述</label>
-                  <input className="wu-input" value={selectedRole.traits} readOnly />
+                  <input className="wu-input" value={selectedCharacter.traits || '—'} readOnly />
                 </div>
                 <div className="hf-fld">
                   <label>形象</label>
-                  <input className="wu-input" value={selectedRole.avatar} readOnly />
+                  <input className="wu-input" value={selectedCharacter.imagePath || '（未上传形象图）'} readOnly />
                 </div>
+                <div className="wu-row" style={{ gap: 8, marginTop: 6 }}>
+                  <Button
+                  variant="secondary" size="sm" icon="upload" busy={uploadImage.isPending}
+                  onClick={() => inspectorFileRef.current?.click()}
+                  >{selectedCharacter.imagePath ? '更换形象' : '上传形象'}</Button>
+                  <input
+                  ref={inspectorFileRef} type="file" accept="image/png,image/jpeg" style={{ display: 'none' }}
+                  onChange={(e) => { handlePickImage(selectedCharacter.id, e.target.files?.[0]); e.target.value = ''; }}
+                  />
+                </div>
+                {newError && <p className="wu-caption" style={{ color: 'var(--wu-semantic-danger)' }}>{newError}</p>}
               </>
             ) : selectedArtifact ? (
               <>
@@ -86,7 +144,7 @@ export function AssetsPage({ project }: { project: Project | null }) {
             )}
           </div>
 
-          {selectedRole && (
+          {selectedCharacter && (
             <div className="hf-ins-sec">
               <h4>语音绑定 <span className="wu-caption" style={{ fontWeight: 400 }}>独立并存，不保证声音完全相同</span></h4>
               <div className="hf-bindrow">
@@ -111,9 +169,9 @@ export function AssetsPage({ project }: { project: Project | null }) {
               <div className="hf-ins-rows">
                 {list.slice(0, 6).map((a) => (
                   <button
-                    key={a.artifactId} type="button" className="hf-bindrow"
-                    style={{ background: 'none', border: 'none', borderBottom: '1px solid var(--wu-semantic-border)', width: '100%', textAlign: 'left', cursor: 'pointer', padding: '7px 0' }}
-                    onClick={() => setSel({ kind: 'artifact', id: a.artifactId })}
+                  key={a.artifactId} type="button" className="hf-bindrow"
+                  style={{ background: 'none', border: 'none', borderBottom: '1px solid var(--wu-semantic-border)', width: '100%', textAlign: 'left', cursor: 'pointer', padding: '7px 0' }}
+                  onClick={() => setSel({ kind: 'artifact', id: a.artifactId })}
                   >
                     <b className="hf-mono">{a.artifactId}</b>
                     <span>{KIND_META[a.kind].label}</span>
@@ -142,7 +200,7 @@ export function AssetsPage({ project }: { project: Project | null }) {
         <h2>资产库</h2>
         <span className="wu-caption">角色不再是每期必经步骤 · 独立入口</span>
         <span className="hf-spacer" />
-        <Button variant="brand" size="sm" icon="plus" disabled title="接入角色库后端后可新建">新建角色</Button>
+        <Button variant="brand" size="sm" icon="plus" onClick={() => { setNewError(null); setNewOpen(true); }}>新建角色</Button>
         <Button variant="secondary" size="sm" disabled title="接入场景库后端后可新建">新建场景</Button>
         <Button variant="secondary" size="sm" icon="upload" disabled title="接入素材导入后可上传">导入素材</Button>
       </div>
@@ -150,32 +208,32 @@ export function AssetsPage({ project }: { project: Project | null }) {
       <div className="hf-body2">
         <div className="hf-sec-t">角色 <span className="wu-caption">保存形象、性格描述、多个语音提供方的独立绑定</span></div>
         <div className="hf-grid">
-          {ROLES.map((r) => {
-            const b = bindingOf(r.id);
-            const active = sel?.kind === 'role' && sel.id === r.id;
+          {characters.map((c) => {
+            const active = sel?.kind === 'character' && sel.id === c.id;
+            const b = bindings.find((x) => x.characterId === c.speaker);
             return (
               <div
-                key={r.id}
-                className={`hf-asset ${active ? 'selected' : ''}`}
-                role="button" tabIndex={0} aria-pressed={active}
-                onClick={() => setSel({ kind: 'role', id: r.id })}
-                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSel({ kind: 'role', id: r.id }); } }}
+              key={c.id}
+              className={`hf-asset ${active ? 'selected' : ''}`}
+              role="button" tabIndex={0} aria-pressed={active}
+              onClick={() => setSel({ kind: 'character', id: c.id })}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSel({ kind: 'character', id: c.id }); } }}
               >
-                <div className="hf-thumb" data-tone={r.tone}>{r.initial}</div>
-                <div className="name">{r.name}</div>
-                <div className="desc">{r.desc}</div>
+                <CharacterThumb c={c} />
+                <div className="name">{c.name}</div>
+                <div className="desc">{c.desc || `${c.role} · ${c.speaker === 'A' ? '男' : '女'}`}</div>
                 <div className="bind">
                   {b?.localRefAudio
-                    ? <Badge tone="success" icon="mic">本地</Badge>
-                    : <Badge tone="muted" icon="mic">本地</Badge>}
+                  ? <Badge tone="success" icon="mic">本地</Badge>
+                  : <Badge tone="muted" icon="mic">本地</Badge>}
                   {b?.minimaxVoiceId
-                    ? <Badge tone="success" icon="mic">MiniMax</Badge>
-                    : <Badge tone="muted" icon="mic">MiniMax</Badge>}
+                  ? <Badge tone="success" icon="mic">MiniMax</Badge>
+                  : <Badge tone="muted" icon="mic">MiniMax</Badge>}
                 </div>
               </div>
             );
           })}
-          <button type="button" className="hf-plus" disabled title="接入角色库后端后可新建">
+          <button type="button" className="hf-plus" onClick={() => { setNewError(null); setNewOpen(true); }}>
             <Icon name="plus" size={20} />
             <span>新建角色</span>
           </button>
@@ -185,12 +243,12 @@ export function AssetsPage({ project }: { project: Project | null }) {
         <div className="hf-grid">
           {SCENES.map((s) => (
             <div
-              key={s.key}
-              className={`hf-asset ${sel?.kind === 'scene' && sel.key === s.key ? 'selected' : ''}`}
-              role="button" tabIndex={0}
-              aria-pressed={sel?.kind === 'scene' && sel.key === s.key}
-              onClick={() => setSel({ kind: 'scene', key: s.key })}
-              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSel({ kind: 'scene', key: s.key }); } }}
+            key={s.key}
+            className={`hf-asset ${sel?.kind === 'scene' && sel.key === s.key ? 'selected' : ''}`}
+            role="button" tabIndex={0}
+            aria-pressed={sel?.kind === 'scene' && sel.key === s.key}
+            onClick={() => setSel({ kind: 'scene', key: s.key })}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSel({ kind: 'scene', key: s.key }); } }}
             >
               <div className="hf-thumb" data-tone={s.tone} style={{ fontSize: s.fs }}>{s.label}</div>
               <div className="name">{s.name}</div>
@@ -214,6 +272,36 @@ export function AssetsPage({ project }: { project: Project | null }) {
           <div className="hf-sec-t" style={{ marginTop: 22 }}>产物登记 <span className="wu-caption">完成阶段任务后自动登记</span></div>
         )}
       </div>
+
+      <Modal
+      open={newOpen} onClose={() => setNewOpen(false)} title="新建角色" width={460}
+      footer={
+        <div className="wu-row" style={{ gap: 8 }}>
+          <span className="wu-caption">角色入全局资产库，所有工程可用</span>
+          <span className="hf-spacer" />
+          <Button variant="ghost" onClick={() => setNewOpen(false)}>取消</Button>
+          <Button variant="brand" busy={createCharacter.isPending} onClick={handleCreate}>创建</Button>
+        </div>
+      }
+      >
+        <div className="hf-fld">
+          <label>名称</label>
+          <Input placeholder="如：王小雅" value={newName} onChange={(e) => setNewName(e.target.value)} />
+        </div>
+        <div className="hf-fld">
+          <label>声道 / 定位</label>
+          <div className="wu-row" style={{ gap: 8 }}>
+            <Button variant={newSpeaker === 'A' ? 'secondary' : 'ghost'} size="sm" onClick={() => { setNewSpeaker('A'); setNewRole('主持'); }}>A · 主持</Button>
+            <Button variant={newSpeaker === 'B' ? 'secondary' : 'ghost'} size="sm" onClick={() => { setNewSpeaker('B'); setNewRole('嘉宾'); }}>B · 嘉宾</Button>
+          </div>
+        </div>
+        <div className="hf-fld">
+          <label>性格描述</label>
+          <Input placeholder="如：活泼 · 举例型 · 语速 1.1" value={newTraits} onChange={(e) => setNewTraits(e.target.value)} />
+        </div>
+        {newError && <p className="wu-caption" style={{ color: 'var(--wu-semantic-danger)' }}>{newError}</p>}
+        <p className="wu-caption">形象图可在创建后于检查器中上传（PNG / JPEG，≤10MB）。</p>
+      </Modal>
     </AppShell>
   );
 }

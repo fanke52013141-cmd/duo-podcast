@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from ..adapters.base import TextProvider
-from ..domain.project import Project, ScriptRevision, Turn
+from ..domain.project import ContentBrief, Project, ScriptRevision, Turn
 from ..storage.project_store import ProjectStore
 
 
@@ -36,11 +36,14 @@ def next_revision_id(project: Project) -> str:
 
 def build_script_revision(project: Project, provider: TextProvider, result: dict[str, Any]) -> ScriptRevision:
     source_input = result.get("sourceInput", {})
+    brief_data = result.get("contentBrief") or {}
     rev = ScriptRevision(
         id=next_revision_id(project),
         # 三入口（topic/article/script）的 kind 由提供方结果透传，不再硬编码（11 报告 P2-6）
         source_input={"kind": source_input.get("kind", "article"),
                       "content": source_input.get("content", "")},
+        # 内容结构由提供方结果透传（mock 也填充演示值）；旧行为是永远空 ContentBrief，检查器全是「—」
+        content_brief=ContentBrief.model_validate(brief_data) if brief_data else ContentBrief(),
         turns=[_turn_from_dict(t) for t in result.get("turns", [])],
         text_api_config_ref=result.get("textApiConfigRef", provider.name),
     )

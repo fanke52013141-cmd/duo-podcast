@@ -14,13 +14,15 @@ from pydantic import ValidationError
 
 from ..domain.project import Project
 from ..services.stage_svc import derive_stage_states
+from ..services.render_inputs import dependency_hash, validate_render_options
+from .voice import _merged_pronunciation
 from ..storage.project_store import ProjectAlreadyExists, ProjectRevisionConflict, ProjectStore
 
 router = APIRouter(prefix="/api/projects", tags=["projects"])
 
 # 客户端可修改的字段（11 报告 P2-5：拒绝注入 revision/id/audioTimeline 等内部字段）
 ALLOWED_PATCH_FIELDS = {"title", "aspect", "scriptRevisions", "currentDraftRevision",
-                        "approvals", "voiceBindings", "pronunciationDict"}
+                        "approvals", "voiceBindings", "pronunciationDict", "selectedVisualVariantId", "cameraMode", "performanceMode", "shotCameraOverrides"}
 # 三个默认确认点必须绑定当前草稿（11 报告 P1-6；stage_svc 的推导口径与此一致）
 CONFIRM_KINDS = {"script", "voice", "sample"}
 # 工程 id 白名单：字母/数字/下划线/连字符/空格/中文，不含路径分隔符与点号（P1-4 路径穿越）
@@ -33,7 +35,7 @@ def _init_store(request: Request) -> ProjectStore:
 
 def _inject_states(request: Request, proj: Project) -> dict:
     jobs = request.app.state.job_manager.list(proj.id) if proj.id else []
-    states = derive_stage_states(proj, jobs)
+    states = derive_stage_states(proj, jobs, _merged_pronunciation(request, proj))
     data = proj.model_dump(mode="json", by_alias=True)
     data["stageProgress"] = {k: v.value for k, v in states.items()}
     return data
@@ -140,6 +142,25 @@ async def patch_project(project_id: str, payload: dict, request: Request) -> dic
         raise HTTPException(422, f"字段不允许修改: {sorted(unknown)}")
     if "approvals" in patch and isinstance(patch["approvals"], list):
         _validate_confirm_bindings(store, project_id, patch["approvals"])
+    saved_project = store.load(project_id)
+    saved_approvals = {json.dumps(a.model_dump(mode="json", by_alias=True), sort_keys=True, ensure_ascii=False) for a in saved_project.approvals} if saved_project else set()
+    for approval in patch.get("approvals", []):
+        if not isinstance(approval, dict):
+            continue
+        if json.dumps(approval, sort_keys=True, ensure_ascii=False) in saved_approvals:
+            continue
+        spec = approval.get("spec", {})
+        if not isinstance(spec, dict):
+            continue
+        if approval.get("kind") == "sample" and spec.get("sampleJobId"):
+            job = request.app.state.job_manager.get(spec["sampleJobId"])
+            current = store.load(project_id)
+            if (job is None or job.project_id != project_id or job.status.value != "succeeded"
+                    or spec.get("sampleArtifactId") not in (job.result or {}).get("artifactIds", [])
+                    or job.input_snapshot.get("dependencyHash") != dependency_hash(current)):
+                raise HTTPException(409, "样片与当前声画输入不一致，请重新预览")
+            spec["dependencyHash"] = dependency_hash(current)
+            validate_render_options(current, {}, _merged_pronunciation(request, current), real_video=False)
     try:
         updated = store.apply(project_id, patch, expected_revision=expected)
     except KeyError as exc:

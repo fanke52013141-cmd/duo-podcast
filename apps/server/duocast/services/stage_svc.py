@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 from ..domain.job import JobStatus
+from .render_inputs import dependency_hash, audio_inputs_match
 from ..domain.project import Project, StageId, StageState
 
 # 阶段 → 所需产物/确认（01 §13.1 精简）
@@ -17,7 +18,7 @@ REQUIREMENTS: dict[StageId, dict] = {
 }
 
 
-def derive_stage_states(project: Project, jobs: list | None = None) -> dict[StageId, StageState]:
+def derive_stage_states(project: Project, jobs: list | None = None, pronunciation=None) -> dict[StageId, StageState]:
     states: dict[StageId, StageState] = {}
     running_kinds = {
         job.kind for job in (jobs or []) if job.status in (JobStatus.QUEUED, JobStatus.RUNNING,
@@ -50,6 +51,21 @@ def derive_stage_states(project: Project, jobs: list | None = None) -> dict[Stag
         rev_in_output = _output_revision(project.output_version)
         if rev_in_output and rev_in_output != project.current_draft_revision:
             states["render"] = StageState.STALE
+    if timeline and timeline.sample_count > 0 and "tts.synthesize" not in running_kinds:
+        revision = next((r for r in project.script_revisions if r.id == project.current_draft_revision), None)
+        if revision:
+            if not audio_inputs_match(project, pronunciation):
+                states["voice"] = StageState.STALE
+                states["visual"] = StageState.STALE
+                if has_render:
+                    states["render"] = StageState.STALE
+    current_hash = dependency_hash(project)
+    sample_approval = latest.get("sample")
+    if sample_approval and sample_approval.spec.get("dependencyHash") and sample_approval.spec["dependencyHash"] != current_hash:
+        states["visual"] = StageState.STALE
+    output_hash = ((project.output_manifest or {}).get("meta") or {}).get("dependencyHash")
+    if output_hash and output_hash != current_hash and "renders" not in running_kinds:
+        states["render"] = StageState.STALE
     return states
 
 

@@ -132,14 +132,22 @@ class ComfyUITTSProvider:
         m = re.search(r"-(A|B)(?:-|$)", str(req.get("voiceBindingId", "")))
         return m.group(1) if m else "A"
 
-    def _ensure_ref_in_input(self, speaker: str) -> str:
-        src = self.refs.get(speaker) or self.refs.get("A")
+    def _ensure_ref_in_input(self, speaker: str, reference=None) -> str:
+        if hasattr(reference, "model_dump"):
+            reference = reference.model_dump(by_alias=True)
+        if reference and reference.get("artifactId"):
+            entry = self.artifacts.by_id(reference["artifactId"])
+            if not entry or entry["kind"] != "audio":
+                raise RuntimeError("TTS_NO_REF: 参考音频资产不存在")
+            src = entry["path"]
+        else:
+            src = self.refs.get(speaker) or self.refs.get("A")
         if not src:
             raise RuntimeError("TTS_NO_REF: 未配置声线参考音频（DUOCAST_TTS_REF_A/B）")
         src = Path(src)
         if not src.exists():
             raise RuntimeError(f"TTS_NO_REF: 参考音频不存在 {src}")
-        name = f"duocast_ref_{speaker}{src.suffix.lower()}"
+        name = f"duocast_ref_{speaker}_{self.artifacts._hash_file(str(src))[:16]}{src.suffix.lower()}"
         dst = self.input_dir / name
         if not dst.exists() or dst.stat().st_size != src.stat().st_size:
             self.input_dir.mkdir(parents=True, exist_ok=True)
@@ -181,7 +189,7 @@ class ComfyUITTSProvider:
         if speed <= 0:
             raise ValueError("语速必须大于 0")
         speaker = self._speaker_of(req)
-        ref_name = self._ensure_ref_in_input(speaker)
+        ref_name = self._ensure_ref_in_input(speaker, req.get("referenceAudio"))
 
         wf = copy.deepcopy(WORKFLOW)
         wf["2"]["inputs"]["text_文本"] = text

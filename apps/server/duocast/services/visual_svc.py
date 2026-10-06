@@ -10,7 +10,7 @@ from typing import Any
 
 from ..domain.audio import AssetRef
 from ..domain.project import Project
-from ..domain.visual import CameraAsset, DialogueCameraGroup, VisualVariant
+from ..domain.visual import CameraAsset, DialogueCameraGroup, VisualVariant, Rect
 from ..storage.project_store import ProjectStore
 
 
@@ -72,6 +72,7 @@ def _apply_over_shoulder_camera(store: ProjectStore, project: Project, result: d
     camera = CameraAsset(
         id=camera_id, master_image=asset, mode="overShoulder",
         subject_speaker=subject, foreground_speaker=foreground,
+        subject_region=Rect.model_validate(result.get("subjectRegion") or {"x": 0.05 if subject == "A" else 0.28, "y": 0.02, "width": 0.67, "height": 0.96}),
     )
     existing = next((i for i, c in enumerate(group.camera_assets) if c.id == camera_id), None)
     if existing is None:

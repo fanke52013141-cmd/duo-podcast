@@ -6,7 +6,7 @@ import { useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useCapabilities, useProject } from './lib/api';
 import { startSse } from './lib/sse';
-import { useJobStore, useProjectStore, useServiceStore } from './stores';
+import { useJobStore, useProjectStore, useServiceStore, loadSession, saveSession } from './stores';
 import { AppShell } from './components/AppShell';
 import { Empty, Button } from './components/wu';
 import { HomePage } from './pages/HomePage';
@@ -86,6 +86,15 @@ export default function App() {
     );
     return handle.stop;
   }, [qc, currentProjectId, noteSeq, touch]);
+
+  // 会话持久化：启动时恢复上次工程与视图（第四轮实测：无路由 SPA 刷新丢上下文）
+  useEffect(() => {
+    const saved = loadSession();
+    if (saved) useProjectStore.setState({ currentProjectId: saved.currentProjectId, view: saved.view });
+  }, []);
+  useEffect(() => {
+    saveSession(currentProjectId, view);
+  }, [currentProjectId, view]);
 
   if (!currentProjectId || view === 'home') {
     return <HomePage />;

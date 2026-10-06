@@ -39,6 +39,11 @@ class Settings:
     image_size: str = "4:5"
     image_quality: str = "low"
     image_resolution: str = "1k"
+    video_provider: str = "mock"
+    text_provider: str = "mock"
+    text_model: str = "deepseek-flash"
+    video_url: str = "http://127.0.0.1:8191"
+    video_input: Path = field(default_factory=lambda: PROJECT_ROOT / "runtime" / "video" / "input")
 
     @staticmethod
     def _env_int(name: str, default: int) -> int:
@@ -73,6 +78,11 @@ class Settings:
             image_size=os.environ.get("DUOCAST_IMAGE_SIZE", "4:5"),
             image_quality=os.environ.get("DUOCAST_IMAGE_QUALITY", "low"),
             image_resolution=os.environ.get("DUOCAST_IMAGE_RESOLUTION", "1k"),
+            video_provider=os.environ.get("DUOCAST_VIDEO_PROVIDER", "mock"),
+            text_provider=os.environ.get("DUOCAST_TEXT_PROVIDER", "mock"),
+            text_model=os.environ.get("DUOCAST_TEXT_MODEL", "deepseek-flash"),
+            video_url=os.environ.get("DUOCAST_VIDEO_URL", "http://127.0.0.1:8191"),
+            video_input=Path(os.environ.get("DUOCAST_VIDEO_INPUT", str(PROJECT_ROOT / "runtime" / "video" / "input"))),
         )
 
 

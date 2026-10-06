@@ -42,8 +42,10 @@ class MockTextProvider:
 
     async def rewrite(self, req: dict[str, Any]) -> dict[str, Any]:
         await asyncio.sleep(self.delay_ms / 1000)
-        # 确定性轻改写（演示候选差异流）：选中话轮应用通用口语化变换
+        # 确定性轻改写（演示候选差异流）：选中话轮按 mode 应用变换，兜底保证候选非空——
+        # 文本没有触发词时旧实现返回「共改 0 处」，用户只能接受一个空差异（第四轮实测发现）。
         turn_ids = set(req.get("turnIds", []))
+        mode = req.get("mode", "rewrite")
         changed: list[str] = []
         turns = []
         for turn in req.get("turns", []):
@@ -53,7 +55,7 @@ class MockTextProvider:
             new_lines = []
             for line in turn.get("lines", []):
                 text = line.get("displayText", "")
-                new_text = self._light_edit(text)
+                new_text = self._light_edit(text, mode)
                 if new_text != text:
                     changed.append(turn["id"])
                 new_lines.append({**line, "displayText": new_text, "spokenText": new_text})
@@ -61,36 +63,152 @@ class MockTextProvider:
         return {"turns": turns, "changedTurnIds": sorted(set(changed))}
 
     @staticmethod
-    def _light_edit(text: str) -> str:
-        """通用轻改写：但→不过；所以你的意思是→也就是说；删去「那么」。"""
-        t = text.replace("但是", "不过").replace("然而", "不过")
-        if t.startswith("所以你的意思是"):
-            t = "也就是说" + t[len("所以你的意思是"):]
+    def _light_edit(text: str, mode: str = "rewrite") -> str:
+        """通用轻改写：按改写意图做确定性替换；无触发词时兜底一处可见变化。"""
+        if not text.strip():
+            return text
+        t = text
+        if mode == "casual":  # 更口语化
+            t = t.replace("但是", "不过").replace("然而", "不过").replace("因此", "所以")
+        elif mode == "dedupe":  # 减少重复：去掉口头禅与重复句
+            t = t.replace("然后，", "").replace("然后", "接着", 1)
+            sentences = [s for s in t.split("。") if s]
+            deduped: list[str] = []
+            for s in sentences:
+                if s not in deduped:
+                    deduped.append(s)
+            if len(deduped) != len(sentences):
+                t = "。".join(deduped) + ("。" if t.rstrip().endswith("。") else "")
+        elif mode == "trim":  # 精简：删语气词与程度副词
+            t = t.replace("其实", "").replace("真的", "").replace("非常", "很").replace("  ", " ")
+        elif mode == "probe":  # 增加追问：句尾补一个具体追问
+            core = t.rstrip("。！？!?. ")
+            t = f"{core}，为什么这么说呢？" if core else t
+        else:  # rewrite：通用
+            t = t.replace("但是", "不过").replace("然而", "不过")
+            if t.startswith("所以你的意思是"):
+                t = "也就是说" + t[len("所以你的意思是"):]
         t = t.replace("那么，", "").replace("那么 ", "")
+        if t == text:  # 兜底：保证候选非空（演示差异流可用性）
+            t = ("说实话，" + text) if mode in ("rewrite", "casual") else (text + "，可以这样理解。")
         return t
 
     @staticmethod
     def _build_script(content: str, brief: str = "", kind: str = "article") -> dict[str, Any]:
-        # 简化拆分：按段落轮流分配给 A / B，产出结构化话轮（真实实现见 02 §5.1 单元划分 + script_svc 两次生成）
-        paragraphs = [p.strip() for p in content.split("\n") if p.strip()] or [content or "（空输入）"]
+        """演示脚本生成：三种入口都产出 A/B 交替、≥3 轮、含收尾的双人对话。
+
+        此前按段落机械轮流：单段话题输入只得到 1 条 A 话轮（B 全程无台词），
+        样片要求的 A→B→A 区间必然缺失（第四轮全流程实测发现）。
+        """
+        text = (content or "").strip()
+        if kind == "script":
+            # 已有脚本：每行一条发言，`A:` / `B:` 标记说话人（01 §3 三入口契约），无标记时轮流分配
+            parsed: list[tuple[str, str]] = []
+            for raw in text.splitlines():
+                line = raw.strip()
+                if not line:
+                    continue
+                marker = line[:2]
+                if marker in ("A:", "A：", "B:", "B："):
+                    parsed.append((marker[0], line[2:].strip()))
+                else:
+                    parsed.append(("", line))
+            entries: list[tuple[str, str]] = []
+            last = "B"
+            for spk, line in parsed:
+                entries.append((spk or ("A" if last == "B" else "B"), line))
+                last = entries[-1][0]
+        else:
+            entries = MockTextProvider._entries_from_prose(text, kind)
+
+        # 相邻同说话人合并成一条话轮的多行（双人对话语义：A/B 交替）
+        merged: list[tuple[str, list[str]]] = []
+        for spk, line in entries:
+            if merged and merged[-1][0] == spk and len(merged[-1][1]) < 2:
+                merged[-1][1].append(line)
+            else:
+                merged.append((spk, [line]))
+
         turns = []
-        for i, para in enumerate(paragraphs):
-            speaker = "A" if i % 2 == 0 else "B"
-            turn_id = f"T{i + 1:02d}"
-            line_id = f"L{(i * 2) + 1:03d}"
+        for i, (speaker, lines) in enumerate(merged):
+            first = lines[0]
+            intent = "summarize" if i == len(merged) - 1 else ("probe" if speaker == "A" and i > 0 else "explain")
             turns.append({
-                "id": turn_id,
+                "id": f"T{i + 1:02d}",
                 "speaker": speaker,
-                "intent": "explain",
+                "intent": intent,
                 "tone": "自然",
                 "speedRatio": 1.0,
-                "lines": [{"id": line_id, "displayText": para, "spokenText": para}],
+                "lines": [{"id": f"L{i * 10 + j + 1:03d}", "displayText": ln, "spokenText": ln}
+                          for j, ln in enumerate(lines)],
             })
         return {
             "revisionId": f"R{mock_script_counter()}",
             "sourceInput": {"kind": kind, "content": content},
+            "contentBrief": MockTextProvider._build_brief(text, kind),
             "turns": turns,
             "textApiConfigRef": "mock-text",
+        }
+
+    @staticmethod
+    def _entries_from_prose(text: str, kind: str) -> list[tuple[str, str]]:
+        """话题 / 文章 → A/B 交替发言序列（保证以 A 开场、A→B→A、以 A 收尾）。"""
+        if not text:
+            text = "（空输入）"
+        sentences = [s.strip() for s in text.replace("！", "。").replace("？", "。").split("。") if s.strip()]
+        head = sentences[0] if sentences else text[:40]
+        if kind == "topic":
+            topic = head if len(head) <= 60 else head[:57] + "…"
+            rest = [s for s in sentences[1:] if s != head]
+            point_a = rest[0] if rest else "技术和听众信任其实是两条线，不能混在一起谈。"
+            point_b = rest[1] if len(rest) > 1 else "商业上数字人确实能降本，但观众认的是人，不是皮。"
+            entries = [
+                ("A", f"欢迎回到本期节目。今天我们聊一个听众问得很多的话题：{topic}。"),
+                ("B", f"这个话题我很有感触。我的基本判断是：{point_b}"),
+                ("A", f"我先补一个背景：{point_a}那听众为什么还是更信任真人？"),
+                ("B", "因为播客的本质是人对人的表达——观点、犹豫、临场的反应都是信任的来源，念稿机器给不了。"),
+                ("A", "所以工具会变，内容的核心不变。今天我们先聊到这里。"),
+                ("A", "感谢大家收听，我们下期再见。"),
+            ]
+            return entries
+        # article：句子两两分组交替分配；不足 3 轮时补开场/收尾模板
+        groups = ["。".join(sentences[i:i + 2]) + "。" for i in range(0, len(sentences), 2) if sentences[i]]
+        groups = [g for g in groups if g.strip("。")]
+        if len(groups) < 3:
+            filler = [
+                ("A", f"今天我们围绕这期内容展开聊：{head[:40]}。"),
+                ("B", groups[0] if groups else "我先说说我的整体看法。"),
+                ("A", groups[1] if len(groups) > 1 else "我补充一个角度。"),
+                ("B", groups[2] if len(groups) > 2 else "对，这两点放在一起看会更清楚。"),
+                ("A", "好，本期先聊到这里，感谢收听，我们下期再见。"),
+            ]
+            return filler
+        entries = []
+        for i, g in enumerate(groups[:14]):  # 演示上限：超长文章截到 14 轮
+            spk = "A" if i % 2 == 0 else "B"
+            if i == 0:
+                g = f"欢迎回到本期节目。{g}"
+            if i == min(13, len(groups) - 1):
+                g = f"{g}今天就先聊到这里，感谢收听。"
+            entries.append((spk, g))
+        return entries
+
+    @staticmethod
+    def _build_brief(text: str, kind: str) -> dict[str, Any]:
+        """内容结构（ContentBrief）：从输入中提取演示值，检查器不再全是「—」。"""
+        if kind == "script":
+            text = "\n".join(ln[2:].strip() if ln[:2] in ("A:", "A：", "B:", "B：") else ln
+                             for ln in text.splitlines())
+        sentences = [s.strip() for s in text.replace("！", "。").replace("？", "。").split("。") if s.strip()]
+        core = sentences[0] if sentences else ""
+        if len(core) > 50:
+            core = core[:47] + "…"
+        facts = [s for s in sentences if any(ch.isdigit() for ch in s)][:2]
+        return {
+            "coreQuestion": core or "本期核心议题待补充",
+            "keyPoints": [s[:40] for s in sentences[1:4]],
+            "necessaryFacts": [s[:40] for s in facts],
+            "speakerDuties": "A 负责开场、提问与推进节奏；B 负责输出观点与举例。",
         }
 
 

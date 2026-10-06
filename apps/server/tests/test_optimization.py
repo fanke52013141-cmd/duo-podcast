@@ -33,6 +33,7 @@ def project_fixture(tmp_path):
 
 
 class AudioProvider:
+    capabilities = {"simulated": True}
     def __init__(self, sample_rate=48000):
         self.requests = []
         self.sample_rate = sample_rate
@@ -221,8 +222,10 @@ def test_voice_api_freezes_revision_at_submission(tmp_path):
 @pytest.mark.parametrize('seconds,expected', [(300, None), (301, 422)])
 def test_render_duration_limit_includes_tail(tmp_path, seconds, expected):
     store, project, revision = project_fixture(tmp_path)
-    project = store.apply(project.id, {'audio_timeline': AudioTimeline(revision_id='R1', sample_count=seconds * 48000)}, project.revision)
-    request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(project_store=store, job_manager=manager_fixture(tmp_path))))
+    units = build_units(project, revision, {})
+    for unit in units: unit.sample_count = seconds * 24000
+    project = store.apply(project.id, {'audio_timeline': AudioTimeline(revision_id='R1', sample_count=seconds * 48000, units=units, unit_offsets={units[0].id:0,units[1].id:seconds*24000})}, project.revision)
+    request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(project_store=store, job_manager=manager_fixture(tmp_path), artifacts=None, capabilities=SimpleNamespace(video={"simulated":True}))))
     if expected:
         with pytest.raises(HTTPException) as caught:
             asyncio.run(generate(project.id, {}, request))

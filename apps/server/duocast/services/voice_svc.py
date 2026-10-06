@@ -27,6 +27,14 @@ def find_revision(project: Project, revision_id: str | None) -> ScriptRevision:
     raise KeyError(f"revision not found: {rid}")
 
 
+def effective_pronunciation(project, global_entries=None):
+    merged = {str(e.get("term", "")).strip():str(e.get("read", "")) for e in (global_entries or []) if str(e.get("term", "")).strip()}
+    for entry in project.pronunciation_dict:
+        if entry.term.strip():
+            merged[entry.term.strip()] = entry.read
+    return [{"term":term,"read":read} for term,read in merged.items()]
+
+
 def apply_pronunciation(texts: list[str], pronunciation: list[dict] | None) -> list[str]:
     """读音词典替换（01 §4.2）：按词条顺序把 term 替换为 read。空词条与空读法跳过。"""
     entries = [(str(e.get("term", "")), str(e.get("read", "")))
@@ -59,12 +67,12 @@ def build_units(project: Project, revision: ScriptRevision, bindings: dict[str, 
             emotion={"label": turn.tone or "自然"},
             speed_ratio=turn.speed_ratio,
         )
-        unit.pronunciation_revision = _unit_fingerprint(turn, unit, pronunciation)
+        unit.pronunciation_revision = _unit_fingerprint(turn, unit, pronunciation, binding.get("localRefAudio"))
         units.append(unit)
     return units
 
 
-def _unit_fingerprint(turn, unit: SynthesisUnit, pronunciation: list[dict] | None = None) -> str:
+def _unit_fingerprint(turn, unit: SynthesisUnit, pronunciation: list[dict] | None = None, reference=None) -> str:
     """确定某个已采用单元还能否服务当前话轮。
 
     版本 ID 本身不足以判断：用户可在同一草稿内编辑一条台词。把会影响音频的
@@ -77,6 +85,10 @@ def _unit_fingerprint(turn, unit: SynthesisUnit, pronunciation: list[dict] | Non
         "providerProfileId": unit.provider_profile_id, "modelId": unit.model_id,
         "emotion": unit.emotion, "speedRatio": unit.speed_ratio,
     }
+    if reference:
+        if hasattr(reference, "model_dump"):
+            reference = reference.model_dump(by_alias=True)
+        payload["referenceAudio"] = {key: reference.get(key, "") for key in ("artifactId", "fileHash")}
     return hashlib.sha256(json.dumps(payload, ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest()
 
 
@@ -129,6 +141,11 @@ async def synthesize_timeline(
     pronunciation 为提交时冻结的读音词典（全局 + 本工程合并），合成前应用替换。
     """
     bindings = _effective_bindings(project, bindings)
+    if not tts.capabilities.get("simulated", True):
+        bindings = {speaker: {"id": f"VB-{speaker}-default", "characterId": speaker,
+                             "providerProfileId": getattr(tts, "name", "local-tts"),
+                             **bindings.get(speaker, {})}
+                    for speaker in ("A", "B")}
     units = build_units(project, revision, bindings, pronunciation)
     if not units:
         raise ValueError("EMPTY_SCRIPT: 没有可合成的发言")
@@ -178,6 +195,7 @@ async def synthesize_timeline(
                 "speaker": turn_speaker.get(unit.turn_id, "A"),
                 "providerProfileId": unit.provider_profile_id, "modelId": unit.model_id,
                 "emotion": unit.emotion, "speedRatio": unit.speed_ratio,
+                "referenceAudio": bindings.get(turn_speaker.get(unit.turn_id, "A"), {}).get("localRefAudio"),
             })
             sample_count = res.get("sampleCount", 0)
             if type(sample_count) is not int or sample_count <= 0:
@@ -404,3 +422,36 @@ def _build_master_track(
     artifact_store.register(asset_id, "mixed", str(path), dependency,
                             params_snapshot={"revisionId": revision_id, "sampleCount": timeline.sample_count})
     return asset_id
+
+
+def retime_adopted_audio(store, project_id, gaps, artifacts):
+    """Change silence only: preserve adopted samples and rebuild their offsets."""
+    project = store.load(project_id)
+    timeline = project.audio_timeline if project else None
+    if timeline is None or timeline.revision_id != project.current_draft_revision:
+        raise ValueError("请先采用当前脚本的配音")
+    if not isinstance(gaps, list) or len(gaps) != max(0, len(timeline.units)-1) or any(type(g) is not int or not 0 <= g <= 2000 for g in gaps):
+        raise ValueError("间隔必须与话轮数量一致，且为0–2000毫秒整数")
+    paths = _paths_for_adopted_units(timeline, artifacts)
+    if len(paths) != len(timeline.units):
+        raise ValueError("已采用的单元音频缺失")
+    for unit in timeline.units:
+        entry = artifacts.by_id(unit.adopted_audio_asset_id)
+        if artifacts._hash_file(paths[unit.id]) != entry["fileHash"]:
+            raise ValueError("单元音频完整性校验失败")
+        with wave.open(paths[unit.id]) as reader:
+            if reader.getnframes() != unit.sample_count or reader.getframerate() != timeline.sample_rate:
+                raise ValueError("单元音频样本数与时间轨不一致")
+    result = timeline.model_copy(deep=True)
+    result.transition_gap_ms = gaps
+    offset = round(result.lead_in_ms * result.sample_rate / 1000)
+    for index, unit in enumerate(result.units):
+        result.unit_offsets[unit.id] = offset
+        offset += unit.sample_count
+        if index < len(gaps):
+            offset += round(gaps[index] * result.sample_rate / 1000)
+    result.sample_count = offset + round(result.tail_out_ms * result.sample_rate / 1000)
+    result.master_audio_asset_id = _build_master_track(result, paths, result.revision_id, artifacts, artifacts.root)
+    store.apply(project_id, {"audio_timeline":result,"audio_history":[*project.audio_history,result],
+                "approvals":[a for a in project.approvals if a.kind not in ("voice","sample")]}, expected_revision=project.revision)
+    return result

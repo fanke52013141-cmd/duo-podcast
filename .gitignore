@@ -64,3 +64,8 @@ apps/storage/
 *.bak
 ~$*
 .cache/
+
+# 本机数字人运行配置、启动凭据和实测产物
+scripts/digital-human/runtime.local.json
+apps/server/_run_dev_toapis.cmd
+链路实测/过肩镜头验证/

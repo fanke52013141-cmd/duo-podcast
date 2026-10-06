@@ -6,7 +6,7 @@
    ========================================================================== */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  useConfirm, useJob, useJobs, useProject, useVoiceAdopt, useVoiceAudition, useVoiceSynthesize,
+  useConfirm, useJob, useJobs, useProject, useVoiceAdopt, useVoiceAudition, useVoiceSynthesize, useVoiceRhythm,
 } from '../lib/api';
 import type { AudioTimeline, Job, Project, ScriptRevision, SynthesisUnit, Turn, VoiceBinding } from '../lib/types';
 import { Alert, Badge, Button, Choice, Icon } from '../components/wu';
@@ -24,8 +24,8 @@ const ENGINES: { id: 'local' | 'minimax'; label: string; profileId: string }[] =
 ];
 
 const VOICE_OPTIONS: Record<'A' | 'B', string[]> = {
-  A: ['CosyVoice2-0.5B · 参考音', 'CosyVoice2-0.5B · 增强'],
-  B: ['CosyVoice2-0.5B · 参考音', 'CosyVoice2-0.5B · 低沉'],
+  A: ['IndexTTS 2.5 · 参考声线'],
+  B: ['IndexTTS 2.5 · 参考声线'],
 };
 
 const GAP_MAX_MS = 1200;
@@ -55,6 +55,8 @@ export function VoicePage({ projectId }: { projectId: string }) {
   const project = useProject(projectId);
   const jobs = useJobs(projectId);
   const synth = useVoiceSynthesize();
+  const rhythm = useVoiceRhythm();
+  const [rhythmGaps, setRhythmGaps] = useState<number[] | null>(null);
   const adopt = useVoiceAdopt();
   const audition = useVoiceAudition();
   const confirm = useConfirm();
@@ -92,10 +94,11 @@ export function VoicePage({ projectId }: { projectId: string }) {
     if (!bs) return {};
     return Object.fromEntries(
       Object.entries(bs).map(([spk, b]) => [
-        spk, { id: b.id, characterId: b.characterId, providerProfileId: b.providerProfileId, modelId: b.modelId },
+        spk, { id: b.id, characterId: b.characterId, providerProfileId: ttsSimulated ? 'mock-tts' : 'comfyui-indextts',
+          modelId: b.modelId, localRefAudio: b.localRefAudio },
       ]),
     );
-  }, [bs]);
+  }, [bs, ttsSimulated]);
 
   // 时间轨可能来自旧话轮数的草稿；间隔数组必须重采样到当前 turnCount-1，
   // 否则增删话轮后合成被服务端 INVALID_GAPS 拒绝（保留已调值，新相邻位补 320）。
@@ -107,7 +110,7 @@ export function VoicePage({ projectId }: { projectId: string }) {
 
   // 时间轨过期 = 脚本草稿版本 ≠ 时间轨对应版本。此时允许（且应当）重新合成；
   // 阶段状态由后端 stage_svc 权威推导为 stale，前端只展示。
-  const timelineStale = !!timeline && !!proj && timeline.revisionId !== proj.currentDraftRevision;
+  const timelineStale = !!timeline && !!proj && (timeline.revisionId !== proj.currentDraftRevision || proj.stageProgress.voice === 'stale');
 
   // 已确认 = 对**当前**时间轨版本的 voice 确认记录。过期时间轨上的历史确认不算
   // （此前把旧时间轨的确认当作已确认：阶段轨显示「已过期」的同时按钮显示「已确认」、
@@ -150,7 +153,7 @@ export function VoicePage({ projectId }: { projectId: string }) {
 
   const startAudition = (spk: 'A' | 'B') => {
     setError(null);
-    audition.mutateAsync({ projectId, speaker: spk })
+    audition.mutateAsync({ projectId, speaker: spk, referenceAudio: bs?.[spk].localRefAudio ?? undefined })
       .then((r) => setAuditionJob({ id: r.jobId, spk }))
       .catch((e) => setError(`试听提交失败：${e instanceof Error ? e.message : e}`));
   };
@@ -165,10 +168,17 @@ export function VoicePage({ projectId }: { projectId: string }) {
     });
   };
 
-  const handleRefFile = (spk: 'A' | 'B', file: File | undefined) => {
+  const handleRefFile = async (spk: 'A' | 'B', file: File | undefined) => {
     if (!file) return;
-    setRefNames((r) => ({ ...r, [spk]: file.name }));
-    updateBinding(spk, { localRefAudio: { artifactId: `ref-${spk.toLowerCase()}-${file.name}`, path: '', fileHash: '' } });
+    try {
+      const form = new FormData();
+      form.append('file', file);
+      const response = await fetch('/api/uploads/audio', { method: 'POST', body: form });
+      const reference = await response.json();
+      if (!response.ok) throw new Error(reference.detail ?? '参考音频上传失败');
+      updateBinding(spk, { localRefAudio: reference });
+      setRefNames((r) => ({ ...r, [spk]: file.name }));
+    } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
   };
 
   const handleSynthesize = () => {
@@ -256,8 +266,9 @@ export function VoicePage({ projectId }: { projectId: string }) {
   const gapIdx = selectedTurnIdx > 0 ? selectedTurnIdx - 1 : 0;
   // 间隔覆盖写入「当前选中」的间隔位，而非固定第一处（11 报告 P2-10：此前显示与数据错位）
   const gapMs = gapOverride !== null
-    ? defaultGaps.map((v, i) => (i === gapIdx ? gapOverride : v))
-    : defaultGaps;
+    ? (rhythmGaps?.length === defaultGaps.length ? rhythmGaps : defaultGaps).map((v, i) => (i === gapIdx ? gapOverride : v))
+    : rhythmGaps?.length === defaultGaps.length ? rhythmGaps : defaultGaps;
+  useEffect(() => { setRhythmGaps(null); setGapOverride(null); }, [timeline?.masterAudioAssetId, revision?.id]);
   useEffect(() => {
     // 切换所选单元后回到默认值，滑杆显示的是新间隔的真实值
     setGapOverride(null);
@@ -345,7 +356,7 @@ export function VoicePage({ projectId }: { projectId: string }) {
                 <input
                   type="range" min={0} max={GAP_MAX_MS} step={20}
                   value={gapValue} aria-label="转场间隔 transitionGapMs"
-                  onChange={(e) => setGapOverride(Number(e.target.value))}
+                  onChange={(e) => { setGapOverride(null); setRhythmGaps(gapMs.map((v, i) => i === gapIdx ? Number(e.target.value) : v)); }}
                   style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', opacity: 0, margin: 0, cursor: 'pointer' }}
                 />
               </span>
@@ -353,8 +364,15 @@ export function VoicePage({ projectId }: { projectId: string }) {
               <span className="hf-mono" style={{ color: 'var(--wu-semantic-text)' }}>{gapValue}ms</span>
             </div>
             <p className="wu-caption" style={{ lineHeight: 1.6 }}>
-              拖动调整话轮间停顿（毫秒），通常不重新合成声音。
+              调整间隔后点击应用，复用已采用声音并重建时间轴；画面与配音确认需要重新检查。
             </p>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <Button variant="secondary" size="sm" onClick={() => {
+                setGapOverride(null);
+                setRhythmGaps(turns.slice(1).map(t => t.intent === 'summarize' ? 500 : t.intent === 'probe' ? 240 : turnText(t).length < 18 ? 180 : 320));
+              }}>建议对话间隔</Button>
+              <Button size="sm" disabled={!timeline || timelineStale || rhythm.isPending || synthesizing} onClick={() => rhythm.mutate({ projectId, transitionGapMs: gapMs }, { onError: e => setError((e as Error).message) })}>应用间隔</Button>
+            </div>
           </div>
 
           <div className="hf-ins-sec">
@@ -422,7 +440,7 @@ export function VoicePage({ projectId }: { projectId: string }) {
           <section className="wu-card hf-eng">
             <h3>语音引擎</h3>
             <div className="hf-engine">
-              {ENGINES.filter((e) => e.id === 'local' || !ttsSimulated).map((e) => (
+              {ENGINES.filter((e) => e.id === 'local').map((e) => (
                 <Choice
                   key={e.id} type="radio" name="engine" value={e.id}
                   checked={engine === e.id} onChange={() => pickEngine(e.id)}
@@ -441,7 +459,7 @@ export function VoicePage({ projectId }: { projectId: string }) {
                     {!ttsSimulated && (
                       <select
                         className="wu-input" aria-label={`${spk.id} 音色`} style={{ marginTop: 4 }}
-                        value={b.modelId}
+                        value={VOICE_OPTIONS[spk.id][0]}
                         onChange={(e) => updateBinding(spk.id, { modelId: e.target.value })}
                       >
                         {VOICE_OPTIONS[spk.id].map((o) => <option key={o} value={o}>{o}</option>)}
@@ -460,7 +478,7 @@ export function VoicePage({ projectId }: { projectId: string }) {
                           onChange={(e) => handleRefFile(spk.id, e.target.files?.[0])}
                         />
                         <span className="wu-caption" style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {b.localRefAudio ? '已绑定（本地引用）' : '未绑定 · 用提供方默认音色'}
+                          {b.localRefAudio ? '已绑定参考音频' : '使用已配置的角色参考声线'}
                         </span>
                       </div>
                     )}

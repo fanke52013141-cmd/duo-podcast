@@ -17,8 +17,10 @@ from fastapi.staticfiles import StaticFiles
 
 from .adapters.base import CapabilityRegistry, TTSProvider
 from .adapters.comfyui_tts import ComfyUITTSProvider
+from .adapters.comfyui_video import ComfyUIVideoProvider
 from .adapters.mock import MockImageProvider, MockTextProvider, MockTTSProvider, MockVideoProvider
 from .adapters.toapis_image import ToAPIsImageProvider
+from .adapters.toapis_text import ToAPIsTextProvider
 from .core.config import PROJECT_ROOT, settings
 from .core.eventbus import EventBus
 from .core.logging import log, setup_logging
@@ -26,9 +28,12 @@ from .jobs.manager import JobManager
 from .jobs.recovery import recover_on_startup
 from .domain.project import Project, ScriptRevision
 from .services.script_svc import apply_script_revision, build_script_revision
+from .services.render_svc import apply_output_version
+from .services.render_inputs import dependency_hash, audio_inputs_match
 from .services.visual_svc import apply_visual_variant
-from .services.voice_svc import find_revision, synthesize_timeline
+from .services.voice_svc import find_revision, synthesize_timeline, effective_pronunciation
 from .storage.artifacts import ArtifactStore
+from .storage.characters import CharacterStore
 from .storage.machine import CacheStore, MachineSettings
 from .storage.project_store import InvalidProjectInput, ProjectStore
 from .storage.templates import TemplateStore
@@ -37,8 +42,8 @@ setup_logging()
 
 
 def _job_runner(manager: JobManager, store: ProjectStore, artifacts: ArtifactStore,
-                text_provider: MockTextProvider, image_provider: MockImageProvider,
-                tts_provider: TTSProvider, video_provider: MockVideoProvider | None = None):
+                text_provider: MockTextProvider | ToAPIsTextProvider, image_provider: MockImageProvider,
+                tts_provider: TTSProvider, video_provider: MockVideoProvider | ComfyUIVideoProvider | None = None, machine=None):
     """Job 执行分派：按 kind 路由到对应 service（06 §6.1 runner 装配）。"""
 
     async def runner(job):
@@ -101,6 +106,7 @@ def _job_runner(manager: JobManager, store: ProjectStore, artifacts: ArtifactSto
                 "speaker": speaker,
                 "providerProfileId": "tts-audition", "modelId": "",
                 "emotion": {"label": "自然"}, "speedRatio": snap.get("speedRatio", 1.0),
+                "referenceAudio": snap.get("referenceAudio"),
             })
             asset_id = res.get("audioAssetId")
             return {"artifactIds": [asset_id] if asset_id else [],
@@ -127,9 +133,24 @@ def _job_runner(manager: JobManager, store: ProjectStore, artifacts: ArtifactSto
                 "foregroundSpeaker": job.input_snapshot.get("foregroundSpeaker"),
                 **{k: res.get(k) for k in ("artifactId", "path", "fileHash", "provider") if res.get(k)},
             })
-            artifact_ids = [variants[0].master_image.artifact_id] if res.get("artifactId") else []
+            artifact_ids = [res["artifactId"]] if res.get("artifactId") else []
             return {"artifactIds": artifact_ids, "meta": {"variantId": variants[0].id}}
         if job.kind == "renders":
+            if video_provider is not None and not video_provider.capabilities.get("simulated", True):
+                result = await video_provider.render(job.input_snapshot, progress=lambda stage: manager.set_stage(job, stage))
+                result["meta"]["dependencyHash"] = job.input_snapshot.get("dependencyHash")
+                current = store.load(job.project_id)
+                if current is None:
+                    raise RuntimeError("project vanished")
+                pronunciation = effective_pronunciation(current, machine.get_global_pronunciation() if machine else [])
+                if not audio_inputs_match(current, pronunciation) or current.current_draft_revision != job.input_snapshot["revisionId"] or (job.input_snapshot.get("dependencyHash") and dependency_hash(current) != job.input_snapshot["dependencyHash"]):
+                    result["meta"]["stale"] = True
+                elif job.input_snapshot.get("candidate"):
+                    result["meta"]["candidate"] = True
+                else:
+                    result["meta"]["outputVersion"] = apply_output_version(
+                        store, current, job.input_snapshot["revisionId"], result)
+                return result
             # 模拟任务只验证流程；不得登记不存在的视频或覆盖真实输出指针。
             project = Project.model_validate(job.input_snapshot["projectSnapshot"])
             revision_id = job.input_snapshot["revisionId"]
@@ -141,6 +162,8 @@ def _job_runner(manager: JobManager, store: ProjectStore, artifacts: ArtifactSto
                          "fps": job.input_snapshot.get("fps")},
             }
         if job.kind == "sample.generate":
+            if video_provider is not None and not video_provider.capabilities.get("simulated", True):
+                return await video_provider.render(job.input_snapshot, progress=lambda stage: manager.set_stage(job, stage))
             # 样片演示任务（01 §6.4）：mock 阶段无可播放片段，但走完整任务链，
             # 让「生成样片 → 任务中心 → 人工检查」的流程可操作（12 报告 P0 的演示侧落位）。
             if video_provider is not None:
@@ -166,7 +189,7 @@ def _job_runner(manager: JobManager, store: ProjectStore, artifacts: ArtifactSto
                     "sample.generate": "video"}
     channel_provider = {
         "text": text_provider, "image": image_provider,
-        "tts": tts_provider, "video": None,
+        "tts": tts_provider, "video": video_provider,
     }
 
     async def simulated_runner(job):
@@ -193,7 +216,8 @@ async def lifespan(app: FastAPI):
     })
 
     # ---- 适配器（TTS/图片已接真实引擎；其余通道实测后替换） ----
-    text_api = MockTextProvider()
+    text_api = (ToAPIsTextProvider(settings.toapis_key, settings.text_model)
+                if settings.text_provider == "toapis" and settings.toapis_key else MockTextProvider())
     if settings.image_provider == "toapis" and settings.toapis_key:
         image_api = ToAPIsImageProvider(
             api_key=settings.toapis_key,
@@ -214,7 +238,9 @@ async def lifespan(app: FastAPI):
         )
     else:
         local_tts = MockTTSProvider()
-    video = MockVideoProvider()
+    video = (ComfyUIVideoProvider(base_url=settings.video_url, input_dir=settings.video_input,
+                                artifact_store=artifacts)
+             if settings.video_provider == "comfyui" else MockVideoProvider())
     capabilities = CapabilityRegistry(
         text=text_api.capabilities,
         image=image_api.capabilities,
@@ -228,10 +254,11 @@ async def lifespan(app: FastAPI):
     app.state.machine = machine
     app.state.cache = cache
     app.state.template_store = TemplateStore(settings.storage_root / "templates")
+    app.state.character_store = CharacterStore(settings.storage_root / "characters")
     app.state.event_bus = event_bus
     app.state.job_manager = job_manager
     app.state.capabilities = capabilities
-    job_manager.set_runner(_job_runner(job_manager, project_store, artifacts, text_api, image_api, local_tts, video))
+    job_manager.set_runner(_job_runner(job_manager, project_store, artifacts, text_api, image_api, local_tts, video, machine))
 
     # ---- 启动自检（02 §7.4 最小版） ----
     recovered = recover_on_startup(settings.storage_root / "jobs")
@@ -267,7 +294,9 @@ app.add_middleware(
 )
 
 from .api import artifacts as artifacts_api
+from .api import assets as assets_api
 from .api import events as events_api
+from .api import export as export_api
 from .api import jobs as jobs_api
 from .api import machine as machine_api
 from .api import projects as projects_api
@@ -280,11 +309,13 @@ from .api import voice as voice_api
 
 app.include_router(projects_api.router)
 app.include_router(providers_api.router)
+app.include_router(assets_api.router)
 app.include_router(script_api.router)
 app.include_router(templates_api.router)
 app.include_router(voice_api.router)
 app.include_router(visual_api.router)
 app.include_router(render_api.router)
+app.include_router(export_api.router)
 app.include_router(jobs_api.router)
 app.include_router(events_api.router)
 app.include_router(artifacts_api.router)

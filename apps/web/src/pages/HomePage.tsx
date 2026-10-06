@@ -79,7 +79,8 @@ function ProjectCard({ p, jobs, onOps }: { p: Project; jobs: Job[] | undefined; 
 
       {edited && <p className="wu-caption">{edited}</p>}
 
-      <Button size="sm" onClick={() => openProject(p.id)}>继续制作</Button>
+      {/* 直达工程当前阶段（阶段由服务端 stageProgress 推导），而不是每次都落回阶段① */}
+      <Button size="sm" onClick={() => openProject(p.id, currentStageOf(p).id)}>继续制作</Button>
     </Card>
   );
 }

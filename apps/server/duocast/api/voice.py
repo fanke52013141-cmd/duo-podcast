@@ -3,26 +3,21 @@
 from __future__ import annotations
 
 import uuid
+import wave
 
 from fastapi import APIRouter, HTTPException, Request
 
 from ..jobs.manager import JobManager
 from ..services.voice_svc import adopt_unit_candidate, find_revision
+from ..services.voice_svc import retime_adopted_audio, effective_pronunciation
 
 router = APIRouter(prefix="/api/projects/{project_id}/voice", tags=["voice"])
 
 
 def _merged_pronunciation(request: Request, project) -> list[dict]:
     """合成用读音词典：先全局（machine.json）后本工程，同词条工程级覆盖全局。"""
-    merged: dict[str, str] = {}
-    for entry in request.app.state.machine.get_global_pronunciation():
-        term = str(entry.get("term", "")).strip()
-        if term:
-            merged[term] = str(entry.get("read", ""))
-    for entry in project.pronunciation_dict:
-        if entry.term.strip():
-            merged[entry.term.strip()] = entry.read
-    return [{"term": k, "read": v} for k, v in merged.items()]
+    machine = getattr(request.app.state, "machine", None)
+    return effective_pronunciation(project, machine.get_global_pronunciation() if machine is not None else [])
 
 
 @router.post("/synthesize")
@@ -46,11 +41,17 @@ async def synthesize(project_id: str, payload: dict, request: Request) -> dict:
                 or any(turn_id not in valid_turn_ids for turn_id in turn_ids)):
             raise HTTPException(422, "turnIds 必须是当前脚本中的非空、无重复话轮 ID 列表")
     client_token = payload.get("clientToken") or f"tts-{uuid.uuid4().hex[:8]}"
+    gaps = payload.get("transitionGapMs")
+    if type(gaps) is int:
+        gaps = [gaps] * max(0, len(revision.turns) - 1)
+    if gaps is not None and (not isinstance(gaps, list)
+                            or any(type(value) is not int or value < 0 for value in gaps)):
+        raise HTTPException(422, "transitionGapMs 必须为非负整数或非负整数列表")
     snapshot = {
         "revisionId": revision.id,
         "projectSnapshot": project.model_dump(mode="json", by_alias=True),
         "voiceBindings": payload.get("voiceBindings", {}),
-        "transitionGapMs": payload.get("transitionGapMs"),
+        "transitionGapMs": gaps,
         "leadInMs": payload.get("leadInMs", 0),
         "tailOutMs": payload.get("tailOutMs", 0),
         "turnIds": turn_ids,
@@ -66,6 +67,20 @@ async def synthesize(project_id: str, payload: dict, request: Request) -> dict:
         input_snapshot=snapshot,
     )
     return {"jobId": job.id, "clientToken": client_token}
+
+
+@router.post("/rhythm")
+def update_rhythm(project_id: str, payload: dict, request: Request):
+    from ..services.render_inputs import validate_render_options
+    project = request.app.state.project_store.load(project_id)
+    if project is None:
+        raise HTTPException(404, "工程不存在")
+    validate_render_options(project, {}, _merged_pronunciation(request, project), real_video=False)
+    try:
+        timeline = retime_adopted_audio(request.app.state.project_store, project_id, payload.get("transitionGapMs"), request.app.state.artifacts)
+    except (ValueError, OSError, wave.Error) as exc:
+        raise HTTPException(409, str(exc)) from exc
+    return timeline.model_dump(by_alias=True)
 
 
 @router.post("/units/{unit_id}/adopt")
@@ -111,6 +126,7 @@ async def audition(project_id: str, payload: dict, request: Request) -> dict:
             "speaker": speaker,
             "text": (payload.get("text") or "")[:120],
             "speedRatio": payload.get("speedRatio", 1.0),
+            "referenceAudio": payload.get("referenceAudio"),
         },
     )
     return {"jobId": job.id, "clientToken": client_token}

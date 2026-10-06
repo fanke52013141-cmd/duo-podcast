@@ -15,6 +15,7 @@ from duocast.storage.project_store import ProjectStore
 
 
 class AssetTTS:
+    capabilities = {"simulated": True}
     def __init__(self):
         self.calls = []
         self.index = 0

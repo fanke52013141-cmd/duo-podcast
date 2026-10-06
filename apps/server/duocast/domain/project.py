@@ -94,7 +94,13 @@ class Project(BaseModel):
     title: str = "未命名节目"
     current_draft_revision: str = ""
     selected_output_version: Optional[str] = None
+    output_manifest: Optional[dict] = None
+    output_history: list[dict] = Field(default_factory=list)
     aspect: Literal["landscape", "portrait"] = "landscape"
+    selected_visual_variant_id: Optional[str] = None
+    camera_mode: Literal["speaker", "twoShot"] = "speaker"
+    performance_mode: Literal["legacy", "adaptive"] = "legacy"
+    shot_camera_overrides: dict[str, Literal["twoShot", "A", "B"]] = Field(default_factory=dict)
     script_revisions: list[ScriptRevision] = Field(default_factory=list)
     voice_bindings: list[VoiceBinding] = Field(default_factory=list)  # A/B 角色声音绑定（01 §11.2）
     audio_timeline: Optional[AudioTimeline] = None  # 阶段③产物（01 §11.2）

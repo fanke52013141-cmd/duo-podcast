@@ -78,11 +78,14 @@ class ToAPIsImageProvider:
             raise ValueError("IMAGE_PROMPT_REQUIRED: 缺少画面描述，无法生成图片")
         if not self.api_key:
             raise RuntimeError("IMAGE_NO_KEY: 未配置 DUOCAST_TOAPIS_KEY")
+        # 画幅跟随工程（01 §6.3 同框底图横竖屏）：landscape→16:9 / portrait→9:16，未给时用默认 size
+        aspect = req.get("aspect")
+        size = {"landscape": "16:9", "portrait": "9:16"}.get(aspect, self.size)
         opener = _opener()
         payload = {
             "model": "gpt-image-2-vip",
             "prompt": prompt,
-            "size": self.size,
+            "size": size,
             "n": 1,
             "quality": self.quality,
             "background": "auto",
@@ -115,12 +118,12 @@ class ToAPIsImageProvider:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(image_bytes)
         dependency = hashlib.sha256(json.dumps(
-            {"prompt": prompt, "size": self.size, "quality": self.quality,
+            {"prompt": prompt, "size": size, "quality": self.quality,
              "resolution": self.resolution}, sort_keys=True, ensure_ascii=False
         ).encode("utf-8")).hexdigest()
         entry = self.store.register(artifact_id, "image", str(path), dependency,
                                     params_snapshot={"model": "gpt-image-2-vip", "taskId": task_id,
-                                                     "size": self.size, "quality": self.quality})
+                                                     "size": size, "quality": self.quality})
         return {"artifactId": artifact_id, "path": str(path),
                 "fileHash": entry["fileHash"], "provider": self.name,
                 "taskId": task_id}

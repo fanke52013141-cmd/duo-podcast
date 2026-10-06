@@ -87,6 +87,17 @@ function countHints(turns: Turn[]): { hints: QaHint[]; pronCount: number } {
       });
     }
   });
+  // 提前暴露阶段④的样片硬约束（此前到生成样片时才发现，需回本阶段返工）
+  if (turns.length > 0) {
+    const seq = turns.map((t) => t.speaker);
+    const hasAlternating = seq.some((s, i) => i + 2 < seq.length && s === 'A' && seq[i + 1] === 'B' && seq[i + 2] === 'A');
+    if (!hasAlternating) {
+      hints.push({
+        kind: 'local', level: 'warn', title: '缺少 A→B→A 交替区间',
+        detail: '阶段④样片需要双方连续交替的 ≥3 条话轮；当前脚本将无法生成样片，请调整说话人或补一条发言。',
+      });
+    }
+  }
   return { hints: hints.slice(0, 6), pronCount };
 }
 
@@ -114,6 +125,9 @@ export function EditScriptPage({ projectId }: { projectId: string }) {
   const proj = project.data;
   const [viewRevId, setViewRevId] = useState<string | null>(null);
   const [turns, setTurns] = useState<Turn[]>([]);
+  // 最新话轮的同步镜像：同一批次内连续多次增删改必须基于最新状态计算，
+  // 否则各操作都基于旧渲染闭包互相覆盖（实测：快速连删 4 条只生效 1 条）。
+  const turnsRef = useRef<Turn[]>([]);
   const [selected, setSelected] = useState<string[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editText, setEditText] = useState('');
@@ -135,7 +149,9 @@ export function EditScriptPage({ projectId }: { projectId: string }) {
   // 版本切换 → 载入话轮
   useEffect(() => {
     if (revision) {
-      setTurns(revision.turns.map((t) => ({ ...t, lines: t.lines.map((l) => ({ ...l })) })));
+      const loaded = revision.turns.map((t) => ({ ...t, lines: t.lines.map((l) => ({ ...l })) }));
+      turnsRef.current = loaded;
+      setTurns(loaded);
       setSelected([]);
       setCandidate(null);
     }
@@ -201,9 +217,10 @@ export function EditScriptPage({ projectId }: { projectId: string }) {
     if (saveTimer.current) {
       window.clearTimeout(saveTimer.current);
       saveTimer.current = null;
-      doSave(turns);
+      doSave(turnsRef.current);
     }
-    if (saveState === 'idle' || saveState === 'saved') return Promise.resolve(saveState === 'saved');
+    // idle = 无挂起编辑，屏障直接通过（返回 false 会让改写在「未编辑过的页面」被静默丢弃——实测踩中）
+    if (saveState === 'idle' || saveState === 'saved') return Promise.resolve(true);
     return new Promise<boolean>((resolve) => {
       const prev = saveWaiter.current;
       saveWaiter.current = () => {
@@ -213,7 +230,10 @@ export function EditScriptPage({ projectId }: { projectId: string }) {
     });
   };
 
-  const applyTurns = (next: Turn[]) => {
+  /** 一律基于 turnsRef.current（最新状态）计算下一状态；同一批次内连续操作不再互相覆盖。 */
+  const applyTurns = (updater: (prev: Turn[]) => Turn[]) => {
+    const next = updater(turnsRef.current);
+    turnsRef.current = next;
     setTurns(next);
     scheduleSave(next);
   };
@@ -226,66 +246,74 @@ export function EditScriptPage({ projectId }: { projectId: string }) {
   };
 
   const updateTurn = (id: string, patch: Partial<Turn>) => {
-    applyTurns(turns.map((t) => (t.id === id ? { ...t, ...patch } : t)));
+    applyTurns((prev) => prev.map((t) => (t.id === id ? { ...t, ...patch } : t)));
   };
 
   const moveTurn = (id: string, dir: -1 | 1) => {
-    const i = turns.findIndex((t) => t.id === id);
-    const j = i + dir;
-    if (i < 0 || j < 0 || j >= turns.length) return;
-    const next = [...turns];
-    [next[i], next[j]] = [next[j], next[i]];
-    applyTurns(next);
+    applyTurns((prev) => {
+      const i = prev.findIndex((t) => t.id === id);
+      const j = i + dir;
+      if (i < 0 || j < 0 || j >= prev.length) return prev;
+      const next = [...prev];
+      [next[i], next[j]] = [next[j], next[i]];
+      return next;
+    });
   };
 
   const addTurn = () => {
-    const n = turns.length + 1;
-    const id = `T${String(Math.max(1, ...turns.map((t) => Number(t.id.replace(/\D/g, '')) || 0)) + 1).padStart(2, '0')}`;
-    applyTurns([...turns, {
-      id, speaker: 'A', intent: 'other', tone: '自然', speedRatio: 1.0,
-      lines: [{ id: `L${String(n * 10).padStart(3, '0')}`, displayText: '', spokenText: '' }],
-    }]);
+    applyTurns((prev) => {
+      const n = prev.length + 1;
+      const id = `T${String(Math.max(1, ...prev.map((t) => Number(t.id.replace(/\D/g, '')) || 0)) + 1).padStart(2, '0')}`;
+      // 双人对话默认交替：新话轮接在最后一条的对方（此前永远默认 A，双人要手动切换）
+      const speaker: Turn['speaker'] = prev[prev.length - 1]?.speaker === 'A' ? 'B' : 'A';
+      return [...prev, {
+        id, speaker, intent: 'other', tone: '自然', speedRatio: 1.0,
+        lines: [{ id: `L${String(n * 10).padStart(3, '0')}`, displayText: '', spokenText: '' }],
+      }];
+    });
   };
 
   /** 拆分长独白：优先在句子边界把单行话轮切成两条；多行话轮按行分界切。 */
   const splitTurn = (id: string) => {
-    const i = turns.findIndex((t) => t.id === id);
-    if (i < 0) return;
-    const src = turns[i];
-    const full = turnText(src);
-    if (!full) return;
-    let headLines: Turn['lines'];
-    let tailLines: Turn['lines'];
-    if (src.lines.length === 1) {
-      const l = src.lines[0];
-      const cut = pickSplitOffset(l.displayText);
-      if (cut <= 0 || cut >= l.displayText.length) return;
-      const maxLine = Math.max(0, ...turns.flatMap((t) => t.lines.map((x) => Number(x.id.replace(/\D/g, '')) || 0)));
-      const newLineId = `L${String(maxLine + 1).padStart(3, '0')}`;
-      const spokenCut = l.spokenText.length === l.displayText.length ? cut : Math.round(cut * (l.spokenText.length / l.displayText.length));
-      headLines = [{ ...l, displayText: l.displayText.slice(0, cut), spokenText: l.spokenText.slice(0, spokenCut) }];
-      tailLines = [{ ...l, id: newLineId, displayText: l.displayText.slice(cut), spokenText: l.spokenText.slice(spokenCut) }];
-    } else {
-      const half = full.length / 2;
-      let k = 1;
-      let acc = 0;
-      for (; k < src.lines.length; k++) {
-        acc += src.lines[k - 1].displayText.length;
-        if (acc >= half) break;
+    applyTurns((prev) => {
+      const i = prev.findIndex((t) => t.id === id);
+      if (i < 0) return prev;
+      const src = prev[i];
+      const full = turnText(src);
+      if (!full) return prev;
+      let headLines: Turn['lines'];
+      let tailLines: Turn['lines'];
+      if (src.lines.length === 1) {
+        const l = src.lines[0];
+        const cut = pickSplitOffset(l.displayText);
+        if (cut <= 0 || cut >= l.displayText.length) return prev;
+        const maxLine = Math.max(0, ...prev.flatMap((t) => t.lines.map((x) => Number(x.id.replace(/\D/g, '')) || 0)));
+        const newLineId = `L${String(maxLine + 1).padStart(3, '0')}`;
+        const spokenCut = l.spokenText.length === l.displayText.length ? cut : Math.round(cut * (l.spokenText.length / l.displayText.length));
+        headLines = [{ ...l, displayText: l.displayText.slice(0, cut), spokenText: l.spokenText.slice(0, spokenCut) }];
+        tailLines = [{ ...l, id: newLineId, displayText: l.displayText.slice(cut), spokenText: l.spokenText.slice(spokenCut) }];
+      } else {
+        const half = full.length / 2;
+        let k = 1;
+        let acc = 0;
+        for (; k < src.lines.length; k++) {
+          acc += src.lines[k - 1].displayText.length;
+          if (acc >= half) break;
+        }
+        if (k >= src.lines.length) return prev;
+        headLines = src.lines.slice(0, k);
+        tailLines = src.lines.slice(k);
       }
-      if (k >= src.lines.length) return;
-      headLines = src.lines.slice(0, k);
-      tailLines = src.lines.slice(k);
-    }
-    const newId = `T${String(Math.max(1, ...turns.map((t) => Number(t.id.replace(/\D/g, '')) || 0)) + 1).padStart(2, '0')}`;
-    const next = [...turns];
-    next.splice(i + 1, 0, { ...src, id: newId, lines: tailLines });
-    next[i] = { ...src, lines: headLines };
-    applyTurns(next);
+      const newId = `T${String(Math.max(1, ...prev.map((t) => Number(t.id.replace(/\D/g, '')) || 0)) + 1).padStart(2, '0')}`;
+      const next = [...prev];
+      next.splice(i + 1, 0, { ...src, id: newId, lines: tailLines });
+      next[i] = { ...src, lines: headLines };
+      return next;
+    });
   };
 
   const removeTurns = (ids: string[]) => {
-    applyTurns(turns.filter((t) => !ids.includes(t.id)));
+    applyTurns((prev) => prev.filter((t) => !ids.includes(t.id)));
     setSelected((s) => s.filter((x) => !ids.includes(x)));
   };
 
@@ -307,7 +335,7 @@ export function EditScriptPage({ projectId }: { projectId: string }) {
   const acceptCandidate = () => {
     if (!candidate) return;
     const byId = new Map(candidate.turns.map((t) => [t.id, t]));
-    applyTurns(turns.map((t) => byId.get(t.id) ?? t));
+    applyTurns((prev) => prev.map((t) => byId.get(t.id) ?? t));
     setCandidate(null);
   };
 
@@ -513,16 +541,25 @@ export function EditScriptPage({ projectId }: { projectId: string }) {
           {candidate && (
             <div className="hf-cand" style={{ marginBottom: 12 }}>
               <div className="t">
-                候选改写 · 差异：共改 {candidate.turnIds.length} 处
+                {candidate.turnIds.length === 0
+                  ? '候选改写 · 未产生差异'
+                  : `候选改写 · 差异：共改 ${candidate.turnIds.length} 处`}
                 <span className="hf-ai" style={{ marginLeft: 8 }}>AI 建议</span>
               </div>
               {candidate.turns.filter((t) => candidate.turnIds.includes(t.id)).map((t) => (
                 <p key={t.id}><b style={{ fontFamily: 'var(--wu-global-mono)' }}>{t.id}</b> {turnText(t)}</p>
               ))}
               <div className="wu-row" style={{ gap: 8 }}>
-                <Button variant="brand" size="sm" icon="check" onClick={acceptCandidate}>接受</Button>
+              {/* 空差异没有可接受的内容，只保留「拒绝」关闭候选（此前 0 处也弹「接受」） */}
+                <Button
+                  variant="brand" size="sm" icon="check" disabled={candidate.turnIds.length === 0}
+                  title={candidate.turnIds.length === 0 ? '本次改写没有产生任何文本变化' : undefined}
+                  onClick={acceptCandidate}
+                >接受</Button>
                 <Button variant="ghost" size="sm" onClick={() => setCandidate(null)}>拒绝</Button>
-                <span className="wu-caption">其他发言不自动重写</span>
+                <span className="wu-caption">
+                  {candidate.turnIds.length === 0 ? '可换一个改写意图，或手动编辑话轮' : '其他发言不自动重写'}
+                </span>
               </div>
             </div>
           )}
@@ -562,14 +599,15 @@ export function EditScriptPage({ projectId }: { projectId: string }) {
                   onDragOver={(e) => e.preventDefault()}
                   onDrop={(e) => {
                     const srcId = e.dataTransfer.getData('text/plain');
-                    const src = turns.findIndex((x) => x.id === srcId);
-                    const dst = turns.findIndex((x) => x.id === t.id);
-                    if (src >= 0 && dst >= 0 && src !== dst) {
-                      const next = [...turns];
+                    applyTurns((prev) => {
+                      const src = prev.findIndex((x) => x.id === srcId);
+                      const dst = prev.findIndex((x) => x.id === t.id);
+                      if (src < 0 || dst < 0 || src === dst) return prev;
+                      const next = [...prev];
                       const [moved] = next.splice(src, 1);
                       next.splice(dst, 0, moved);
-                      applyTurns(next);
-                    }
+                      return next;
+                    });
                   }}
                 >
                   <div className="hf-turn-head">

@@ -104,6 +104,8 @@ textarea.wu-input { min-height:104px; resize:vertical; }
 .wu .hf-ots-subject { position:relative; z-index:2; max-width:55%; margin-left:auto; padding:4px 7px; border-radius:5px; background:color-mix(in srgb,var(--wu-semantic-raised) 84%,transparent); color:var(--wu-semantic-text); font-size:11px; text-align:right; }
 .wu .hf-ots-preview[data-camera="B"] .hf-ots-subject { margin-right:auto; margin-left:0; text-align:left; }
 .wu .hf-ots-preview > .wu-badge { position:absolute; z-index:3; top:10px; right:10px; }
+.wu .hf-ots-preview[data-ready="true"] { padding:0; }
+.wu .hf-ots-preview[data-ready="true"]::before { display:none; }
 .wu .hf-ots-card-body { display:flex; align-items:flex-start; gap:10px; padding:10px 12px; }
 .wu .hf-ots-card-body > div:first-child { flex:1; min-width:0; }
 .wu .hf-ots-card-body b { display:block; font-size:12.8px; }

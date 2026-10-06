@@ -22,8 +22,15 @@ def apply_output_version(store: ProjectStore, project: Project, revision_id: str
         except ValueError:
             n = 1
     output = f"OUT-{revision_id}-v{n}"
+    manifest = {"version": output, "artifactIds": (result or {}).get("artifactIds", []), "meta": (result or {}).get("meta", {})}
+    history = list(project.output_history)
+    if project.output_manifest and not any(v["version"] == project.output_manifest["version"] for v in history):
+        history.append(project.output_manifest)
+    history.append(manifest)
     store.apply(project.id, {
         "output_version": output,
         "selected_output_version": output,
+        "output_manifest": manifest,
+        "output_history": history,
     }, expected_revision=project.revision)
     return output

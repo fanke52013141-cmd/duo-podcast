@@ -4,10 +4,13 @@ POST /api/projects/{id}/visual/sample → 样片任务 sample.generate（gpu 队
 from __future__ import annotations
 
 import uuid
+import math
 
 from fastapi import APIRouter, HTTPException, Request
 
 from ..jobs.manager import JobManager
+from ..services.render_inputs import dependency_hash, validate_render_options, resolve_visual_id, resolve_camera_mode, validate_motion_source
+from .voice import _merged_pronunciation
 
 router = APIRouter(prefix="/api/projects/{project_id}/visual", tags=["visual"])
 
@@ -58,18 +61,34 @@ async def sample(project_id: str, payload: dict, request: Request) -> dict:
     project = store.load(project_id)
     if project is None:
         raise HTTPException(404, "project not found")
+    validate_render_options(project, payload, _merged_pronunciation(request, project),
+                            real_video=not request.app.state.capabilities.video.get("simulated", True))
+    validate_motion_source(project, payload, request.app.state.artifacts)
     timeline = project.audio_timeline
-    if timeline is None or timeline.sample_count <= 0:
+    if timeline is None or timeline.sample_count <= 0 or timeline.sample_rate <= 0:
         raise HTTPException(422, "请先生成配音时间轨，样片区间依赖音轨")
     start = payload.get("rangeStartSec")
     end = payload.get("rangeEndSec")
     total = timeline.sample_count / (timeline.sample_rate or 48000)
-    if not isinstance(start, (int, float)) or not isinstance(end, (int, float)) \
+    if type(start) not in (int, float) or type(end) not in (int, float) or not math.isfinite(start) or not math.isfinite(end) \
             or not (0 <= start < end <= total + 0.001):
         raise HTTPException(422, f"非法样片区间 ({start}, {end})，音轨总长 {total:.1f}s")
     client_token = payload.get("clientToken") or f"smp-{uuid.uuid4().hex[:8]}"
+    revision_id = payload.get("revisionId") or project.current_draft_revision
+    if timeline.revision_id != revision_id or revision_id != project.current_draft_revision:
+        raise HTTPException(409, "配音已过期，请先采用当前脚本对应的配音")
     snapshot = {
-        "revisionId": payload.get("revisionId") or project.current_draft_revision,
+        "revisionId": revision_id,
+        "cacheOnly": bool(payload.get("reuseMotionArtifactId") and payload.get("redoFromSec") is None),
+        "projectSnapshot": project.model_dump(mode="json", by_alias=True),
+        "dependencyHash": dependency_hash(project),
+        "visualVariantId": resolve_visual_id(project, payload),
+        "performanceMode": payload.get("performanceMode", project.performance_mode),
+        "reuseMotionArtifactId": payload.get("reuseMotionArtifactId"),
+        "redoFromSec": payload.get("redoFromSec"),
+        "resumableVideo": True,
+        "cameraMode": resolve_camera_mode(project, payload),
+        "seed": payload.get("seed", 1),
         "rangeStartSec": float(start),
         "rangeEndSec": float(end),
         "aspect": payload.get("aspect", project.aspect),
@@ -78,7 +97,7 @@ async def sample(project_id: str, payload: dict, request: Request) -> dict:
     job = manager.submit(
         kind="sample.generate",
         project_id=project_id,
-        queue_class="gpu",
+        queue_class="cpu" if snapshot["cacheOnly"] else "gpu",
         client_token=client_token,
         input_snapshot=snapshot,
     )

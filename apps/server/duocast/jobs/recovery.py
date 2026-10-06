@@ -37,7 +37,11 @@ def recover_on_startup(jobs_root: Path) -> list[Job]:
         if job.status in (JobStatus.RUNNING, JobStatus.RECOVERING, JobStatus.PAUSE_REQUESTED,
                           JobStatus.CANCEL_REQUESTED):
             # 无定向查询能力的最小实现：标 unknown，避免误判重跑（02 §7.2 纪律）
-            job.status = JobStatus.UNKNOWN
+            safe_video = (job.kind in ("renders", "sample.generate") and job.input_snapshot.get("resumableVideo")
+                          and job.status in (JobStatus.RUNNING, JobStatus.RECOVERING))
+            job.status = JobStatus.QUEUED if safe_video else JobStatus.UNKNOWN
+            if safe_video:
+                job.stage = "recovering saved motion task"
             _atomic_write(job_file, job)
         # 终态也装入管理器：历史任务与幂等键重启后仍然有效。
         recovered.append(job)

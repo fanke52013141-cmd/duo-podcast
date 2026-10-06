@@ -151,6 +151,8 @@ export interface Project {
   title: string;
   currentDraftRevision: string;
   selectedOutputVersion: string | null;
+  outputManifest?: { version: string; artifactIds: string[]; meta: Record<string, unknown> };
+  outputHistory?: { version: string; artifactIds: string[]; meta: Record<string, unknown> }[];
   aspect: Aspect;
   scriptRevisions: ScriptRevision[];
   voiceBindings: VoiceBinding[];
@@ -158,6 +160,10 @@ export interface Project {
   /** 历史配音候选（11 报告 P2-11：后端 09 起恒追加，前端此前缺类型） */
   audioHistory?: AudioTimeline[];
   visualVariants: VisualVariant[];
+  selectedVisualVariantId?: string;
+  cameraMode?: 'speaker' | 'twoShot';
+  performanceMode?: 'legacy' | 'adaptive';
+  shotCameraOverrides?: Record<string, 'twoShot' | 'A' | 'B'>;
   outputVersion: string | null;
   /** 本工程读音词典（全局词典在 machine 设置） */
   pronunciationDict?: PronunciationEntry[];
@@ -185,7 +191,7 @@ export interface Job {
   priority?: number;
   /** queued 任务的队内排位（1 起），由后端计算 */
   queuePosition?: number | null;
-  result: Record<string, unknown> | null;
+  result: (Record<string, unknown> & { artifactIds?: string[]; simulated?: boolean }) | null;
   createdAt: string;
   /** 进入 succeeded/failed/cancelled 终态的时刻（ISO8601）；进行中为 null */
   finishedAt?: string | null;
@@ -232,6 +238,17 @@ export interface ProgramTemplate {
     aspect?: Aspect;
     voiceBindings?: { characterId: string; providerProfileId: string; modelId: string }[];
   };
+}
+
+/* ---- 全局角色库（01 §1.5 资产库：形象 / 性格，跨工程复用） ---- */
+export interface Character {
+  id: string;
+  name: string;
+  speaker: 'A' | 'B';
+  role: string;
+  desc: string;
+  traits: string;
+  imagePath: string;
 }
 
 /** 服务提供方展示元数据（能力徽章中文名，01 §1.6.4） */

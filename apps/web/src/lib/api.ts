@@ -4,7 +4,8 @@
    ========================================================================== */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
-  ArtifactEntry, Capabilities, Job, MachineSettings, ProgramTemplate, Project,
+  AudioTimeline,
+  ArtifactEntry, Capabilities, Character, Job, MachineSettings, ProgramTemplate, Project,
   PronunciationEntry, ScriptRevision, SourceKind, Turn,
 } from './types';
 
@@ -242,6 +243,7 @@ export interface ConfirmInput {
   projectId: string;
   expectedRevision: number;
   kind: 'script' | 'voice' | 'sample';
+  spec?: Record<string, unknown>;
   inputRevisionId: string;
   note?: string;
 }
@@ -249,12 +251,12 @@ export interface ConfirmInput {
 export const useConfirm = () => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ projectId, expectedRevision, kind, inputRevisionId, note }: ConfirmInput) => {
+    mutationFn: ({ projectId, expectedRevision, kind, inputRevisionId, note, spec }: ConfirmInput) => {
       const proj = qc.getQueryData<Project>(['project', projectId]);
       const approval = {
         kind,
         inputRevisionId,
-        spec: {},
+        spec: spec ?? {},
         decision: 'accepted' as const,
         reasonTarget: null,
         note: note ?? '',
@@ -322,6 +324,14 @@ export const useVoiceSynthesize = () => {
   });
 };
 
+export const useVoiceRhythm = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { projectId: string; transitionGapMs: number[] }) => sendJson<AudioTimeline>(`/projects/${input.projectId}/voice/rhythm`, 'POST', { transitionGapMs: input.transitionGapMs }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['project'] }); qc.invalidateQueries({ queryKey: ['projects'] }); },
+  });
+};
+
 export interface VoiceAdoptInput {
   projectId: string;
   unitId: string;
@@ -347,6 +357,7 @@ export interface VoiceAuditionInput {
   projectId: string;
   speaker: 'A' | 'B';
   text?: string;
+  referenceAudio?: { artifactId: string; path: string; fileHash: string };
 }
 
 export const useVoiceAudition = () => {
@@ -354,7 +365,7 @@ export const useVoiceAudition = () => {
   return useMutation({
     mutationFn: (input: VoiceAuditionInput) =>
       sendJson<JobAccepted>(`/projects/${input.projectId}/voice/audition`, 'POST', {
-        speaker: input.speaker, text: input.text ?? '',
+        speaker: input.speaker, text: input.text ?? '', referenceAudio: input.referenceAudio,
       }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['jobs'] }),
   });
@@ -391,6 +402,9 @@ export const useVisualGenerate = () => {
 };
 
 export interface SampleGenInput {
+  performanceMode?: 'legacy' | 'adaptive';
+  visualVariantId?: string;
+  cameraMode?: 'twoShot' | 'speaker';
   projectId: string;
   clientToken: string;
   revisionId: string;
@@ -404,6 +418,9 @@ export const useSampleGenerate = () => {
   return useMutation({
     mutationFn: (input: SampleGenInput) =>
       sendJson<JobAccepted>(`/projects/${input.projectId}/visual/sample`, 'POST', {
+        visualVariantId: input.visualVariantId,
+        cameraMode: input.cameraMode,
+        performanceMode: input.performanceMode,
         clientToken: input.clientToken,
         revisionId: input.revisionId,
         rangeStartSec: input.rangeStartSec,
@@ -414,7 +431,64 @@ export const useSampleGenerate = () => {
   });
 };
 
+// ---------- 资产库：全局角色 + 图片上传（01 §1.5） ----------
+
+async function uploadFile<T>(path: string, file: File, extra?: Record<string, string>): Promise<T> {
+  const fd = new FormData();
+  fd.append('file', file);
+  Object.entries(extra ?? {}).forEach(([k, v]) => fd.append(k, v));
+  const res = await fetch(`${BASE}${path}`, { method: 'POST', body: fd });
+  if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
+  return res.json() as Promise<T>;
+}
+
+export const useCharacters = () =>
+  useQuery({ queryKey: ['characters'], queryFn: () => getJson<Character[]>('/characters') });
+
+export const useCreateCharacter = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { name: string; speaker?: 'A' | 'B'; role?: string; desc?: string; traits?: string }) =>
+      sendJson<Character>('/characters', 'POST', input),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['characters'] }),
+  });
+};
+
+export const useUploadCharacterImage = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ characterId, file }: { characterId: string; file: File }) =>
+      uploadFile<Character>(`/characters/${characterId}/image`, file),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['characters'] }),
+  });
+};
+
+export interface UploadedImage { path: string; webPath: string; fileHash: string }
+
+export const useUploadMasterImage = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ projectId, file, aspect, ...camera }: { projectId: string; file: File; aspect: 'landscape' | 'portrait'; mode?: 'overShoulder'; cameraGroupId?: string; cameraAssetId?: string; subjectSpeaker?: 'A' | 'B'; foregroundSpeaker?: 'A' | 'B' }) =>
+      uploadFile<{ variantId: string; webPath: string }>(
+      `/projects/${projectId}/visual/upload-master`, file, { aspect, ...camera })
+      ,
+    onSuccess: (_data, input) => {
+      qc.invalidateQueries({ queryKey: ['project', input.projectId] });
+      qc.invalidateQueries({ queryKey: ['artifacts'] });
+    },
+  });
+};
+
 export interface RenderGenInput {
+  generationProfile?: 'accepted' | 'matched' | 'reference' | 'listener' | 'dialogue';
+  listeningSeed?: number;
+  motionReferenceArtifactId?: string;
+  performanceMode?: 'legacy' | 'adaptive';
+  reuseMotionArtifactId?: string;
+  redoFromSec?: number;
+  candidate?: boolean;
+  visualVariantId?: string;
+  cameraMode?: 'twoShot' | 'speaker';
   projectId: string;
   clientToken: string;
   revisionId: string;
@@ -429,10 +503,35 @@ export const useRenderGenerate = () => {
       sendJson<JobAccepted>(`/projects/${input.projectId}/render/generate`, 'POST', {
         clientToken: input.clientToken,
         revisionId: input.revisionId,
+        visualVariantId: input.visualVariantId,
+        cameraMode: input.cameraMode,
         resolution: input.resolution,
+        generationProfile: input.generationProfile,
+        listeningSeed: input.listeningSeed,
+        motionReferenceArtifactId: input.motionReferenceArtifactId,
+        performanceMode: input.performanceMode,
+        reuseMotionArtifactId: input.reuseMotionArtifactId,
+        redoFromSec: input.redoFromSec,
+        candidate: input.candidate,
         fps: input.fps,
       }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['jobs'] }),
+  });
+};
+
+export const useRenderAdopt = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { projectId: string; jobId: string }) => sendJson<{ version: string }>(`/projects/${input.projectId}/render/adopt`, 'POST', { jobId: input.jobId }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['project'] }); qc.invalidateQueries({ queryKey: ['jobs'] }); },
+  });
+};
+
+export const useOutputSelect = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { projectId: string; version: string }) => sendJson<{ version: string }>(`/projects/${input.projectId}/render/select-version`, 'POST', { version: input.version }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['project'] }),
   });
 };
 
@@ -469,3 +568,15 @@ export const useJobAbandon = () => {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['jobs'] }),
   });
 };
+
+
+export interface ListeningPlan {
+  version: string;
+  seed: number;
+  referenceCount: number;
+  requiresVisualReview: boolean;
+  segments: { start: number; end: number; eligible: boolean; reason: string; listener?: 'A' | 'B'; label?: string; reactionAtSec?: number }[];
+}
+export const useListeningPlan = (projectId: string, visualId: string | undefined, seed: number, enabled: boolean) =>
+  useQuery({ queryKey: ['listening-plan', projectId, visualId, seed],
+    queryFn: () => getJson<ListeningPlan>(`/projects/${projectId}/render/listening-plan?seed=${seed}${visualId ? `&visualVariantId=${encodeURIComponent(visualId)}` : ''}`), enabled });

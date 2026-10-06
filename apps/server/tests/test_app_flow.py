@@ -17,6 +17,12 @@ def wait_job(client, job_id):
     raise AssertionError('job timed out')
 
 
+def current_turn_count(client, base):
+    proj = client.get(base).json()
+    rev = next(r for r in proj['scriptRevisions'] if r['id'] == proj['currentDraftRevision'])
+    return len(rev['turns'])
+
+
 def test_demo_flow_and_restart_do_not_invent_media(tmp_path, monkeypatch):
     monkeypatch.setattr('duocast.main.settings', replace(settings, storage_root=tmp_path))
     with TestClient(app) as client:
@@ -33,11 +39,13 @@ def test_demo_flow_and_restart_do_not_invent_media(tmp_path, monkeypatch):
         assert script_job['result']['simulated'] is True
         project = client.get(base).json()
         assert project['currentDraftRevision']
-        voice_job = client.post(base + '/voice/synthesize', json={'transitionGapMs': [500]}).json()['jobId']
+        # mock 脚本生成现为 A/B 交替多话轮（第四轮优化），间隔数随实际话轮数构造
+        gaps = [500] * (current_turn_count(client, base) - 1)
+        voice_job = client.post(base + '/voice/synthesize', json={'transitionGapMs': gaps}).json()['jobId']
         wait_job(client, voice_job)
         project = client.get(base).json()
         audio = project['audioTimeline']
-        assert audio['sampleCount'] == sum(u['sampleCount'] for u in audio['units']) + 24000
+        assert audio['sampleCount'] == sum(u['sampleCount'] for u in audio['units']) + 24000 * len(gaps)
         render_job = client.post(base + '/render/generate', json={}).json()['jobId']
         result = wait_job(client, render_job)
         assert result['result']['simulated'] is True

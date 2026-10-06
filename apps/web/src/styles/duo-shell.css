@@ -227,8 +227,10 @@ body { margin:0; background:var(--wu-semantic-canvas); color:var(--wu-semantic-t
 .hf-zone { background:var(--wu-semantic-surface); border:1px solid var(--wu-semantic-border); border-radius:var(--wu-global-radius-lg); padding:14px 16px; }
 .hf-canvas { position:relative; height:252px; border-radius:var(--wu-global-radius-md); overflow:hidden; background:linear-gradient(150deg,var(--wu-semantic-muted) 0%,var(--wu-semantic-surface) 55%,var(--wu-semantic-canvas) 100%); border:1px solid var(--wu-semantic-border); }
 .hf-canvas .scene-hint { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; color:var(--wu-semantic-caption); font-size:12px; letter-spacing:1px; text-align:center; padding:0 24px; }
-.hf-region { position:absolute; border:2px dashed var(--wu-semantic-info); border-radius:8px; background:var(--wu-semantic-info-bg); }
-.hf-region.b { border-color:var(--hf-speaker-b); background:var(--hf-speaker-b-bg); }
+/* 人物区域是底图上的标注蒙层：底图真实化（上传 / 图片 API）后必须半透明，
+   不透明底色会把整个画布盖住、底图完全不可见（第四轮全流程实测发现）。 */
+.hf-region { position:absolute; border:2px dashed var(--wu-semantic-info); border-radius:8px; background:color-mix(in srgb, var(--wu-semantic-info-bg) 42%, transparent); }
+.hf-region.b { border-color:var(--hf-speaker-b); background:color-mix(in srgb, var(--hf-speaker-b-bg) 42%, transparent); }
 .hf-region .tag { position:absolute; left:6px; top:6px; font-size:10.5px; font-weight:700; background:var(--wu-semantic-info); color:var(--wu-semantic-on-primary); border-radius:4px; padding:1px 7px; }
 .hf-region.b .tag { background:var(--hf-speaker-b); color:#fff; }
 .hf-canvas .cta { position:absolute; left:0; right:0; bottom:12px; display:flex; justify-content:center; }

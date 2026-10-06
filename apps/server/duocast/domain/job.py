@@ -56,7 +56,8 @@ class Job(BaseModel):
     queue_class: QueueClass = "cpu"
     client_token: str = ""
     input_snapshot: dict[str, Any] = Field(default_factory=dict)
-    stage: JobStage = "prepare"
+    # Providers may publish detailed stages; persisted jobs must accept them on reload.
+    stage: str = "prepare"
     status: JobStatus = JobStatus.QUEUED
     # 队列内优先级：数值小者先执行，同优先级按 created_at FIFO（12 报告 C-1）。
     priority: int = 0

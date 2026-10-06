@@ -54,6 +54,12 @@ def wait_job(client, job_id):
     raise AssertionError('job timed out')
 
 
+def current_turn_count(client, base):
+    proj = client.get(base).json()
+    rev = next(r for r in proj['scriptRevisions'] if r['id'] == proj['currentDraftRevision'])
+    return len(rev['turns'])
+
+
 def test_real_tts_master_track_and_file_endpoint(tmp_path, monkeypatch):
     monkeypatch.setattr('duocast.main.settings', replace(
         settings, storage_root=tmp_path, tts_provider='comfyui'))
@@ -65,8 +71,10 @@ def test_real_tts_master_track_and_file_endpoint(tmp_path, monkeypatch):
             'sourceInput': {'kind': 'article', 'content': '你好。\n欢迎来聊一聊。'},
             'clientToken': 's1'})
         wait_job(client, gen.json()['jobId'])
+        # mock 脚本生成现为 A/B 交替多话轮（第四轮优化），间隔数随实际话轮数构造
+        gaps = [500] * (current_turn_count(client, base) - 1)
         job = wait_job(client, client.post(base + '/voice/synthesize', json={
-            'transitionGapMs': [500]}).json()['jobId'])
+            'transitionGapMs': gaps}).json()['jobId'])
 
         assert job['result']['simulated'] is False  # 真实通道不标模拟
         tl = client.get(base).json()['audioTimeline']

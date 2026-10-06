@@ -6,19 +6,19 @@
    ========================================================================== */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  useConfirm, useJobs, useProject, useSampleGenerate, useVisualGenerate,
+  usePatchProject, useConfirm, useJobs, useProject, useSampleGenerate, useUploadMasterImage, useVisualGenerate,
 } from '../lib/api';
 import type { Job, ScriptRevision, VisualVariant } from '../lib/types';
-import { Alert, Badge, Button, Choice, Icon } from '../components/wu';
+import { Alert, Badge, Button, Icon } from '../components/wu';
 import { AppShell, FootBar, StageHead, TimelineBar } from '../components/AppShell';
-import { useProjectStore } from '../stores';
+import { useProjectStore, useServiceStore } from '../stores';
 
 const ASPECTS: { id: 'landscape' | 'portrait'; label: string }[] = [
   { id: 'landscape', label: '横屏 16:9' },
   { id: 'portrait', label: '竖屏 9:16' },
 ];
 
-const SHOT_PRESETS = ['稳定同框（默认）', '轻微推拉', '发言人裁切'];
+const SHOT_PRESETS = ['稳定同框', '发言人裁切'];
 
 
 type VisualMode = 'twoShot' | 'overShoulder';
@@ -56,10 +56,13 @@ function fmtSecs(secs: number): string {
 
 export function VisualPage({ projectId }: { projectId: string }) {
   const project = useProject(projectId);
+  const realVideo = useServiceStore(s => s.capabilities?.video.mode !== 'mock');
   const jobs = useJobs(projectId);
   const gen = useVisualGenerate();
   const genSample = useSampleGenerate();
+  const uploadMaster = useUploadMasterImage();
   const confirm = useConfirm();
+  const patchProject = usePatchProject();
   const setView = useProjectStore((s) => s.setView);
 
   const proj = project.data;
@@ -67,17 +70,21 @@ export function VisualPage({ projectId }: { projectId: string }) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [tab, setTab] = useState<'compose' | 'shot' | 'sample'>('compose');
   const [preset, setPreset] = useState(SHOT_PRESETS[0]);
-  const [shotOpts, setShotOpts] = useState<Record<string, boolean>>({ 轻微推拉: false, 发言人裁切: false });
   const [error, setError] = useState<string | null>(null);
-  const [visualMode, setVisualMode] = useState<VisualMode>('twoShot');
+  const [visualMode, setVisualMode] = useState<VisualMode>(() => localStorage.getItem(`duocast-visual-mode-${projectId}`) === 'overShoulder' ? 'overShoulder' : 'twoShot');
+  useEffect(() => { localStorage.setItem(`duocast-visual-mode-${projectId}`, visualMode); }, [projectId, visualMode]);
   const [lockedCameras, setLockedCameras] = useState<Record<'A' | 'B', boolean>>({ A: false, B: false });
   const [otsNotice, setOtsNotice] = useState<string | null>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
+  const masterFileRef = useRef<HTMLInputElement | null>(null);
+  const cameraFileRef = useRef<HTMLInputElement | null>(null);
+  const uploadCamera = useRef<'A' | 'B'>('A');
   const zoneRefs = useRef<Record<string, HTMLElement | null>>({ compose: null, shot: null, sample: null });
 
   useEffect(() => {
     if (proj?.aspect) setAspect(proj.aspect);
-  }, [proj?.aspect]);
+    if (proj?.cameraMode) setPreset(proj.cameraMode === 'twoShot' ? '稳定同框' : '发言人裁切');
+  }, [proj?.aspect, proj?.cameraMode]);
 
   const revision: ScriptRevision | undefined =
     proj?.scriptRevisions.find((r) => r.id === proj.currentDraftRevision)
@@ -87,7 +94,9 @@ export function VisualPage({ projectId }: { projectId: string }) {
   // 过肩机位组以独立视觉变体保存；同框面板不能把 A 过肩图误当主图。
   const twoShotVariants = variants.filter((variant) => variant.mode !== 'overShoulder');
   const timeline = proj?.audioTimeline ?? null;
-  const selected = twoShotVariants.find((v) => v.id === selectedId) ?? twoShotVariants[twoShotVariants.length - 1] ?? null;
+  const cameraGroupId = `CG-ots-${projectId}`;
+  const otsVariant = variants.find(v => v.mode === 'overShoulder' && v.cameraGroups?.some(g => g.id === cameraGroupId));
+  const selected = visualMode === 'overShoulder' ? otsVariant ?? null : twoShotVariants.find((v) => v.id === (selectedId ?? proj?.selectedVisualVariantId)) ?? twoShotVariants[twoShotVariants.length - 1] ?? null;
   const genJob: Job | undefined = (jobs.data ?? []).find(
     (j) => j.kind === 'visual.generate' && ['queued', 'running', 'recovering'].includes(j.status),
   );
@@ -95,8 +104,19 @@ export function VisualPage({ projectId }: { projectId: string }) {
   const sampleJob: Job | undefined = (jobs.data ?? []).find(
     (j) => j.kind === 'sample.generate' && ['queued', 'running', 'recovering'].includes(j.status),
   );
-  const sampleDone = (jobs.data ?? []).some(
-    (j) => j.kind === 'sample.generate' && j.status === 'succeeded',
+  const currentSample = (jobs.data ?? []).find(j => {
+    if (j.kind !== 'sample.generate' || j.status !== 'succeeded') return false;
+    const snapshot = j.inputSnapshot?.projectSnapshot as typeof proj;
+    return !!snapshot && snapshot.currentDraftRevision === proj?.currentDraftRevision
+      && JSON.stringify(snapshot.audioTimeline) === JSON.stringify(proj?.audioTimeline)
+      && JSON.stringify(snapshot.scriptRevisions) === JSON.stringify(proj?.scriptRevisions)
+      && JSON.stringify(snapshot.visualVariants) === JSON.stringify(proj?.visualVariants)
+      && (!j.inputSnapshot?.visualVariantId || j.inputSnapshot.visualVariantId === selected?.id)
+      && (j.inputSnapshot?.cameraMode ?? 'speaker') === (visualMode === 'overShoulder' ? 'speaker' : preset === '稳定同框' ? 'twoShot' : 'speaker');
+  });
+  const sampleDone = !!currentSample;
+  const sampleSimulated = (jobs.data ?? []).some(
+    (j) => j.kind === 'sample.generate' && j.status === 'succeeded' && j.result?.simulated !== false,
   );
   const voiceApproved = proj?.approvals.some((a) => a.kind === 'voice' && a.decision === 'accepted') ?? false;
   const sampleApproved = proj?.approvals.some(
@@ -106,7 +126,6 @@ export function VisualPage({ projectId }: { projectId: string }) {
   const canGenerate = !!proj && !!proj.currentDraftRevision && !generating;
   // 样片当前只承载「生成成功与否」：接受门槛 = 有主图变体 + 样片任务成功。
   const canAccept = !!selected && sampleDone;
-  const cameraGroupId = `CG-ots-${projectId}`;
   const cameraStatus = useMemo<Record<'A' | 'B', CameraStatus>>(() => {
     const persisted = new Set(
       variants.flatMap((variant) => variant.cameraGroups ?? [])
@@ -130,7 +149,7 @@ export function VisualPage({ projectId }: { projectId: string }) {
   }, [cameraGroupId, jobs.data, variants]);
   const otsReady = cameraStatus.A === 'ready' && cameraStatus.B === 'ready';
   // 接受样片的真实门槛 = 已选主图变体 + 全部检查项（样片确认绑定当前草稿，服务端校验）。
-  const sampleFailJob = (jobs.data ?? []).find((j) => j.kind === 'sample.generate' && j.status === 'failed');
+  const sampleFailJob = (jobs.data ?? []).find((j) => j.kind === 'sample.generate' && j.status === 'failed' && j.inputSnapshot.visualVariantId === selected?.id && JSON.stringify((j.inputSnapshot.projectSnapshot as typeof proj)?.visualVariants) === JSON.stringify(proj?.visualVariants));
   const acceptHint = canAccept
     ? '样片已生成，可接受'
     : !selected
@@ -159,8 +178,12 @@ export function VisualPage({ projectId }: { projectId: string }) {
       projectId,
       clientToken: crypto.randomUUID(),
       revisionId: proj.currentDraftRevision,
-      rangeStartSec: Math.round(sampleRange.start * 10) / 10,
-      rangeEndSec: Math.round(sampleRange.end * 10) / 10,
+      visualVariantId: selected?.id,
+      cameraMode: visualMode === 'overShoulder' ? 'speaker' : preset === '稳定同框' ? 'twoShot' : 'speaker',
+      performanceMode: proj.performanceMode ?? 'legacy',
+      rangeStartSec: sampleRange.start,
+      // 不能四舍五入：区间末尾常等于音轨总长，向上取整会超出服务端 end<=total+0.001 容差（实测 422）
+      rangeEndSec: sampleRange.end,
       aspect,
     }, { onError: (e) => setError((e as Error).message) });
   };
@@ -168,14 +191,15 @@ export function VisualPage({ projectId }: { projectId: string }) {
   const handleAccept = () => {
     if (!proj) return;
     // 样片确认绑当前草稿；服务端校验绑定关系，过期确认会 422（11 报告 P1-6）
-    confirm.mutate({ projectId, expectedRevision: proj.revision, kind: 'sample', inputRevisionId: proj.currentDraftRevision }, {
+    confirm.mutate({ projectId, expectedRevision: proj.revision, kind: 'sample', spec: { sampleJobId: currentSample?.id, sampleArtifactId: currentSample?.result?.artifactIds?.[0] }, inputRevisionId: proj.currentDraftRevision }, {
       onError: (e) => setError((e as Error).message),
     });
   };
 
   const handleCameraAction = (camera: 'A' | 'B', action: '生成' | '上传' | '重做') => {
     if (action === '上传') {
-      setOtsNotice(`${camera} 发言机位的上传入口尚未接入资产 API；当前请用“生成”创建实际机位任务。`);
+      uploadCamera.current = camera;
+      cameraFileRef.current?.click();
       return;
     }
     if (!proj) return;
@@ -257,7 +281,23 @@ export function VisualPage({ projectId }: { projectId: string }) {
               <>
                 <div style={{ display: 'flex', gap: 8 }}>
                   <Button variant="secondary" size="sm" busy={generating} disabled={!canGenerate} onClick={handleGenerate}>生成</Button>
-                  <Button variant="secondary" size="sm" icon="upload" disabled>上传</Button>
+                  <Button
+                  variant="secondary" size="sm" icon="upload" busy={uploadMaster.isPending}
+                  title="上传本地底图（PNG/JPEG ≤10MB），登记为主图变体"
+                  onClick={() => masterFileRef.current?.click()}
+                  >上传</Button>
+                  <input
+                  ref={masterFileRef} type="file" accept="image/png,image/jpeg" style={{ display: 'none' }}
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    e.target.value = '';
+                    if (!f || !proj) return;
+                    uploadMaster.mutate({ projectId, file: f, aspect }, {
+                      onSuccess: ({ variantId }) => setSelectedId(variantId),
+                      onError: (e) => setError((e as Error).message),
+                    });
+                  }}
+                  />
                 </div>
                 <p className="wu-caption" style={{ marginTop: 8 }}>候选底图需人工检查身份与遮挡。</p>
               </>
@@ -365,7 +405,7 @@ export function VisualPage({ projectId }: { projectId: string }) {
         <span className="hf-seg" role="group" aria-label="画幅">
           {ASPECTS.map((a) => (
             <button
-              key={a.id} type="button" aria-pressed={aspect === a.id}
+              key={a.id} type="button" disabled={realVideo && a.id === 'portrait'} title={a.id === 'portrait' ? '竖屏布局尚未开放' : undefined} aria-pressed={aspect === a.id}
               style={{ width: 'auto', padding: '0 10px' }}
               onClick={() => setAspect(a.id)}
             >{a.label}</button>
@@ -403,6 +443,15 @@ export function VisualPage({ projectId }: { projectId: string }) {
             {visualMode === 'twoShot' ? (
               <>
                 <div className="hf-canvas" data-aspect={aspect}>
+                  {/* 真实底图（上传 / 图片 API 产出）直接铺底，人物区域框叠加其上 */}
+                  {selected?.masterImage?.artifactId && (
+                    <img
+                    src={`/api/artifacts/${selected.masterImage.artifactId}/file`}
+                    alt="同框底图"
+                    style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}
+                    onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                    />
+                  )}
                   {!selected && (
                     <span className="scene-hint">
                       {generating ? '正在生成同框底图…' : '同框底图 · 点击下方「生成同框底图」提交图片 API 任务'}
@@ -410,16 +459,16 @@ export function VisualPage({ projectId }: { projectId: string }) {
                   )}
                   {selected && regions.map(({ key, r }) => (
                     <div
-                      key={key} className={`hf-region ${key === 'B' ? 'b' : ''}`}
-                      style={{ left: `${r.x * 100}%`, top: `${r.y * 100}%`, width: `${r.width * 100}%`, height: `${r.height * 100}%` }}
+                    key={key} className={`hf-region ${key === 'B' ? 'b' : ''}`}
+                    style={{ left: `${r.x * 100}%`, top: `${r.y * 100}%`, width: `${r.width * 100}%`, height: `${r.height * 100}%` }}
                     >
                       <span className="tag">{key} 区</span>
                     </div>
                   ))}
                   <div className="cta">
                     <Button
-                      variant="secondary" size="sm" icon="sparkle" busy={generating} disabled={!canGenerate}
-                      onClick={handleGenerate}
+                    variant="secondary" size="sm" icon="sparkle" busy={generating} disabled={!canGenerate}
+                    onClick={handleGenerate}
                     >生成同框底图</Button>
                   </div>
                 </div>
@@ -428,7 +477,7 @@ export function VisualPage({ projectId }: { projectId: string }) {
                     <select
                       className="hf-mini-select" aria-label="主图变体"
                       value={selected?.id ?? ''}
-                      onChange={(e) => setSelectedId(e.target.value)}
+                      onChange={(e) => { setSelectedId(e.target.value); if (proj) patchProject.mutate({ projectId, expectedRevision: proj.revision, patch: { selectedVisualVariantId: e.target.value } }); }}
                       disabled={!twoShotVariants.length}
                     >
                       {twoShotVariants.length
@@ -455,15 +504,23 @@ export function VisualPage({ projectId }: { projectId: string }) {
               </>
             ) : (
               <div className="hf-ots-grid">
+                <input ref={cameraFileRef} type="file" aria-label="过肩机位图片" accept="image/png,image/jpeg" style={{ display: 'none' }} onChange={e => {
+                  const file = e.target.files?.[0]; e.target.value = '';
+                  if (!file) return;
+                  const subject = uploadCamera.current;
+                  uploadMaster.mutate({ projectId, file, aspect, mode: 'overShoulder', cameraGroupId, cameraAssetId: `CA-ots-${subject}`, subjectSpeaker: subject, foregroundSpeaker: subject === 'A' ? 'B' : 'A' }, {
+                    onSuccess: () => setOtsNotice(`${subject} 机位图片已登记，可生成过肩样片。`), onError: e => setError((e as Error).message),
+                  });
+                }} />
                 {OTS_CAMERAS.map((camera) => {
                   const ready = cameraStatus[camera.id] === 'ready';
                   const locked = lockedCameras[camera.id];
                   const status = cameraStatusMeta(cameraStatus[camera.id]);
                   return (
                     <article key={camera.id} className="hf-ots-card">
-                      <div className="hf-ots-preview" data-camera={camera.id} aria-label={`${camera.title}构图占位`}>
-                        <span className="hf-ots-foreground">{camera.foreground}</span>
-                        <span className="hf-ots-subject">{camera.subject}</span>
+                      <div className="hf-ots-preview" data-camera={camera.id} data-ready={ready} aria-label={`${camera.title}构图`}>
+                        {otsVariant?.cameraGroups?.flatMap(g => g.cameraAssets).filter(c => c.subjectSpeaker === camera.id).map(c => <img key={c.id} src={`/api/artifacts/${c.masterImage.artifactId}/file`} alt={`${camera.title}实际构图`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />)}
+                        {!ready && <><span className="hf-ots-foreground">{camera.foreground}</span><span className="hf-ots-subject">{camera.subject}</span></>}
                         <Badge tone={status.tone}>{status.label}</Badge>
                       </div>
                       <div className="hf-ots-card-body">
@@ -472,10 +529,10 @@ export function VisualPage({ projectId }: { projectId: string }) {
                           <p>{camera.subject}；{camera.foreground}</p>
                         </div>
                         <div className="hf-ots-actions">
-                          <Button variant="secondary" size="sm" icon="sparkle" onClick={() => handleCameraAction(camera.id, ready ? '重做' : '生成')}>
+                          <Button variant="secondary" size="sm" icon="sparkle" disabled={locked} onClick={() => handleCameraAction(camera.id, ready ? '重做' : '生成')}>
                             {ready ? '重做' : '生成'}
                           </Button>
-                          <Button variant="secondary" size="sm" icon="upload" onClick={() => handleCameraAction(camera.id, '上传')}>上传</Button>
+                          <Button variant="secondary" size="sm" icon="upload" disabled={locked} aria-label={`${camera.id}机位上传`} onClick={() => handleCameraAction(camera.id, '上传')}>上传</Button>
                           <Button variant={locked ? 'brand' : 'ghost'} size="sm" icon={locked ? 'check' : 'edit'} onClick={() => setLockedCameras((current) => ({ ...current, [camera.id]: !current[camera.id] }))}>
                             {locked ? '已锁定' : '锁定'}
                           </Button>
@@ -496,16 +553,10 @@ export function VisualPage({ projectId }: { projectId: string }) {
                 <span className="lb">镜头预设</span>
                 <select
                   className="wu-input" aria-label="镜头预设" style={{ width: 'auto', minHeight: 32 }}
-                  value={preset} onChange={(e) => setPreset(e.target.value)}
+                  value={preset} onChange={(e) => { setPreset(e.target.value); if (proj) patchProject.mutate({ projectId, expectedRevision: proj.revision, patch: { cameraMode: e.target.value === '稳定同框' ? 'twoShot' : 'speaker' } }); }}
                 >
                   {SHOT_PRESETS.map((p) => <option key={p} value={p}>{p}</option>)}
                 </select>
-                {['轻微推拉', '发言人裁切'].map((o) => (
-                  <Choice
-                    key={o} type="checkbox" checked={shotOpts[o]}
-                    onChange={(v) => setShotOpts((s) => ({ ...s, [o]: v }))} label={o}
-                  />
-                ))}
                 <span className="hf-spacer" />
               </div>
             ) : (
@@ -539,8 +590,16 @@ export function VisualPage({ projectId }: { projectId: string }) {
                 onClick={handleGenSample}
               >生成样片</Button>
               {sampleDone && <Badge tone="success" icon="check">样片生成成功</Badge>}
+              {sampleDone && <span className="wu-caption">请检查双方口型、倾听反应和身份，再接受样片。</span>}
               {(genSample.isPending || sampleJob) && <Badge tone="info">生成中…</Badge>}
             </div>
+            {/* 演示样片无画面：明确告知「接受」前并不存在可人工检查的片段（12 报告 P0 的诚实口径） */}
+            {sampleDone && sampleSimulated && (
+              <p className="wu-caption" style={{ marginTop: 6 }}>
+                演示模式：样片任务走通但无真实画面；接受前无法人工检查口型与身份。真实视频引擎接入后此处产出可播放片段。
+              </p>
+            )}
+            {currentSample?.result?.simulated === false && currentSample.result.artifactIds?.length ? <video key={currentSample.id} controls preload="metadata" style={{ width: '100%', maxHeight: 480 }} src={`/api/artifacts/${currentSample.result.artifactIds[0]}/file`} /> : null}
           </section>
         </div>
       </div>
