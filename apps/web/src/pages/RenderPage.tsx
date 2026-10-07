@@ -6,7 +6,7 @@
    ========================================================================== */
 import { useEffect, useMemo, useState, useRef } from 'react';
 import {
-  useJobs, useProject, useRenderGenerate, useRenderAdopt, useOutputSelect, usePatchProject, useArtifacts, useListeningPlan, type ListeningPlan,
+  useJobs, useProject, useRenderGenerate, useRenderAdopt, useOutputSelect, usePatchProject, type ListeningPlan,
 } from '../lib/api';
 import type { AudioTimeline, Job, Project, SynthesisUnit } from '../lib/types';
 import { Alert, Badge, Button, Icon } from '../components/wu';
@@ -77,18 +77,13 @@ function segLabel(seg: Segment, idx: number, total: number, speakers: Map<string
 export function RenderPage({ projectId }: { projectId: string }) {
   const project = useProject(projectId);
   const jobs = useJobs(projectId);
-  const artifacts = useArtifacts();
   const render = useRenderGenerate();
   const adopt = useRenderAdopt();
   const selectOutput = useOutputSelect();
   const patchProject = usePatchProject();
   const baselineVideo = useRef<HTMLVideoElement>(null);
   const candidateVideo = useRef<HTMLVideoElement>(null);
-  const [performanceMode, setPerformanceMode] = useState<'legacy' | 'adaptive'>('legacy');
   const [redoFromSec, setRedoFromSec] = useState(0);
-  const [generationProfile, setGenerationProfile] = useState<'accepted' | 'matched' | 'reference' | 'listener' | 'dialogue'>('accepted');
-  const [listeningSeed, setListeningSeed] = useState(1);
-  const [referenceId, setReferenceId] = useState('');
   const [candidateId, setCandidateId] = useState('');
   const setView = useProjectStore((s) => s.setView);
   const simulated = useServiceStore((s) => s.capabilities?.video.mode === 'mock');
@@ -123,17 +118,12 @@ export function RenderPage({ projectId }: { projectId: string }) {
   const resolution = RESOLUTION_OPTIONS.find((r) => r.id === resolutionId)?.value ?? '854x480';
   const totalSecs = timeline ? timeline.sampleCount / (timeline.sampleRate || 48000) : 0;
   const isOverShoulder = latestVariant?.mode === 'overShoulder';
-  const effectiveProfile = isOverShoulder ? 'accepted' : generationProfile;
-  const automaticListening = effectiveProfile === 'dialogue';
-  const plan = useListeningPlan(projectId, latestVariant?.id, listeningSeed, automaticListening && !!timeline);
-  const usesReference = effectiveProfile === 'reference' || effectiveProfile === 'listener';
-  const motionReferences = (artifacts.data?.artifacts ?? []).filter(a => a.kind === 'video' && a.paramsSnapshot.purpose === 'motionReference' && a.paramsSnapshot.projectId === projectId && a.paramsSnapshot.visualArtifactId === latestVariant?.masterImage.artifactId && a.paramsSnapshot.rangeStartSec === redoFromSec && typeof a.paramsSnapshot.rangeEndSec === 'number' && Math.abs(a.paramsSnapshot.rangeEndSec - totalSecs) < 0.001 && (generationProfile !== 'listener' || a.paramsSnapshot.listenerSpeaker === 'A' || a.paramsSnapshot.listenerSpeaker === 'B'));
-  const selectedReference = motionReferences.find(a => a.artifactId === referenceId) ?? motionReferences[0];
+  const standardSource = !!proj?.outputManifest
+    && (proj.outputManifest.meta.performanceMode ?? 'legacy') === 'legacy'
+    && (proj.outputManifest.meta.generationProfile ?? 'accepted') === 'accepted';
 
   const handleRender = (localRedo = false) => {
     if (!proj || !timeline) return;
-    if (usesReference && (!localRedo || !selectedReference)) { setError('请选择匹配的动作参考，并使用从此段重做。'); return; }
-    if (automaticListening && (!plan.data || !plan.data.referenceCount)) { setError(plan.error ? (plan.error as Error).message : '当前没有可安全分层的倾听片段，请查看动作计划。'); return; }
     setError(null);
     render.mutate({
       projectId,
@@ -143,12 +133,10 @@ export function RenderPage({ projectId }: { projectId: string }) {
       cameraMode: isOverShoulder ? 'speaker' : proj.cameraMode ?? 'speaker',
       resolution,
       fps,
-      performanceMode: isOverShoulder ? 'legacy' : performanceMode,
-      generationProfile: effectiveProfile,
-      listeningSeed,
-      motionReferenceArtifactId: usesReference ? selectedReference?.artifactId : undefined,
+      performanceMode: 'legacy',
+      generationProfile: 'accepted',
       candidate: true,
-      reuseMotionArtifactId: !isOverShoulder && (localRedo || automaticListening || ((proj.outputManifest?.meta.performanceMode ?? 'legacy') === performanceMode && (proj.outputManifest?.meta.generationProfile ?? 'accepted') === generationProfile)) ? proj.outputManifest?.artifactIds[0] : undefined,
+      reuseMotionArtifactId: !isOverShoulder && standardSource ? proj.outputManifest?.artifactIds[0] : undefined,
       redoFromSec: localRedo ? redoFromSec : undefined,
     }, { onError: (e) => setError((e as Error).message) });
   };
@@ -169,12 +157,7 @@ export function RenderPage({ projectId }: { projectId: string }) {
     if (lastMeta?.resolution) setResolutionId(RESOLUTION_OPTIONS.find(r => r.value === lastMeta.resolution)?.id ?? '480p');
     if (lastMeta?.fps) setFps(lastMeta.fps);
   }, [recentRender?.id]);
-  useEffect(() => { setPerformanceMode(proj?.performanceMode ?? 'legacy'); }, [proj?.performanceMode]);
-  useEffect(() => {
-    setGenerationProfile(proj?.outputManifest?.meta.generationProfile === 'dialogue' ? 'dialogue' : 'accepted');
-    const savedPlan = proj?.outputManifest?.meta.listeningPlan as ListeningPlan | undefined;
-    setListeningSeed(savedPlan?.seed ?? 1);
-  }, [proj?.selectedOutputVersion]);
+
 
 
   const voiceSource = simulated ? '模拟语音' : proj?.voiceBindings?.[0]?.providerProfileId === 'minimax' ? 'MiniMax' : '本地引擎';
@@ -196,7 +179,6 @@ export function RenderPage({ projectId }: { projectId: string }) {
           <div className="hf-ins-sec">
             <h4>导出规格</h4>
             <div className="hf-fld"><label>画面机位</label><select className="wu-input" aria-label="画面机位" value={latestVariant?.id ?? ''} onChange={e => {
-              setGenerationProfile('accepted');
               if (proj) patchProject.mutate({ projectId, expectedRevision: proj.revision, patch: { selectedVisualVariantId: e.target.value } }, { onError: e => setError((e as Error).message) });
             }}>{eligibleVariants.map(v => <option key={v.id} value={v.id}>{v.id} · {v.mode === 'overShoulder' ? '过肩正反打' : '双人同框'}</option>)}</select></div>
             <div className="hf-fld">
@@ -218,40 +200,6 @@ export function RenderPage({ projectId }: { projectId: string }) {
                 {FPSS.map((f) => <option key={f} value={f}>{f} fps</option>)}
               </select>
             </div>
-            <div className="hf-fld">
-              <label>表演方式</label>
-              <select className="wu-input" aria-label="表演方式" disabled={isOverShoulder} value={isOverShoulder ? 'legacy' : performanceMode} onChange={e => {
-                const value = e.target.value as 'legacy' | 'adaptive';
-                setPerformanceMode(value);
-                if (proj) patchProject.mutate({ projectId, expectedRevision: proj.revision, patch: { performanceMode: value } }, { onError: e => setError((e as Error).message) });
-              }}>
-                <option value="legacy">已验证表演</option>
-                <option value="adaptive">按角色编排反应（候选）</option>
-              </select>
-            </div>
-            <div className="hf-fld">
-              <label>动作生成方式</label>
-              <select className="wu-input" aria-label="动作生成方式" disabled={latestVariant?.mode === 'overShoulder'} value={latestVariant?.mode === 'overShoulder' ? 'accepted' : generationProfile} onChange={e => setGenerationProfile(e.target.value as typeof generationProfile)}>
-                <option value="accepted">当前已验证配置</option>
-                <option value="matched">匹配模型采样（试验）</option>
-                <option value="reference">动作参考驱动（试验）</option>
-                <option value="listener">保留说话者，合成倾听动作（试验）</option><option value="dialogue">按对话生成倾听动作</option>
-              </select>
-            </div>
-            {automaticListening && <div className="hf-fld">
-              <label htmlFor="listening-seed">动作变体</label>
-              <input id="listening-seed" className="wu-input" type="number" min={0} max={10000} step={1} value={listeningSeed} onChange={e => setListeningSeed(Number(e.target.value))} />
-              <p className="wu-caption">系统根据台词和音轨生成动作素材；变体影响反应时机与幅度。生成后仍需比较画面。</p>
-            </div>}
-            {usesReference && <div className="hf-fld">
-              <label>末段动作参考</label>
-              <select className="wu-input" aria-label="末段动作参考" value={selectedReference?.artifactId ?? ''} onChange={e => setReferenceId(e.target.value)}>
-                {!motionReferences.length && <option value="">此起点暂无匹配参考</option>}
-                {motionReferences.map((a, i) => <option key={a.artifactId} value={a.artifactId}>{typeof a.paramsSnapshot.label === 'string' ? a.paramsSnapshot.label : `动作参考 ${i+1}`} · {fmtT(redoFromSec)} 起</option>)}
-              </select>
-              <p className="wu-caption">选择对应重做起点后，从此段生成候选；效果仍需比较验收。</p>
-              {selectedReference && <video controls preload="metadata" style={{ width: '100%' }} src={`/api/artifacts/${selectedReference.artifactId}/file`} />}
-            </div>}
             <div className="hf-fld">
               <label>编码</label>
               <select className="wu-input" aria-label="编码" value={codec} onChange={(e) => setCodec(e.target.value)}>
@@ -324,7 +272,7 @@ export function RenderPage({ projectId }: { projectId: string }) {
         </Badge>
         <span className="hf-spacer" />
         <Button
-          variant="brand" icon="play" busy={rendering} disabled={!canRender || usesReference}
+          variant="brand" icon="play" busy={rendering} disabled={!canRender}
           onClick={() => handleRender()}
         >{rendering ? '执行中' : simulated ? '运行流程演示' : '生成候选成片'}</Button>
       </StageHead>
@@ -333,13 +281,6 @@ export function RenderPage({ projectId }: { projectId: string }) {
         {simulated && <Alert tone="warning">当前为流程演示，不生成 MP4、WAV 或 SRT；下方分段为示意，真实模型效果与规格尚未验证。</Alert>}
         {timeline && totalSecs > 300 && <Alert tone="danger">完整音轨超过 5 分钟，请先精简内容，不会自动截断尾句。</Alert>}
         {timeline && timeline.revisionId !== proj?.currentDraftRevision && <Alert tone="warning">当前配音属于旧脚本，请先生成或采用当前版本配音。</Alert>}
-        {automaticListening && <section className="hf-ins-sec" aria-label="倾听动作计划">
-          <h4>倾听动作计划</h4>
-          {plan.isFetching && <p>正在根据当前对话规划…</p>}
-          {plan.error && <Alert tone="danger">{(plan.error as Error).message}</Alert>}
-          {plan.data && <><p>自动生成 {plan.data.referenceCount} 段动作素材；角色交接片段保留原表演。</p>
-            {plan.data.segments.map(segment => <p key={segment.start}>{fmtT(segment.start)}–{fmtT(segment.end)} · {segment.eligible ? `${segment.listener} ${segment.label}，在 ${fmtT(segment.start + (segment.reactionAtSec ?? 0))} 左右反应` : segment.reason}</p>)}</>}
-        </section>}
         {error && <Alert tone="danger">{error}</Alert>}
         {!timeline && (
           <Alert tone="warning">
@@ -409,7 +350,7 @@ export function RenderPage({ projectId }: { projectId: string }) {
           <select id="redo-from" className="wu-input" value={redoFromSec} onChange={e => setRedoFromSec(Number(e.target.value))}>
             {segments.map(s => <option key={s.id} value={s.outputRange[0]}>{fmtT(s.outputRange[0])}</option>)}
           </select>
-          <Button variant="secondary" disabled={isOverShoulder || !canRender || !proj?.outputManifest || (usesReference && !selectedReference)} onClick={() => handleRender(true)}>从此段重做候选</Button>
+          <Button variant="secondary" disabled={isOverShoulder || !canRender || !standardSource} onClick={() => handleRender(true)}>从此段重做候选</Button>
         </section>}
 
         <div className="hf-s5">
