@@ -23,16 +23,21 @@ import {
 import { Badge, Button, Card, Choice, Empty, Icon, Input, Modal } from '../components/wu';
 import { useProjectStore } from '../stores';
 
-/** 工程的后台任务口径：排队/执行中计为「后台任务 N」，渲染类另给「渲染中」文案。 */
+/** 工程的后台任务口径：排队/执行中/暂停都算「还有活没干完」，渲染类另给进度文案。 */
 function jobSummary(jobs: Job[] | undefined, projectId: string) {
+  const PENDING = ['queued', 'running', 'recovering', 'pause_requested', 'paused', 'waiting_confirmation'];
   const active = (jobs ?? []).filter(
-    (j) => j.projectId === projectId && (j.status === 'queued' || j.status === 'running'),
+    (j) => j.projectId === projectId && PENDING.includes(j.status),
   );
   if (active.length === 0) return null;
   const rendering = active.find((j) => j.kind.startsWith('render'));
   const seg = rendering?.result as { done?: number; total?: number } | null | undefined;
   if (rendering && seg && typeof seg.done === 'number' && typeof seg.total === 'number') {
     return { tone: 'info' as const, text: `渲染中 ${seg.done}/${seg.total} 段` };
+  }
+  // 暂停中的任务以前从首页消失，用户以为已经结束
+  if (active.every((j) => j.status === 'paused' || j.status === 'pause_requested')) {
+    return { tone: 'warning' as const, text: `暂停中 ${active.length}` };
   }
   return { tone: 'warning' as const, text: `后台任务 ${active.length}` };
 }
@@ -104,12 +109,17 @@ export function HomePage() {
   const [stageFilter, setStageFilter] = useState('all');
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const filteredProjects = useMemo(() => projects.filter((p) => {
-    const q = searchText.trim().toLowerCase();
-    if (q && !`${p.id} ${p.title}`.toLowerCase().includes(q)) return false;
-    if (stageFilter !== 'all' && currentStageOf(p).id !== stageFilter) return false;
-    return true;
-  }), [projects, searchText, stageFilter]);
+  const filteredProjects = useMemo(() => projects
+    // 「最近工程」必须按最后编辑排序；之前直接用接口顺序（按 ID 升序），
+    // 新建的工程反而不在第一屏。
+    .slice()
+    .sort((a, b) => (b.updatedAt ?? '').localeCompare(a.updatedAt ?? ''))
+    .filter((p) => {
+      const q = searchText.trim().toLowerCase();
+      if (q && !`${p.id} ${p.title}`.toLowerCase().includes(q)) return false;
+      if (stageFilter !== 'all' && currentStageOf(p).id !== stageFilter) return false;
+      return true;
+    }), [projects, searchText, stageFilter]);
   // 保存为模板：从既有工程提取配置（画幅 + A/B 声线引用）
   const [saveTplOpen, setSaveTplOpen] = useState(false);
   const [saveTplProjectId, setSaveTplProjectId] = useState<string>('');

@@ -43,9 +43,13 @@ export function saveSession(currentProjectId: string | null, view: View): void {
   } catch { /* 隐私模式等场景下忽略 */ }
 }
 
+// 初始化时就恢复会话：等 useEffect 再恢复会让首帧先渲染首页，
+// 刷新工程页时闪一下首页并多发一轮请求（第六轮实测）。
+const restoredSession = loadSession();
+
 export const useProjectStore = create<ProjectState>((set) => ({
-  currentProjectId: null,
-  view: 'home',
+  currentProjectId: restoredSession?.currentProjectId ?? null,
+  view: restoredSession?.view ?? 'home',
   selectedRevisionId: null,
   openProject: (id, view) => set({ currentProjectId: id, view: view ?? 'create', selectedRevisionId: null }),
   setView: (view) => set({ view }),
