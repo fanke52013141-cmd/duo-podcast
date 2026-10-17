@@ -49,6 +49,18 @@ class _PriorityQueue:
                 return i + 1
         return None
 
+    def discard(self, job_id: str) -> int:
+        """从堆里摘掉指定任务（工程删除时用），返回摘除条数。
+
+        只删 _jobs 不清队列的话，worker 仍会取出该 Job 照常执行并重建落盘目录。
+        """
+        kept = [entry for entry in self._heap if entry[3].id != job_id]
+        removed = len(self._heap) - len(kept)
+        if removed:
+            self._heap = kept
+            heapq.heapify(self._heap)
+        return removed
+
     async def get(self) -> Job:
         while True:
             if self._heap:
@@ -71,6 +83,8 @@ class JobManager:
         self.bus = event_bus
         self.queue_caps = queue_caps or {"gpu": 1, "api": 16, "cpu": 4}
         self._jobs: dict[str, Job] = {}
+        # 工程删除后进入此集合：队列摘除 + 收尾不再落盘，防止「任务复活」。
+        self._discarded: set[str] = set()
         self._queues: dict[str, _PriorityQueue] = {k: _PriorityQueue() for k in self.queue_caps}
         self._gpu_lock = asyncio.Lock()
         self._runner: Optional[JobRunner] = None
@@ -159,6 +173,13 @@ class JobManager:
         moved = 0
         trash_path = Path(trash_dir)
         for job in [j for j in self._jobs.values() if j.project_id == project_id]:
+            # 先登记为丢弃：运行中的任务收尾时不再落盘，排队的任务出队后直接跳过。
+            self._discarded.add(job.id)
+            for queue in self._queues.values():
+                queue.discard(job.id)
+            if job.status in (JobStatus.RUNNING, JobStatus.PAUSE_REQUESTED, JobStatus.CANCEL_REQUESTED):
+                # 让 worker 在 runner 返回后走 CANCEL_REQUESTED → CANCELLED 分支（不落盘）。
+                job.status = JobStatus.CANCEL_REQUESTED
             src = self.root / job.id
             if src.exists():
                 (trash_path / "jobs").mkdir(parents=True, exist_ok=True)
@@ -263,6 +284,9 @@ class JobManager:
         while True:
             job = await queue.get()
             try:
+                # 取出瞬间工程可能已被删除：直接丢弃，不执行也不落盘。
+                if job.id in self._discarded:
+                    continue
                 if job.status != JobStatus.QUEUED:
                     continue
                 self.transition(job, JobStatus.RUNNING)
@@ -295,6 +319,10 @@ class JobManager:
         return job
 
     def _persist(self, job: Job) -> None:
+        # 工程已删除、任务已移入回收站：worker 若还在跑，收尾不得把 job.json 写回来，
+        # 否则被删工程的任务会「复活」（第五轮幽灵任务的第二层根因）。
+        if job.id in self._discarded:
+            return
         p = self.root / job.id / "job.json"
         p.parent.mkdir(parents=True, exist_ok=True)
         # 唯一临时文件名：不跟随预置的 project.json.tmp 之类的固定名链接，避免链接攻击。
