@@ -8,9 +8,10 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   usePatchProject, useConfirm, useJobs, useProject, useSampleGenerate, useUploadMasterImage, useVisualGenerate,
 } from '../lib/api';
-import type { Job, ScriptRevision, VisualVariant } from '../lib/types';
+import { SPEAKERS, type Job, type ScriptRevision, type VisualVariant } from '../lib/types';
 import { Alert, Badge, Button, Icon } from '../components/wu';
 import { AppShell, FootBar, StageHead, TimelineBar } from '../components/AppShell';
+import { formatTimecode } from '../lib/format';
 import { useError } from '../lib/useError';
 import { useProjectStore, useServiceStore } from '../stores';
 
@@ -31,8 +32,8 @@ const VISUAL_MODES: { id: VisualMode; label: string }[] = [
 ];
 
 const OTS_CAMERAS: { id: 'A' | 'B'; title: string; subject: string; foreground: string }[] = [
-  { id: 'A', title: 'A 发言机位', subject: '李雷 · 清晰主体', foreground: '韩梅梅 · 前景肩背' },
-  { id: 'B', title: 'B 发言机位', subject: '韩梅梅 · 清晰主体', foreground: '李雷 · 前景肩背' },
+  { id: 'A', title: 'A 发言机位', subject: `${SPEAKERS.A.name} · 清晰主体`, foreground: `${SPEAKERS.B.name} · 前景肩背` },
+  { id: 'B', title: 'B 发言机位', subject: `${SPEAKERS.B.name} · 清晰主体`, foreground: `${SPEAKERS.A.name} · 前景肩背` },
 ];
 
 const cameraStatusMeta = (status: CameraStatus) => {
@@ -48,12 +49,6 @@ const asRegion = (v: unknown): Region | null => {
   if (typeof r.x !== 'number' || typeof r.y !== 'number' || typeof r.width !== 'number' || typeof r.height !== 'number') return null;
   return { x: r.x, y: r.y, width: r.width, height: r.height };
 };
-
-function fmtSecs(secs: number): string {
-  const m = Math.floor(secs / 60);
-  const s = Math.floor(secs % 60);
-  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
-}
 
 export function VisualPage({ projectId }: { projectId: string }) {
   const project = useProject(projectId);
@@ -119,10 +114,10 @@ export function VisualPage({ projectId }: { projectId: string }) {
   const sampleSimulated = (jobs.data ?? []).some(
     (j) => j.kind === 'sample.generate' && j.status === 'succeeded' && j.result?.simulated !== false,
   );
-  const voiceApproved = proj?.approvals.some((a) => a.kind === 'voice' && a.decision === 'accepted') ?? false;
-  const sampleApproved = proj?.approvals.some(
-    (a) => a.kind === 'sample' && a.decision === 'accepted' && proj.currentDraftRevision && a.inputRevisionId === proj.currentDraftRevision,
-  ) ?? false;
+  // 两个确认态统一取后端 stageProgress（F3）：确认记录被撤销、或样片/时间轨已过期时，
+  // 阶段状态会是 pending_confirm / stale，页脚不会再单独显示「已确认」。
+  const voiceApproved = proj?.stageProgress.voice === 'done';
+  const sampleApproved = proj?.stageProgress.visual === 'done';
 
   const canGenerate = !!proj && !!proj.currentDraftRevision && !generating;
   // 样片当前只承载「生成成功与否」：接受门槛 = 有主图变体 + 样片任务成功。
@@ -244,7 +239,7 @@ export function VisualPage({ projectId }: { projectId: string }) {
         if (startUnit && endUnit) {
           const s0 = (tl.unitOffsets[startUnit.id] ?? 0) / tl.sampleRate;
           const s1 = ((tl.unitOffsets[endUnit.id] ?? 0) + endUnit.sampleCount) / tl.sampleRate;
-          return { start: s0, end: s1, label: `${fmtSecs(s0)} – ${fmtSecs(s1)} · A→B→A` };
+          return { start: s0, end: s1, label: `${formatTimecode(s0, { padMinutes: true })} – ${formatTimecode(s1, { padMinutes: true })} · A→B→A` };
         }
       }
     }
@@ -497,10 +492,10 @@ export function VisualPage({ projectId }: { projectId: string }) {
                     </select>
                   </span>
                   <span className="item">角色 A
-                    <select className="hf-mini-select" aria-label="角色 A"><option>李雷 · 资产库</option></select>
+                    <select className="hf-mini-select" aria-label="角色 A"><option>{SPEAKERS.A.name} · 资产库</option></select>
                   </span>
                   <span className="item">角色 B
-                    <select className="hf-mini-select" aria-label="角色 B"><option>韩梅梅 · 资产库</option></select>
+                    <select className="hf-mini-select" aria-label="角色 B"><option>{SPEAKERS.B.name} · 资产库</option></select>
                   </span>
                   <span className="hf-spacer" />
                   

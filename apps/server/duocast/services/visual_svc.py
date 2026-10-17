@@ -12,6 +12,7 @@ from ..domain.audio import AssetRef
 from ..domain.project import Project
 from ..domain.visual import CameraAsset, DialogueCameraGroup, VisualVariant, Rect
 from ..storage.project_store import ProjectStore
+from .approvals import revoke
 
 
 def apply_visual_variant(store: ProjectStore, project: Project, result: dict[str, Any]) -> list[VisualVariant]:
@@ -32,7 +33,7 @@ def apply_visual_variant(store: ProjectStore, project: Project, result: dict[str
     )
     variants = [v.model_dump(by_alias=True) for v in project.visual_variants] + [variant.model_dump(by_alias=True)]
     store.apply(project.id, {"visual_variants": variants,
-                             "approvals": [a for a in project.approvals if a.kind != 'sample']},
+                             "approvals": revoke(project.approvals, ("sample",), "视觉输入变更")},
                 expected_revision=project.revision)
     return [variant]
 
@@ -82,6 +83,6 @@ def _apply_over_shoulder_camera(store: ProjectStore, project: Project, result: d
 
     store.apply(project.id, {
         "visual_variants": [v.model_dump(by_alias=True) for v in variants],
-        "approvals": [a for a in project.approvals if a.kind != "sample"],
+        "approvals": revoke(project.approvals, ("sample",), "视觉输入变更"),
     }, expected_revision=project.revision)
     return [target]

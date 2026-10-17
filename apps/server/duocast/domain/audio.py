@@ -58,3 +58,8 @@ class AudioTimeline(BaseModel):
     annotation_version: str = ""
     # 关口 A：真实引擎产出的整期拼接母轨（PCM16/48k mono）资产 id；mock 模式恒为 None
     master_audio_asset_id: Optional[str] = None
+    # 本次合成是否已写回工程当前时间轨。False = 仅存入 audio_history（合成期间脚本被改动），
+    # 阶段③与任务中心据此提示，避免出现「任务成功但配音没变」的假成功。
+    applied: bool = True
+    # 本次整期合成里复用了旧音频的单元（指纹未变），用于展示「只重做改动的句子」。
+    reused_unit_ids: list[str] = Field(default_factory=list)

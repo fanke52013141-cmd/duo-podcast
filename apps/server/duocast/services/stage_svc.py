@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 from ..domain.job import JobStatus
-from .render_inputs import dependency_hash, audio_inputs_match
+from .render_inputs import dependency_hash, audio_inputs_match, visual_dependency_hash
 from ..domain.project import Project, StageId, StageState
 
 # 阶段 → 所需产物/确认（01 §13.1 精简）
@@ -25,18 +25,34 @@ def derive_stage_states(project: Project, jobs: list | None = None, pronunciatio
                                                            JobStatus.PAUSE_REQUESTED, JobStatus.RECOVERING)
     }
     latest = {a.kind: a for a in project.approvals
-              if a.input_revision_id == project.current_draft_revision}
+              if a.input_revision_id == project.current_draft_revision and not a.revoked_at}
     approved = {kind for kind, a in latest.items() if a.decision == "accepted"}
     has_script = bool(project.current_draft_revision)
     has_voice = bool(getattr(project, "audio_timeline", None))
     has_visual = bool(getattr(project, "visual_variants", None))
-    has_render = bool(project.selected_output_version)
+    current_hash = dependency_hash(project)
+    demo_jobs = [job for job in (jobs or [])
+                 if job.kind == "renders" and job.status == JobStatus.SUCCEEDED
+                 and (job.result or {}).get("simulated")]
+    # 演示渲染（simulated）不产出真实文件、也不写 output 指针，但它确实把流程走完了。
+    # 阶段⑤ 若只认 selected_output_version，就会在「正文写演示完成」的同时显示「未准备」
+    # （第五轮 E2E 实测矛盾）。这里按「演示任务 + 输入指纹」推导：一致=完成，变了=已过期。
+    demo_render = any(
+        (not (job.input_snapshot or {}).get("dependencyHash")
+         or job.input_snapshot["dependencyHash"] == current_hash)
+        for job in demo_jobs
+    )
+    demo_render_stale = bool(demo_jobs) and not demo_render
+    has_render = bool(project.selected_output_version) or demo_render
 
     states["create"] = StageState.DONE if has_script else StageState.READY
     states["script"] = _stage(has_script, "script" in approved, "script.generate" in running_kinds)
     states["voice"] = _stage(has_voice, "voice" in approved, "tts.synthesize" in running_kinds)
     states["visual"] = _stage(has_visual, "sample" in approved, "visual.generate" in running_kinds)
     states["render"] = _stage(has_render, True, "renders" in running_kinds)
+    if demo_render_stale and "renders" not in running_kinds:
+        # 演示产物跑过、但脚本/配音/画面又改过：给出「已过期」，而不是退回「未准备」。
+        states["render"] = StageState.STALE
     timeline = project.audio_timeline
     if timeline and "tts.synthesize" not in running_kinds:
         if timeline.revision_id != project.current_draft_revision:
@@ -59,10 +75,12 @@ def derive_stage_states(project: Project, jobs: list | None = None, pronunciatio
                 states["visual"] = StageState.STALE
                 if has_render:
                     states["render"] = StageState.STALE
-    current_hash = dependency_hash(project)
     sample_approval = latest.get("sample")
-    if sample_approval and sample_approval.spec.get("dependencyHash") and sample_approval.spec["dependencyHash"] != current_hash:
-        states["visual"] = StageState.STALE
+    # 样片绑定的是「画面依赖」（F4）；旧数据里可能是整份依赖哈希，两种都认。
+    if sample_approval and sample_approval.spec.get("dependencyHash"):
+        declared = sample_approval.spec["dependencyHash"]
+        if declared not in (visual_dependency_hash(project), current_hash):
+            states["visual"] = StageState.STALE
     output_hash = ((project.output_manifest or {}).get("meta") or {}).get("dependencyHash")
     if output_hash and output_hash != current_hash and "renders" not in running_kinds:
         states["render"] = StageState.STALE

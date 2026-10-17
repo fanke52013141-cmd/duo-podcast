@@ -46,6 +46,9 @@ export interface ScriptRevision {
   contentBrief?: ContentBrief;
   turns: Turn[];
   textApiConfigRef: string;
+  /* F5 分支：父版本 + 用户可见分支名 */
+  parentRevisionId?: string;
+  label?: string;
 }
 
 export interface Approval {
@@ -56,6 +59,9 @@ export interface Approval {
   reasonTarget?: StageId | null;
   note: string;
   at: string;
+  /* F2：确认不物理删除，失效时标记撤销 */
+  revokedAt?: string | null;
+  revokedReason?: string;
 }
 
 /* ---- 阶段③ 声音三层对象（01 §11.2，与后端 domain/audio.py 对齐） ---- */

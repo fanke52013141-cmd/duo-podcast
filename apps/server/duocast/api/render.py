@@ -112,7 +112,11 @@ async def select_version(project_id: str, payload: dict, request: Request):
     manifest = next((v for v in versions if v["version"] == payload.get("version")), None)
     if manifest is None:
         raise HTTPException(404, "输出版本不存在")
-    store.apply(project_id, {"selected_output_version": manifest["version"], "output_manifest": manifest}, expected_revision=project.revision)
+    # 三个指针必须同步：output_version 供阶段⑤ 过期判断、selected_output_version 供
+    # 「是否有产物」、output_manifest 供导出。此前只改后两个，切旧版本后阶段状态与导出不一致。
+    store.apply(project_id, {"selected_output_version": manifest["version"],
+                             "output_version": manifest["version"],
+                             "output_manifest": manifest}, expected_revision=project.revision)
     return {"version": manifest["version"]}
 
 

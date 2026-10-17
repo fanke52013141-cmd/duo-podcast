@@ -1,4 +1,4 @@
-/* ============================================================================
+﻿/* ============================================================================
    HF-03 · 阶段③ 试听配音（真实数据流，01 §5 权威）
    主视图：左 语音引擎面板（固定 300px，引擎单选 + A/B 音色绑定）/ 右 配音清单（话轮级）
    底部：时长检查条 + TimelineBar（全应用唯一深色面，05 §1.5）
@@ -10,14 +10,13 @@ import {
 } from '../lib/api';
 import type { AudioTimeline, Job, Project, ScriptRevision, SynthesisUnit, Turn, VoiceBinding } from '../lib/types';
 import { Alert, Badge, Button, Choice, Icon } from '../components/wu';
-import { AppShell, FootBar, StageHead, TimelineBar, fmtDur as sharedFmtDur } from '../components/AppShell';
+import { AppShell, FootBar, StageHead, TimelineBar } from '../components/AppShell';
+import { formatSamples } from '../lib/format';
 import { useError } from '../lib/useError';
+import { SPEAKERS as SPEAKER_NAMES } from '../lib/types';
 import { useProjectStore, useServiceStore } from '../stores';
 
-const SPEAKERS: { id: 'A' | 'B'; name: string; role: string }[] = [
-  { id: 'A', name: '李雷', role: '主持' },
-  { id: 'B', name: '韩梅梅', role: '嘉宾' },
-];
+const SPEAKERS: { id: 'A' | 'B'; name: string; role: string }[] = (['A', 'B'] as const).map((id) => ({ id, ...SPEAKER_NAMES[id] }));
 
 const ENGINES: { id: 'local' | 'minimax'; label: string; profileId: string }[] = [
   { id: 'local', label: '本地引擎（默认）', profileId: 'mock-tts' },
@@ -46,10 +45,6 @@ function defaultBindings(proj: Project): Record<'A' | 'B', VoiceBinding> {
     A: fromProj('A') ?? { id: 'VB-A', characterId: 'A', providerProfileId: 'mock-tts', modelId: VOICE_OPTIONS.A[0], localRefAudio: null, minimaxVoiceId: null, auditionState: 'none' },
     B: fromProj('B') ?? { id: 'VB-B', characterId: 'B', providerProfileId: 'mock-tts', modelId: VOICE_OPTIONS.B[0], localRefAudio: null, minimaxVoiceId: null, auditionState: 'none' },
   };
-}
-
-function fmtDur(samples: number, sampleRate: number): string {
-  return sharedFmtDur(samples, sampleRate);
 }
 
 export function VoicePage({ projectId }: { projectId: string }) {
@@ -89,6 +84,10 @@ export function VoicePage({ projectId }: { projectId: string }) {
     (j) => j.kind === 'tts.synthesize' && ['queued', 'running', 'recovering'].includes(j.status),
   );
   const synthesizing = !!synthJob;
+  // 最近一次成功的整期合成是否真的写回了当前时间轨。False = 合成期间脚本被改动，
+  // 结果只存进音频历史（后端 meta.applied=false），必须提示而不是显示"成功但没变"。
+  const lastSynth = (jobs.data ?? []).find((j) => j.kind === 'tts.synthesize' && j.status === 'succeeded');
+  const synthNotApplied = (lastSynth?.result?.meta as { applied?: boolean } | undefined)?.applied === false;
   // voiceApproved 的推导放在 timelineStale 之后（见下方注释：过期时间轨上的历史确认不算）。
 
   const bindingsPayload = useMemo(() => {
@@ -113,12 +112,9 @@ export function VoicePage({ projectId }: { projectId: string }) {
   // 阶段状态由后端 stage_svc 权威推导为 stale，前端只展示。
   const timelineStale = !!timeline && !!proj && (timeline.revisionId !== proj.currentDraftRevision || proj.stageProgress.voice === 'stale');
 
-  // 已确认 = 对**当前**时间轨版本的 voice 确认记录。过期时间轨上的历史确认不算
-  // （此前把旧时间轨的确认当作已确认：阶段轨显示「已过期」的同时按钮显示「已确认」、
-  // 下一步放行，两条口径互相矛盾）。
-  const voiceApproved = !timelineStale && !!proj?.approvals.some(
-    (a) => a.kind === 'voice' && a.decision === 'accepted' && timeline && a.inputRevisionId === timeline.revisionId,
-  );
+  // 已确认 = 后端 stage_svc 判定阶段③ 为 done（含"确认绑定当前时间轨 + 输入指纹一致"）。
+  // 前端不再自算确认条件，避免「轨道已过期、按钮仍显示已确认」的两套口径（F3）。
+  const voiceApproved = !timelineStale && proj?.stageProgress.voice === 'done';
 
   // 合成许可：有工程、有话轮、没有正在进行的合成任务即可。
   // 已确认的配音也允许重做（11 报告 P2-16 + v3.1 死锁解除：重合成会替换当前时间轨
@@ -148,6 +144,11 @@ export function VoicePage({ projectId }: { projectId: string }) {
       }
     } else if (j.status === 'failed') {
       setError(`试听失败：${j.error ?? '引擎不可用'}`);
+    } else if (j.status === 'cancelled' || j.status === 'cancel_requested') {
+      // 取消也要终结本地状态：否则按钮会永久停在 disabled，只能刷新页面。
+      setError('试听已取消，可重新发起。');
+    } else if (j.status === 'unknown') {
+      setError('试听任务状态未知（可能已被清理），可重新发起。');
     } else return;
     setAuditionJob(null);
   }, [audJob.data, auditionJob]);
@@ -257,7 +258,7 @@ export function VoicePage({ projectId }: { projectId: string }) {
     units.forEach((u) => { if (!m.has(u.turnId)) m.set(u.turnId, u); });
     return m;
   }, [units]);
-  const totalSecs = timeline ? fmtDur(timeline.sampleCount, timeline.sampleRate) : '待合成';
+  const totalSecs = timeline ? formatSamples(timeline.sampleCount, timeline.sampleRate) : '待合成';
   const selectedUnit = units.find((u) => u.id === selectedUnitId) ?? null;
   const turns = revision?.turns ?? [];
   const selectedTurnIdx = selectedUnit
@@ -290,7 +291,7 @@ export function VoicePage({ projectId }: { projectId: string }) {
       timeline={
         <TimelineBar
           timeline={timeline}
-          curSecs={timeline ? fmtDur(playheadSamples, timeline.sampleRate) : '00:00.0'}
+          curSecs={timeline ? formatSamples(playheadSamples, timeline.sampleRate) : '00:00.0'}
           labels={[`A 轨（${SPEAKERS[0].name}）`, `B 轨（${SPEAKERS[1].name}）`]}
           speakerOf={(turnId) => revision?.turns.find((t) => t.id === turnId)?.speaker ?? 'A'}
           playPct={playPct}
@@ -306,7 +307,7 @@ export function VoicePage({ projectId }: { projectId: string }) {
                   <b>{selectedUnit.id}</b>
                   <span>合成单元 · {selectedUnit.voiceBindingId}</span>
                   <span className="hf-spacer" />
-                  <span className="wu-caption">时长 {timeline ? fmtDur(selectedUnit.sampleCount, timeline.sampleRate) : '待定'}</span>
+                  <span className="wu-caption">时长 {timeline ? formatSamples(selectedUnit.sampleCount, timeline.sampleRate) : '待定'}</span>
                 </div>
                 <div className="hf-unit">
                   <b>{selectedUnit.turnId}</b>
@@ -379,7 +380,7 @@ export function VoicePage({ projectId }: { projectId: string }) {
           <div className="hf-ins-sec">
             <h4>依赖提示</h4>
             <ul className="hf-ins-list">
-              <li>阶段② 脚本确认：{proj?.approvals.some((a) => a.kind === 'script' && a.decision === 'accepted') ? '已通过' : '未确认'}</li>
+              <li>阶段② 脚本确认：{proj?.stageProgress.script === 'done' ? '已通过' : '未确认'}</li>
               <li>时间轨过期：{timelineStale ? '是 · 脚本话轮改动后需重新合成' : '否 · 时间轨与当前草稿一致'}</li>
             </ul>
           </div>
@@ -417,6 +418,12 @@ export function VoicePage({ projectId }: { projectId: string }) {
 
       <div className="hf-body">
         {error && <Alert tone="danger" onClose={dismissError}>{error}</Alert>}
+        {synthNotApplied && (
+          <Alert tone="warning">
+            上一次整期合成期间脚本被改动：结果已存入音频历史，但<b>没有替换当前时间轨</b>。
+            请基于最新脚本重新生成整期配音后再确认。
+          </Alert>
+        )}
         {!proj?.scriptRevisions.length && (
           <Alert tone="warning">
             还没有脚本。请先在阶段①创建本期并生成对话。
@@ -515,7 +522,7 @@ export function VoicePage({ projectId }: { projectId: string }) {
             {turns.map((t) => {
               const u = unitByTurn.get(t.id);
               const sel = !!u && u.id === selectedUnitId;
-              const dur = u && timeline ? fmtDur(u.sampleCount, timeline.sampleRate) : null;
+              const dur = u && timeline ? formatSamples(u.sampleCount, timeline.sampleRate) : null;
               const turnIdx = turns.findIndex((x) => x.id === t.id);
               const generating = synthesizing && !u && !!synthJob;
               const genDone = units.filter((x) => turns.findIndex((y) => y.id === x.turnId) <= turnIdx).length;

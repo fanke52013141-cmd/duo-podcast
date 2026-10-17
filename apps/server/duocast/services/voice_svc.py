@@ -17,6 +17,7 @@ from ..adapters.base import TTSProvider
 from ..domain.audio import AudioTimeline, SynthesisUnit, VoiceBinding
 from ..domain.project import Project, ScriptRevision
 from ..storage.project_store import ProjectStore
+from .approvals import revoke
 
 
 def find_revision(project: Project, revision_id: str | None) -> ScriptRevision:
@@ -39,7 +40,8 @@ def apply_pronunciation(texts: list[str], pronunciation: list[dict] | None) -> l
     """读音词典替换（01 §4.2）：按词条顺序把 term 替换为 read。空词条与空读法跳过。"""
     entries = [(str(e.get("term", "")), str(e.get("read", "")))
                for e in (pronunciation or []) if isinstance(e, dict)]
-    entries = [(t, r) for t, r in entries if t]
+    # 空读法必须一起跳过：只过滤空 term 时，read="" 会把 term 从朗读文本里整段删掉。
+    entries = [(t, r) for t, r in entries if t and r]
     if not entries:
         return texts
     out = []
@@ -174,6 +176,9 @@ async def synthesize_timeline(
     current = store.load(project.id) if store is not None else None
     candidates_by_unit = _candidate_units_for_revision(current, revision.id) if current else {}
     adopted_by_unit = _adopted_units_for_revision(current, revision.id) if current else {}
+    # F1：整期合成时，指纹没变的单元直接复用历史已采用音频，只对改动过的话轮重新推理。
+    # 跨 revision 复用是刻意的——改一句脚本会新建草稿版本，但其余句子的读音并没有变。
+    reusable_by_unit = _reusable_units(current) if (current and is_full_synthesis) else {}
     offset = lead_in_ms * 48
     unit_paths: dict[str, str] = {}
     turn_speaker = {t.id: t.speaker for t in revision.turns}
@@ -189,7 +194,18 @@ async def synthesize_timeline(
         if previous_candidates:
             _merge_candidates(unit, previous_candidates)
         should_synthesize = is_full_synthesis or unit.turn_id in target_set
-        if should_synthesize:
+        reusable = reusable_by_unit.get(unit.id)
+        reuse = (reusable is not None
+                 and reusable.adopted_audio_asset_id
+                 and reusable.sample_count > 0
+                 and reusable.pronunciation_revision == unit.pronunciation_revision)
+        if reuse:
+            # 文本/声线/情绪/语速/参考音频的指纹完全一致：直接复用旧音频，不再请求 TTS。
+            unit.adopted_audio_asset_id = reusable.adopted_audio_asset_id
+            unit.sample_count = reusable.sample_count
+            _merge_candidates(unit, reusable)
+            timeline.reused_unit_ids.append(unit.id)
+        elif should_synthesize:
             res = await tts.synthesize({
                 "lineTexts": line_texts, "voiceBindingId": unit.voice_binding_id,
                 "speaker": turn_speaker.get(unit.turn_id, "A"),
@@ -225,6 +241,10 @@ async def synthesize_timeline(
         timeline.units.append(unit)
     timeline.sample_count = offset + tail_out_ms * 48
 
+    if is_full_synthesis and artifact_store is not None and artifacts_root is not None:
+        # 复用单元的音频路径来自产物清单；新合成单元由适配器直接给出路径。
+        for unit_id, path in _paths_for_adopted_units(timeline, artifact_store).items():
+            unit_paths.setdefault(unit_id, path)
     if is_full_synthesis and artifact_store is not None and artifacts_root is not None and len(unit_paths) == len(units):
         timeline.master_audio_asset_id = _build_master_track(
             timeline, unit_paths, revision.id, artifact_store, Path(artifacts_root))
@@ -234,14 +254,18 @@ async def synthesize_timeline(
     if current is None:
         raise KeyError(project.id)
     patch = {"audio_history": [*current.audio_history, timeline]}
+    applied = False
     # 旧任务始终保留结果，但不可替换已经编辑过的当前配音。
     if (is_full_synthesis and current.revision == project.revision
             and current.current_draft_revision == revision.id):
+        applied = True
         patch.update(audio_timeline=timeline, voice_bindings=voice_bindings,
-                     approvals=[a for a in current.approvals if a.kind not in ('voice', 'sample')])
+                     approvals=revoke(current.approvals, ("voice",), "重新生成整期配音"))
     elif (not is_full_synthesis and current.current_draft_revision == revision.id):
         # 候选本身不替换母轨，但采用时必须按产生候选时的声线配置校验输入指纹。
+        applied = True
         patch["voice_bindings"] = voice_bindings
+    timeline.applied = applied
     store.apply(project.id, patch, expected_revision=current.revision)
     return timeline
 
@@ -277,6 +301,26 @@ def _adopted_units_for_revision(project: Project | None, revision_id: str) -> di
     if not project or not project.audio_timeline or project.audio_timeline.revision_id != revision_id:
         return {}
     return {unit.id: unit for unit in project.audio_timeline.units if unit.adopted_audio_asset_id}
+
+
+def _reusable_units(project: Project | None) -> dict[str, SynthesisUnit]:
+    """可跨 revision 复用的已采用单元（按时间倒序，首个生效）。
+
+    F1：改一句脚本会新建草稿版本，但其余句子的文本/声线/情绪/语速都没变。
+    只要单元指纹（pronunciation_revision）一致，就可以直接沿用旧音频，
+    不必整期重新推理，也不会因为音频时间轨变化而作废 ④ 的样片确认。
+    """
+    if not project:
+        return {}
+    merged: dict[str, SynthesisUnit] = {}
+    for timeline in [project.audio_timeline, *reversed(project.audio_history)]:
+        if not timeline:
+            continue
+        for unit in timeline.units:
+            if not unit.adopted_audio_asset_id or unit.sample_count <= 0:
+                continue
+            merged.setdefault(unit.id, unit.model_copy(deep=True))
+    return merged
 
 
 def _candidate_units_for_revision(project: Project | None, revision_id: str) -> dict[str, SynthesisUnit]:
@@ -378,8 +422,7 @@ def adopt_unit_candidate(
     updated = store.apply(project_id, {
         "audio_timeline": canonical,
         "audio_history": [*project.audio_history, canonical],
-        "approvals": [approval for approval in project.approvals
-                      if approval.kind not in ("voice", "sample")],
+        "approvals": revoke(project.approvals, ("voice",), "采用新的单元音频"),
     }, expected_revision=project.revision)
     return updated.audio_timeline
 
@@ -458,5 +501,5 @@ def retime_adopted_audio(store, project_id, gaps, artifacts):
     if not demo_retime:
         result.master_audio_asset_id = _build_master_track(result, paths, result.revision_id, artifacts, artifacts.root)
     store.apply(project_id, {"audio_timeline":result,"audio_history":[*project.audio_history,result],
-                "approvals":[a for a in project.approvals if a.kind not in ("voice","sample")]}, expected_revision=project.revision)
+                "approvals":revoke(project.approvals, ("voice",), "调整间隔后重建时间轨")}, expected_revision=project.revision)
     return result

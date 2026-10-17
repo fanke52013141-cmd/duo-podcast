@@ -74,6 +74,9 @@ class ScriptRevision(BaseModel):
     content_brief: ContentBrief = Field(default_factory=ContentBrief)
     turns: list[Turn] = Field(default_factory=list)
     text_api_config_ref: str = ""
+    # F5 分支：父版本相同即同一分支的不同尝试；label 是用户可见的分支名。
+    parent_revision_id: str = ""
+    label: str = ""
 
 
 class Approval(BaseModel):
@@ -85,6 +88,9 @@ class Approval(BaseModel):
     reason_target: Optional[StageId] = None
     note: str = ""
     at: str = ""
+    # F2：确认是审计记录，不物理删除；因上游变更失效时打上撤销时间与原因。
+    revoked_at: Optional[str] = None
+    revoked_reason: str = ""
 
 
 class Project(BaseModel):

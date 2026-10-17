@@ -11,6 +11,7 @@ import {
 import type { AudioTimeline, Job, Project, SynthesisUnit } from '../lib/types';
 import { Alert, Badge, Button, Icon } from '../components/wu';
 import { AppShell, FootBar, StageHead, TimelineBar } from '../components/AppShell';
+import { formatTimecode } from '../lib/format';
 import { useError } from '../lib/useError';
 import { useProjectStore, useServiceStore } from '../stores';
 
@@ -53,13 +54,6 @@ function planSegments(timeline: AudioTimeline): Segment[] {
   return out;
 }
 
-function fmtT(secs: number): string {
-  const m = Math.floor(secs / 60);
-  const s = Math.floor(secs % 60);
-  const ds = Math.floor((secs - Math.floor(secs)) * 10);
-  return `${m}:${String(s).padStart(2, '0')}.${ds}`;
-}
-
 function candidateLabel(job: Job): string {
   const meta = job.result?.meta as { generationProfile?: string; performanceMode?: string; visualMode?: string } | undefined;
   if (meta?.visualMode === 'overShoulder') return '过肩正反打';
@@ -98,7 +92,7 @@ export function RenderPage({ projectId }: { projectId: string }) {
   const timeline: AudioTimeline | null = proj?.audioTimeline ?? null;
   const segments = useMemo(() => (timeline ? planSegments(timeline) : []), [timeline]);
   const outputVersion = proj?.selectedOutputVersion ?? proj?.outputVersion ?? null;
-  const sampleApproved = proj?.approvals.some((a) => a.kind === 'sample' && a.decision === 'accepted') ?? false;
+  const sampleApproved = proj?.stageProgress.visual === 'done';
   const eligibleVariants = proj?.visualVariants.filter(v => v.aspect === (proj.aspect ?? 'landscape') && (v.mode !== 'overShoulder' || v.cameraGroups?.some(g => g.cameraAssets.some(c => c.subjectSpeaker === 'A') && g.cameraAssets.some(c => c.subjectSpeaker === 'B')))) ?? [];
   const latestVariant = eligibleVariants.find(v => v.id === proj?.selectedVisualVariantId) ?? eligibleVariants[eligibleVariants.length - 1] ?? null;
 
@@ -142,14 +136,23 @@ export function RenderPage({ projectId }: { projectId: string }) {
     }, { onError: (e) => setError((e as Error).message) });
   };
 
-  const recentRender = (jobs.data ?? []).find((j) => j.kind === 'renders' && j.status === 'succeeded' && (!proj?.outputManifest || j.result?.artifactIds?.includes(proj.outputManifest.artifactIds[0])));
-  const adoptedArtifacts = new Set([...(proj?.outputHistory ?? []), ...(proj?.outputManifest ? [proj.outputManifest] : [])].flatMap(v => v.artifactIds));
+  // 先算版本集合：判断"当前正式成片"必须看产物是否已被采用，
+  // 否则首个未采用的候选会被当成正式视频（分段全绿、基线自己比自己）。
+  const versions = [...new Map([...(proj?.outputHistory ?? []), ...(proj?.outputManifest ? [proj.outputManifest] : [])].map(v => [v.version, v])).values()];
+  const adoptedArtifacts = new Set(versions.flatMap(v => v.artifactIds ?? []));
+  const recentRender = (jobs.data ?? []).find((j) => {
+    if (j.kind !== 'renders' || j.status !== 'succeeded') return false;
+    const meta = j.result?.meta as { candidate?: boolean } | undefined;
+    const artifactId = j.result?.artifactIds?.[0];
+    if (artifactId && adoptedArtifacts.has(artifactId)) return true;
+    // 还没有采用任何成片时，只有正式渲染（非候选）才算当前视频
+    return meta?.candidate !== true && !proj?.outputManifest;
+  });
   const candidates = (jobs.data ?? []).filter(j => j.kind === 'renders' && j.status === 'succeeded' && (j.result?.meta as { candidate?: boolean } | undefined)?.candidate === true && !adoptedArtifacts.has(j.result?.artifactIds?.[0] ?? ''));
   const otsCompleted = (jobs.data ?? []).find(j => j.kind === 'renders' && j.status === 'succeeded' && j.inputSnapshot.visualVariantId === latestVariant?.id && (j.result?.meta as { visualMode?: string } | undefined)?.visualMode === 'overShoulder');
   const candidate = candidates.find(j => j.id === candidateId) ?? candidates[0];
   const candidateMeta = candidate?.result?.meta as { generationStats?: { generated: number; composited?: number; cached: number; retained: number }; performanceMode?: string; generationProfile?: string; automaticReferenceArtifactIds?: string[]; listeningPlan?: ListeningPlan; continuityTransitions?: { atSec: number; frameAtSec?: number; cameraAssetId: string; qualityCheck?: { before: { windowMaxMeanGrayChange: number }; after: { windowMaxMeanGrayChange: number }; needsReview: boolean } }[] } | undefined;
   const comparisonStart = typeof candidate?.inputSnapshot.redoFromSec === 'number' ? candidate.inputSnapshot.redoFromSec : candidateMeta?.listeningPlan?.segments.find(s => s.eligible)?.start;
-  const versions = [...new Map([...(proj?.outputHistory ?? []), ...(proj?.outputManifest ? [proj.outputManifest] : [])].map(v => [v.version, v])).values()];
   const lastMeta = recentRender?.result?.meta as { outputVersion?: string; resolution?: string; fps?: number } | undefined;
   // 演示渲染已跑过（模拟通道）：分段卡与快照状态按「演示完成」展示，不再永远停在「待生成」
   const demoRendered = recentRender?.result?.simulated === true;
@@ -246,8 +249,8 @@ export function RenderPage({ projectId }: { projectId: string }) {
           <div className="hf-ins-sec">
             <h4>阶段状态</h4>
             <ul className="hf-ins-list">
-              <li>脚本确认：{proj?.approvals.some((a) => a.kind === 'script' && a.decision === 'accepted') ? '已通过' : '未确认'}</li>
-              <li>配音确认：{proj?.approvals.some((a) => a.kind === 'voice' && a.decision === 'accepted') ? '已通过' : '未确认'}</li>
+              <li>脚本确认：{proj?.stageProgress.script === 'done' ? '已通过' : '未确认'}</li>
+              <li>配音确认：{proj?.stageProgress.voice === 'done' ? '已通过' : '未确认'}</li>
               <li>样片确认：{sampleApproved ? '已通过' : '未确认'}</li>
             </ul>
           </div>
@@ -317,7 +320,7 @@ export function RenderPage({ projectId }: { projectId: string }) {
           {!!candidateMeta?.continuityTransitions?.length && <details open><summary>同机位续接检查</summary>
             <p className="wu-caption">比较续接窗口内的最大帧间变化，仅用于定位跳变；口型、表情和光流形变仍需观看确认。</p>
             {candidateMeta.continuityTransitions.map((transition, i) => <div key={i}>
-              <p>{fmtT(transition.frameAtSec ?? transition.atSec)} · {transition.qualityCheck
+              <p>{formatTimecode(transition.frameAtSec ?? transition.atSec, { tenths: true })} · {transition.qualityCheck
                 ? `窗口帧差 ${transition.qualityCheck.before.windowMaxMeanGrayChange.toFixed(2)} → ${transition.qualityCheck.after.windowMaxMeanGrayChange.toFixed(2)} · ${transition.qualityCheck.needsReview ? '变化增大，请复查' : '未检测到帧差增大，待画面确认'}`
                 : '旧候选未记录质量检查，重新导出可补充'}</p>
               <Button variant="secondary" onClick={() => {
@@ -349,7 +352,7 @@ export function RenderPage({ projectId }: { projectId: string }) {
           </select>
           <label htmlFor="redo-from">重做起点</label>
           <select id="redo-from" className="wu-input" value={redoFromSec} onChange={e => setRedoFromSec(Number(e.target.value))}>
-            {segments.map(s => <option key={s.id} value={s.outputRange[0]}>{fmtT(s.outputRange[0])}</option>)}
+            {segments.map(s => <option key={s.id} value={s.outputRange[0]}>{formatTimecode(s.outputRange[0], { tenths: true })}</option>)}
           </select>
           <Button variant="secondary" disabled={isOverShoulder || !canRender || !standardSource} onClick={() => handleRender(true)}>从此段重做候选</Button>
         </section>}
@@ -357,9 +360,9 @@ export function RenderPage({ projectId }: { projectId: string }) {
         <div className="hf-s5">
           {/* 开始生成前确认（01 §7.1） */}
           <section className="hf-summary">
-            <div className="hf-summary-t">开始生成前确认 <span className="wu-caption">点击「开始生成」时冻结输入快照</span></div>
+            <div className="hf-summary-t">开始生成前确认 <span className="wu-caption">点击「{simulated ? '运行流程演示' : '生成候选成片'}」时冻结输入快照</span></div>
             <div className="hf-summary-grid">
-              <div className="hf-kv"><div className="k">{simulated ? '演示估算时长' : '实际时长'}</div><div className="v hf-mono">{timeline ? fmtT(totalSecs) : '—'}</div></div>
+              <div className="hf-kv"><div className="k">{simulated ? '演示估算时长' : '实际时长'}</div><div className="v hf-mono">{timeline ? formatTimecode(totalSecs, { tenths: true }) : '—'}</div></div>
               <div className="hf-kv"><div className="k">画布</div><div className="v">{proj?.aspect === 'portrait' ? '竖屏 9:16' : '横屏 16:9'} · {resolution} 导出画布</div></div>
               <div className="hf-kv"><div className="k">语音来源</div><div className="v">{voiceSource}</div></div>
               <div className="hf-kv"><div className="k">视频模式</div><div className="v">{isOverShoulder ? '双机位过肩正反打' : '双人动态同框'}</div></div>
@@ -392,7 +395,7 @@ export function RenderPage({ projectId }: { projectId: string }) {
                         <span className="tt">#{String(i + 1).padStart(2, '0')} {segLabel(sg, i, segments.length, speakers)}</span>
                       </div>
                       <div className="sub">
-                        {fmtT(dur)} · {reused ? '快照一致 ✓' : demoRendered ? '流程演示 · 无真实视频' : `数字人动态视频 · ${resolutionId}`}
+                        {formatTimecode(dur, { tenths: true })} · {reused ? '快照一致 ✓' : demoRendered ? '流程演示 · 无真实视频' : `数字人动态视频 · ${resolutionId}`}
                       </div>
                     </div>
                   );
@@ -426,7 +429,7 @@ export function RenderPage({ projectId }: { projectId: string }) {
             <div style={{ display: 'flex', gap: 8, marginTop: 10, alignItems: 'center' }}>
               <Button variant="secondary" size="sm" disabled title="接入桌面集成后可打开输出目录">打开输出目录</Button>
               {proj?.outputManifest ? <a className="wu-btn wu-btn-brand" href={`/api/projects/${projectId}/export/package`} download>下载交付包</a> : <span className="wu-caption">新版成片生成后可下载完整交付包</span>}
-              <span className="wu-caption">{outputVersion ? `已导出 ${outputVersion}` : '需先生成成片'}</span>
+              <span className="wu-caption">{outputVersion ? `已导出 ${outputVersion}` : demoRendered ? '演示产物 · 无真实文件可导出' : '需先生成成片'}</span>
             </div>
           </section>
         </div>

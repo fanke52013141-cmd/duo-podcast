@@ -190,15 +190,6 @@ export function Choice({
   );
 }
 
-export function Switch({ checked, onChange, label }: { checked: boolean; onChange: (v: boolean) => void; label?: string }) {
-  return (
-    <label className="wu-choice">
-      <input type="checkbox" className="wu-switch" checked={checked} onChange={(e) => onChange(e.target.checked)} />
-      {label && <span>{label}</span>}
-    </label>
-  );
-}
-
 /* ---------------- Tabs ---------------- */
 export interface TabItem { id: string; label: React.ReactNode; disabled?: boolean; }
 
@@ -259,15 +250,6 @@ export function Modal({
 }
 
 /* ---------------- 小工具 ---------------- */
-export function Progress({ value, max = 100, tone = 'info' }: { value: number; max?: number; tone?: Tone }) {
-  const pct = max > 0 ? Math.min(100, Math.round((value / max) * 100)) : 0;
-  return (
-    <div className="hf-prog" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}>
-      <i style={{ width: `${pct}%`, background: `var(--wu-semantic-${tone === 'info' ? 'info' : tone === 'success' ? 'success' : tone === 'warning' ? 'warning' : tone === 'danger' ? 'danger' : 'brand'})` }} />
-    </div>
-  );
-}
-
 export function SegControl({ options, value, onChange }: { options: { value: string; label: string }[]; value: string; onChange: (v: string) => void }) {
   return (
     <div className="hf-seg" role="group">

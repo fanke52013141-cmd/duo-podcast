@@ -147,14 +147,6 @@ export const useCreateTemplate = () => {
   });
 };
 
-export const useDeleteTemplate = () => {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (templateId: string) => sendJson<{ deleted: string }>(`/templates/${templateId}`, 'DELETE'),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['templates'] }),
-  });
-};
-
 export interface PatchProjectInput {
   projectId: string;
   patch: Record<string, unknown>;
@@ -181,6 +173,20 @@ export const useDeleteProject = () => {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['projects'] });
       qc.removeQueries({ queryKey: ['project'] });
+    },
+  });
+};
+
+/* 从任一版本派生子草稿（F5 分支）：不改动原版本，新版本立刻成为当前草稿。 */
+export const useBranchScript = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ projectId, fromRevisionId, label }: { projectId: string; fromRevisionId: string; label?: string }) =>
+      sendJson<{ revisionId: string; parentRevisionId: string; label: string }>(
+        `/projects/${projectId}/script/branch`, 'POST', { fromRevisionId, label }),
+    onSuccess: (_res, vars) => {
+      qc.invalidateQueries({ queryKey: ['project', vars.projectId] });
+      qc.invalidateQueries({ queryKey: ['projects'] });
     },
   });
 };
@@ -237,7 +243,7 @@ export function upsertDraftTurns(proj: Project, turns: Turn[], baseRevId?: strin
     return { patch: { scriptRevisions: [rev], currentDraftRevision: rev.id }, revId: rev.id };
   }
   const approved = proj.approvals.some(
-    (a) => a.kind === 'script' && a.decision === 'accepted' && a.inputRevisionId === base.id,
+    (a) => a.kind === 'script' && a.decision === 'accepted' && !a.revokedAt && a.inputRevisionId === base.id,
   );
   const isLast = proj.scriptRevisions[proj.scriptRevisions.length - 1]?.id === base.id;
   const isDraft = base.id === proj.currentDraftRevision;
@@ -618,6 +624,3 @@ export interface ListeningPlan {
   requiresVisualReview: boolean;
   segments: { start: number; end: number; eligible: boolean; reason: string; listener?: 'A' | 'B'; label?: string; reactionAtSec?: number }[];
 }
-export const useListeningPlan = (projectId: string, visualId: string | undefined, seed: number, enabled: boolean) =>
-  useQuery({ queryKey: ['listening-plan', projectId, visualId, seed],
-    queryFn: () => getJson<ListeningPlan>(`/projects/${projectId}/render/listening-plan?seed=${seed}${visualId ? `&visualVariantId=${encodeURIComponent(visualId)}` : ''}`), enabled });

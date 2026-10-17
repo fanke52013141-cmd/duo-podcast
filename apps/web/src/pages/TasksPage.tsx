@@ -6,8 +6,9 @@
 import { useMemo, useState } from 'react';
 import { useJobPause, useJobResume, useJobCancel, useJobAbandon, useJobs } from '../lib/api';
 import { JOB_LABEL, type Job, type JobStatus } from '../lib/types';
-import { Badge, Button } from '../components/wu';
+import { Alert, Badge, Button } from '../components/wu';
 import { AppShell } from '../components/AppShell';
+import { formatElapsed } from '../lib/format';
 import { useProjectStore } from '../stores';
 
 const RUNNING: JobStatus[] = ['running', 'pause_requested', 'paused', 'recovering', 'waiting_confirmation', 'cancel_requested', 'unknown'];
@@ -54,12 +55,6 @@ function fmtTime(iso: string): string {
   return d.toLocaleString('zh-CN', { hour12: false, month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' });
 }
 
-function fmtDur(sec: number): string {
-  if (sec < 60) return `${Math.max(0, Math.round(sec))}s`;
-  const m = Math.floor(sec / 60);
-  return `${m}:${String(Math.round(sec % 60)).padStart(2, '0')}`;
-}
-
 function elapsedOf(j: Job): number {
   // 终态任务耗时 = finishedAt - createdAt；进行中任务 = now - createdAt。
   // 没有终态时刻时终态任务显示 0（不冒充仍在增长的耗时）。
@@ -102,6 +97,9 @@ export function TasksPage() {
   const setView = useProjectStore((s) => s.setView);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [refreshedAt, setRefreshedAt] = useState(() => Date.now());
+  // 暂停/继续/取消/放弃的失败原因：这些接口会因状态已变返回 409/404，
+  // 不提示就会变成"点了没反应"。
+  const [opError, setOpError] = useState<string | null>(null);
 
   const all = jobs.data ?? [];
   const groups = useMemo(() => {
@@ -123,11 +121,19 @@ export function TasksPage() {
   const handlePause = (j?: Job) => {
     const t = j ?? selected;
     if (!t) return;
-    (t.status === 'paused' ? resume : pause).mutate(t.id);
+    // pause_requested / cancel_requested 上没有任何可执行动作：
+    // 此前仍按「继续」显示并走 pause()，点了完全没反应。
+    if (t.status === 'pause_requested' || t.status === 'cancel_requested') return;
+    setOpError(null);
+    (t.status === 'paused' ? resume : pause).mutate(t.id, {
+      onError: (e) => setOpError(`操作失败：${(e as Error).message}`),
+    });
   };
   const handleCancel = (j?: Job) => {
     const t = j ?? selected;
-    if (t) cancel.mutate(t.id);
+    if (!t) return;
+    setOpError(null);
+    cancel.mutate(t.id, { onError: (e) => setOpError(`取消失败：${(e as Error).message}`) });
   };
 
   const renderTask = (j: Job, inQueue: boolean) => {
@@ -151,8 +157,8 @@ export function TasksPage() {
             <span className="hf-tag">{j.queueClass}</span>
             <span className="hf-task-meta" style={{ margin: 0, marginLeft: 'auto' }}>
               <span>{JOB_LABEL[j.status]}</span>
-              {ok && <span>{fmtDur(elapsedOf(j))} · {fmtTime(j.finishedAt ?? j.createdAt)} 完成</span>}
-              {!ok && RUNNING.includes(j.status) && <span>已 {fmtDur(elapsedOf(j))}</span>}
+              {ok && <span>{formatElapsed(elapsedOf(j))} · {fmtTime(j.finishedAt ?? j.createdAt)} 完成</span>}
+              {!ok && RUNNING.includes(j.status) && <span>已 {formatElapsed(elapsedOf(j))}</span>}
               {j.error && <span className="err">{j.error}</span>}
             </span>
           </div>
@@ -181,7 +187,10 @@ export function TasksPage() {
           <div className="hf-task-ops">
             {RUNNING.includes(j.status) && (
               <Button variant="secondary" size="sm" disabled={!canPauseJob(j)} onClick={(e) => { e.stopPropagation(); handlePause(j); }}>
-                {j.status === 'paused' || j.status === 'pause_requested' ? '继续' : '当前段完成后暂停'}
+                {j.status === 'paused' ? '继续'
+                  : j.status === 'pause_requested' ? '暂停中…'
+                  : j.status === 'cancel_requested' ? '取消中…'
+                  : '当前段完成后暂停'}
               </Button>
             )}
             {canCancelJob(j) && (RUNNING.includes(j.status) || inQueue) && (
@@ -194,7 +203,11 @@ export function TasksPage() {
             )}
             {j.status === 'unknown' && (
               <Button variant="ghost" size="sm" busy={abandon.isPending}
-                onClick={(e) => { e.stopPropagation(); abandon.mutate(j.id); }}>
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setOpError(null);
+                  abandon.mutate(j.id, { onError: (err) => setOpError(`放弃失败：${(err as Error).message}`) });
+                }}>
                 无法恢复 · 放弃记账
               </Button>
             )}
@@ -249,7 +262,9 @@ export function TasksPage() {
           <div className="hf-ins-sec">
             <h4>取消语义</h4>
             <div className="hf-task-ops" style={{ marginTop: 0 }}>
-              <Button variant="secondary" size="sm" disabled={!canPause} busy={pause.isPending || resume.isPending} onClick={() => handlePause()}>{selected?.status === 'paused' ? '继续' : '当前任务完成后暂停'}</Button>
+              <Button variant="secondary" size="sm" disabled={!canPause} busy={pause.isPending || resume.isPending} onClick={() => handlePause()}>
+                {selected?.status === 'paused' ? '继续' : selected?.status === 'pause_requested' ? '暂停中…' : '当前任务完成后暂停'}
+              </Button>
               <Button variant="ghost" size="sm" disabled={!canCancel} busy={cancel.isPending} onClick={() => handleCancel()}>取消</Button>
             </div>
             <p className="wu-caption" style={{ marginTop: 8 }}>取消后已落盘内容保留，可续跑。</p>
@@ -299,6 +314,7 @@ export function TasksPage() {
       </div>
 
       <div className="hf-body2">
+        {opError && <Alert tone="danger">{opError}</Alert>}
         <section className="hf-grp">
           <div className="hf-grp-t">运行中 <Badge tone="brand">{groups.running.length}</Badge></div>
           {groups.running.map((j) => renderTask(j, false))}

@@ -3,6 +3,7 @@
    对齐 HF-00/HF-01 结构；阶段状态徽章由工程 stageProgress 推导（01 §13.1）
    ========================================================================== */
 import React from 'react';
+import { formatSamples } from '../lib/format';
 import { STAGE_META, STAGE_ORDER, type AudioTimeline, type Project, type StageState } from '../lib/types';
 import { Badge, Icon, type Tone } from './wu';
 import { useProjectStore, useServiceStore, type View } from '../stores';
@@ -43,7 +44,7 @@ export function TopBar({ project }: { project: Project | null }) {
         <button
           type="button"
           className="hf-link"
-          style={{ background: 'none', border: 'none', padding: 0, fontSize: 12.5, cursor: 'pointer' }}
+          style={{ background: 'none', border: 'none', padding: '5px 4px', minHeight: 26, fontSize: 12.5, cursor: 'pointer' }}
           onClick={leaveProject}
         >‹ 工程列表</button>
       )}
@@ -122,15 +123,6 @@ export function StageHead({ title, children }: { title: string; children?: React
    导致另外两屏整条缺失（.hf-timeline 0/1）。此处抽成壳级组件，三屏共享同一份标记。
    -------------------------------------------------------------------------- */
 
-/** 样本数 → `MM:SS.d`（设计稿时间区文案格式 `01:23.4 / 02:48.120`）。 */
-export function fmtDur(samples: number, sampleRate: number): string {
-  const secs = sampleRate > 0 ? samples / sampleRate : 0;
-  const m = Math.floor(secs / 60);
-  const s = Math.floor(secs % 60);
-  const ds = Math.floor((secs - Math.floor(secs)) * 10);
-  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}.${ds}`;
-}
-
 export function TimelineBar({
   timeline, speakerOf, playPct = 0, curSecs = '00:00.0', labels,
 }: {
@@ -197,7 +189,7 @@ export function TimelineBar({
         >
           <Icon name={demoPlaying ? 'pause' : 'play'} size={16} />
         </button>
-        {showDemo ? fmt(demoSecs) : curSecs} / {fmtDur(total, timeline.sampleRate)}
+        {showDemo ? fmt(demoSecs) : curSecs} / {formatSamples(total, timeline.sampleRate)}
       </span>
       <div className="hf-tl-tracks">
         <div className="hf-tl-track">

@@ -14,7 +14,7 @@ from pydantic import ValidationError
 
 from ..domain.project import Project
 from ..services.stage_svc import derive_stage_states
-from ..services.render_inputs import dependency_hash, validate_render_options
+from ..services.render_inputs import dependency_hash, validate_render_options, visual_dependency_hash
 from .voice import _merged_pronunciation
 from ..storage.project_store import InvalidProjectInput, ProjectAlreadyExists, ProjectRevisionConflict, ProjectStore
 
@@ -165,7 +165,9 @@ async def patch_project(project_id: str, payload: dict, request: Request) -> dic
     if "approvals" in patch and isinstance(patch["approvals"], list):
         _validate_confirm_bindings(store, project_id, patch["approvals"])
     saved_project = store.load(project_id)
-    saved_approvals = {json.dumps(a.model_dump(mode="json", by_alias=True), sort_keys=True, ensure_ascii=False) for a in saved_project.approvals} if saved_project else set()
+    # 只和「有效确认」去重：已撤销的旧记录不应阻止用户重新确认（F2）。
+    saved_approvals = {json.dumps(a.model_dump(mode="json", by_alias=True), sort_keys=True, ensure_ascii=False)
+                       for a in saved_project.approvals if not a.revoked_at} if saved_project else set()
     for approval in patch.get("approvals", []):
         if not isinstance(approval, dict):
             continue
@@ -191,7 +193,8 @@ async def patch_project(project_id: str, payload: dict, request: Request) -> dic
                     "样片无法接受：任务不存在、未成功、产物不符，或生成样片后脚本/配音/构图又改动过。"
                     "请重新生成样片后再接受；若反复出现，请回到阶段②③检查是否还有未确认的改动。",
                 )
-            spec["dependencyHash"] = dependency_hash(current)
+            # 样片确认只绑定「画面依赖」：之后调间隔/换配音不应让已接受的样片作废（F4）。
+            spec["dependencyHash"] = visual_dependency_hash(current)
             validate_render_options(current, {}, _merged_pronunciation(request, current), real_video=False)
     try:
         updated = store.apply(project_id, patch, expected_revision=expected)

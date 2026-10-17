@@ -12,6 +12,7 @@ from duocast.jobs.manager import JobManager
 from duocast.core.eventbus import EventBus
 from duocast.services.voice_svc import adopt_unit_candidate, synthesize_timeline
 from duocast.storage.project_store import ProjectStore
+from duocast.services.approvals import active
 
 
 class AssetTTS:
@@ -72,7 +73,10 @@ def test_adopting_candidate_rebuilds_timeline_and_clears_voice_confirmations(tmp
     assert adopted.units[0].adopted_audio_asset_id == "AUD-3"
     assert adopted.units[1].adopted_audio_asset_id == "AUD-2"
     assert adopted.sample_count == 48003 + 320 * 48 + 48002
-    assert [approval.kind for approval in store.load(project.id).approvals] == ["script"]
+    saved = store.load(project.id)
+    # F2：采纳新音频后 voice/sample 确认被标记撤销，而不是从列表消失
+    assert set(approval.kind for approval in active(saved.approvals)) == {"script", "sample"}
+    assert {approval.kind for approval in saved.approvals if approval.revoked_at} == {"voice"}  # F4
 
 
 def test_api_rejects_empty_duplicate_or_unknown_partial_turn_ids(tmp_path):
