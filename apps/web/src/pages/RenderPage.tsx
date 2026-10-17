@@ -142,14 +142,23 @@ export function RenderPage({ projectId }: { projectId: string }) {
     }, { onError: (e) => setError((e as Error).message) });
   };
 
-  const recentRender = (jobs.data ?? []).find((j) => j.kind === 'renders' && j.status === 'succeeded' && (!proj?.outputManifest || j.result?.artifactIds?.includes(proj.outputManifest.artifactIds[0])));
-  const adoptedArtifacts = new Set([...(proj?.outputHistory ?? []), ...(proj?.outputManifest ? [proj.outputManifest] : [])].flatMap(v => v.artifactIds));
+  // 先算版本集合：判断"当前正式成片"必须看产物是否已被采用，
+  // 否则首个未采用的候选会被当成正式视频（分段全绿、基线自己比自己）。
+  const versions = [...new Map([...(proj?.outputHistory ?? []), ...(proj?.outputManifest ? [proj.outputManifest] : [])].map(v => [v.version, v])).values()];
+  const adoptedArtifacts = new Set(versions.flatMap(v => v.artifactIds ?? []));
+  const recentRender = (jobs.data ?? []).find((j) => {
+    if (j.kind !== 'renders' || j.status !== 'succeeded') return false;
+    const meta = j.result?.meta as { candidate?: boolean } | undefined;
+    const artifactId = j.result?.artifactIds?.[0];
+    if (artifactId && adoptedArtifacts.has(artifactId)) return true;
+    // 还没有采用任何成片时，只有正式渲染（非候选）才算当前视频
+    return meta?.candidate !== true && !proj?.outputManifest;
+  });
   const candidates = (jobs.data ?? []).filter(j => j.kind === 'renders' && j.status === 'succeeded' && (j.result?.meta as { candidate?: boolean } | undefined)?.candidate === true && !adoptedArtifacts.has(j.result?.artifactIds?.[0] ?? ''));
   const otsCompleted = (jobs.data ?? []).find(j => j.kind === 'renders' && j.status === 'succeeded' && j.inputSnapshot.visualVariantId === latestVariant?.id && (j.result?.meta as { visualMode?: string } | undefined)?.visualMode === 'overShoulder');
   const candidate = candidates.find(j => j.id === candidateId) ?? candidates[0];
   const candidateMeta = candidate?.result?.meta as { generationStats?: { generated: number; composited?: number; cached: number; retained: number }; performanceMode?: string; generationProfile?: string; automaticReferenceArtifactIds?: string[]; listeningPlan?: ListeningPlan; continuityTransitions?: { atSec: number; frameAtSec?: number; cameraAssetId: string; qualityCheck?: { before: { windowMaxMeanGrayChange: number }; after: { windowMaxMeanGrayChange: number }; needsReview: boolean } }[] } | undefined;
   const comparisonStart = typeof candidate?.inputSnapshot.redoFromSec === 'number' ? candidate.inputSnapshot.redoFromSec : candidateMeta?.listeningPlan?.segments.find(s => s.eligible)?.start;
-  const versions = [...new Map([...(proj?.outputHistory ?? []), ...(proj?.outputManifest ? [proj.outputManifest] : [])].map(v => [v.version, v])).values()];
   const lastMeta = recentRender?.result?.meta as { outputVersion?: string; resolution?: string; fps?: number } | undefined;
   // 演示渲染已跑过（模拟通道）：分段卡与快照状态按「演示完成」展示，不再永远停在「待生成」
   const demoRendered = recentRender?.result?.simulated === true;
@@ -357,7 +366,7 @@ export function RenderPage({ projectId }: { projectId: string }) {
         <div className="hf-s5">
           {/* 开始生成前确认（01 §7.1） */}
           <section className="hf-summary">
-            <div className="hf-summary-t">开始生成前确认 <span className="wu-caption">点击「开始生成」时冻结输入快照</span></div>
+            <div className="hf-summary-t">开始生成前确认 <span className="wu-caption">点击「{simulated ? '运行流程演示' : '生成候选成片'}」时冻结输入快照</span></div>
             <div className="hf-summary-grid">
               <div className="hf-kv"><div className="k">{simulated ? '演示估算时长' : '实际时长'}</div><div className="v hf-mono">{timeline ? fmtT(totalSecs) : '—'}</div></div>
               <div className="hf-kv"><div className="k">画布</div><div className="v">{proj?.aspect === 'portrait' ? '竖屏 9:16' : '横屏 16:9'} · {resolution} 导出画布</div></div>
@@ -426,7 +435,7 @@ export function RenderPage({ projectId }: { projectId: string }) {
             <div style={{ display: 'flex', gap: 8, marginTop: 10, alignItems: 'center' }}>
               <Button variant="secondary" size="sm" disabled title="接入桌面集成后可打开输出目录">打开输出目录</Button>
               {proj?.outputManifest ? <a className="wu-btn wu-btn-brand" href={`/api/projects/${projectId}/export/package`} download>下载交付包</a> : <span className="wu-caption">新版成片生成后可下载完整交付包</span>}
-              <span className="wu-caption">{outputVersion ? `已导出 ${outputVersion}` : '需先生成成片'}</span>
+              <span className="wu-caption">{outputVersion ? `已导出 ${outputVersion}` : demoRendered ? '演示产物 · 无真实文件可导出' : '需先生成成片'}</span>
             </div>
           </section>
         </div>

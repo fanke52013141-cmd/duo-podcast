@@ -31,7 +31,10 @@ body { margin:0; background:var(--wu-semantic-canvas); color:var(--wu-semantic-t
 .hf-sec-head { display:flex; align-items:center; gap:12px; margin-bottom:16px; }
 .hf-sec-head h2 { font-size:24px; font-weight:600; line-height:1.4; }
 .hf-grid3 { display:grid; grid-template-columns:repeat(3,1fr); gap:var(--wu-global-space4); align-items:stretch; }
-.hf-pcard { display:grid; gap:10px; align-content:start; }
+.hf-pcard { display:grid; grid-template-columns:minmax(0,1fr); gap:10px; align-content:start; }
+/* 卡片是 grid 容器：长标题会把隐式列撑到 min-content，按钮随之溢出到相邻卡片上方。
+   minmax(0,1fr) + 子项 min-width:0 让标题自己省略，而不是把卡片撑破。 */
+.hf-pcard > * { min-width:0; }
 .hf-pcard-h { display:flex; align-items:center; gap:8px; }
 .hf-pcard-h h3 { font-size:14px; font-weight:600; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .hf-pcard-h .wu-icon-btn { margin-left:auto; }
@@ -148,7 +151,7 @@ body { margin:0; background:var(--wu-semantic-canvas); color:var(--wu-semantic-t
 .hf-turn.sm { padding:9px 12px; margin-bottom:8px; }
 .hf-turn.sm .hf-turn-text { font-size:12.5px; line-height:1.6; margin:0; flex:1; min-width:0; }
 .hf-turn.sm .hf-turn-meta { margin-top:5px; }
-.wu .hf-mini-select { font:inherit; font-size:11.5px; height:auto; padding:2px 4px; border:1px solid var(--wu-semantic-control-border); border-radius:6px; background:var(--wu-semantic-raised); color:var(--wu-semantic-text); }
+.wu .hf-mini-select { font:inherit; font-size:11.5px; min-height:24px; height:auto; padding:3px 4px; border:1px solid var(--wu-semantic-control-border); border-radius:6px; background:var(--wu-semantic-raised); color:var(--wu-semantic-text); }
 /* 图标按钮：权威基线（workspace-ui/components.css）的 .wu-icon-btn 只声明了尺寸
    （width:var(--wu-size-md) + [data-size="sm"]→var(--wu-size-sm)），没有外观重置。
    HF-00 靠 .wu-btn 兜底，HF-02 的裸 button 则直接渲染成浏览器默认灰底凸边按钮。

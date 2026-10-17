@@ -43,7 +43,7 @@ export function TopBar({ project }: { project: Project | null }) {
         <button
           type="button"
           className="hf-link"
-          style={{ background: 'none', border: 'none', padding: 0, fontSize: 12.5, cursor: 'pointer' }}
+          style={{ background: 'none', border: 'none', padding: '5px 4px', minHeight: 26, fontSize: 12.5, cursor: 'pointer' }}
           onClick={leaveProject}
         >‹ 工程列表</button>
       )}
