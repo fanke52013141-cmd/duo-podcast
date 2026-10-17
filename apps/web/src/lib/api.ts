@@ -204,10 +204,11 @@ export const useScriptDiff = (projectId: string, base: string, source: string, e
 export const useMergeScript = () => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ projectId, baseRevisionId, sourceRevisionId, turnIds, label }: {
-      projectId: string; baseRevisionId: string; sourceRevisionId: string; turnIds: string[]; label?: string;
+    mutationFn: ({ projectId, baseRevisionId, sourceRevisionId, turnIds, lineIds, label }: {
+      projectId: string; baseRevisionId: string; sourceRevisionId: string;
+      turnIds?: string[]; lineIds?: string[]; label?: string;
     }) => sendJson<{ revisionId: string }>(`/projects/${projectId}/script/merge`, 'POST',
-      { baseRevisionId, sourceRevisionId, turnIds, label }),
+      { baseRevisionId, sourceRevisionId, turnIds, lineIds, label }),
     onSuccess: (_res, vars) => {
       qc.invalidateQueries({ queryKey: ['project', vars.projectId] });
       qc.invalidateQueries({ queryKey: ['projects'] });

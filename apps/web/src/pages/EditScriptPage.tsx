@@ -390,14 +390,19 @@ export function EditScriptPage({ projectId }: { projectId: string }) {
 
   useEffect(() => {
     if (!diff.data) return;
-    // 默认勾选「改写 + 新增」，删除类不自动合并（避免误删）
-    setDiffSelected(diff.data.changes.filter((c) => c.status !== 'removed').map((c) => c.turnId));
+    // 默认勾选「改写 + 新增」（行级用 turn:line，整段用 turn:id）；删除类需手动勾选，避免误删
+    setDiffSelected([
+      ...diff.data.turns.filter((t) => t.status === 'added').map((t) => `turn:${t.turnId}`),
+      ...diff.data.lines.filter((l) => l.status !== 'removed').map((l) => `${l.turnId}:${l.lineId}`),
+    ]);
   }, [diff.data]);
 
   const handleMerge = () => {
     if (!diffBase || !diffSource) return;
+    const turnIds = diffSelected.filter((t) => t.startsWith('turn:')).map((t) => t.slice(5));
+    const lineIds = diffSelected.filter((t) => !t.startsWith('turn:'));
     mergeScript.mutate(
-      { projectId, baseRevisionId: diffBase, sourceRevisionId: diffSource, turnIds: diffSelected,
+      { projectId, baseRevisionId: diffBase, sourceRevisionId: diffSource, turnIds, lineIds,
         label: `合并自 ${diffSource}` },
       {
         onSuccess: () => { setDiffOpen(false); setViewRevId(null); },
@@ -860,27 +865,56 @@ export function EditScriptPage({ projectId }: { projectId: string }) {
             </select>
           </div>
           {diff.isError && <Alert tone="danger">读取差异失败：{(diff.error as Error).message}</Alert>}
-          {diff.data && diff.data.changes.length === 0 && <p className="wu-caption">两个版本内容一致。</p>}
+          {diff.data && diff.data.turns.length === 0 && diff.data.lines.length === 0 && (
+            <p className="wu-caption">两个版本内容一致。</p>
+          )}
           <div style={{ display: 'grid', gap: 6, maxHeight: 300, overflow: 'auto' }}>
-            {diff.data?.changes.map((c) => (
-              <label key={c.turnId} className="wu-row" style={{ alignItems: 'flex-start', gap: 8, padding: '6px 8px', border: '1px solid var(--wu-semantic-border)', borderRadius: 8 }}>
-                <input
-                  type="checkbox"
-                  checked={diffSelected.includes(c.turnId)}
-                  onChange={(e) => setDiffSelected((prev) => e.target.checked ? [...prev, c.turnId] : prev.filter((x) => x !== c.turnId))}
-                />
-                <span style={{ display: 'grid', gap: 2 }}>
-                  <span>
-                    <Badge tone={c.status === 'added' ? 'success' : c.status === 'removed' ? 'danger' : 'warning'}>
-                      {c.status === 'added' ? '新增' : c.status === 'removed' ? '删除' : '改写'}
-                    </Badge>{' '}
-                    <span className="hf-mono">{c.turnId}</span> · {c.speaker}
+            {diff.data?.turns.map((t) => {
+              const token = `turn:${t.turnId}`;
+              return (
+                <label key={token} className="wu-row" style={{ alignItems: 'flex-start', gap: 8, padding: '6px 8px', border: '1px solid var(--wu-semantic-border)', borderRadius: 8 }}>
+                  <input
+                    type="checkbox"
+                    checked={diffSelected.includes(token)}
+                    onChange={(e) => setDiffSelected((prev) => e.target.checked ? [...prev, token] : prev.filter((x) => x !== token))}
+                  />
+                  <span style={{ display: 'grid', gap: 2 }}>
+                    <span>
+                      <Badge tone={t.status === 'added' ? 'success' : t.status === 'removed' ? 'danger' : 'warning'}>
+                        {t.status === 'added' ? '整段新增' : t.status === 'removed' ? '整段删除' : '说话人变化'}
+                      </Badge>{' '}
+                      <span className="hf-mono">{t.turnId}</span> · {t.speaker}
+                    </span>
+                    {t.text && <span className="wu-caption">{t.text.slice(0, 80)}</span>}
                   </span>
-                  {c.before && <span className="wu-caption">原：{c.before.slice(0, 60)}</span>}
-                  {c.after && <span className="wu-caption">新：{c.after.slice(0, 60)}</span>}
-                </span>
-              </label>
-            ))}
+                </label>
+              );
+            })}
+            {diff.data?.lines.length ? (
+              <span className="wu-caption" style={{ marginTop: 4 }}>行级差异（同一段里改不同句子可分别勾选）</span>
+            ) : null}
+            {diff.data?.lines.map((c) => {
+              const token = `${c.turnId}:${c.lineId}`;
+              return (
+                <label key={token} className="wu-row" style={{ alignItems: 'flex-start', gap: 8, padding: '6px 8px', border: '1px solid var(--wu-semantic-border)', borderRadius: 8 }}>
+                  <input
+                    type="checkbox"
+                    checked={diffSelected.includes(token)}
+                    onChange={(e) => setDiffSelected((prev) => e.target.checked ? [...prev, token] : prev.filter((x) => x !== token))}
+                  />
+                  <span style={{ display: 'grid', gap: 2 }}>
+                    <span>
+                      <Badge tone={c.status === 'added' ? 'success' : c.status === 'removed' ? 'danger' : 'warning'}>
+                        {c.status === 'added' ? '新增' : c.status === 'removed' ? '删除' : '改写'}
+                      </Badge>{' '}
+                      <span className="hf-mono">{c.turnId} / {c.lineId}</span> · {c.speaker}
+                    </span>
+                    {c.before && <span className="wu-caption">原：{c.before.slice(0, 60)}</span>}
+                    {c.after && <span className="wu-caption">新：{c.after.slice(0, 60)}</span>}
+                  </span>
+                </label>
+              );
+            })}
           </div>
         </div>
       </Modal>

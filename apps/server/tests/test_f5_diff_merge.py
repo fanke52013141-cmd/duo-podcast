@@ -1,4 +1,4 @@
-"""F5 对比/合并，以及阶段③ 单元级进度回调。"""
+"""F5 对比/合并（行级）与阶段③ 单元级进度。"""
 
 import asyncio
 from types import SimpleNamespace
@@ -8,21 +8,23 @@ import pytest
 
 from duocast.api.script import diff_script, merge_script
 from duocast.domain.project import Line, ScriptRevision, Turn
-from duocast.services.script_svc import diff_revisions, merge_revision
+from duocast.services.script_svc import diff_revisions
 from duocast.services.voice_svc import synthesize_timeline
 from duocast.storage.project_store import ProjectStore
 
 
-def _turn(tid: str, speaker: str, text: str) -> Turn:
-    return Turn(id=tid, speaker=speaker, lines=[Line(id=f"L-{tid}", spoken_text=text, display_text=text)])
+def _turn(tid: str, speaker: str, *texts: str) -> Turn:
+    return Turn(id=tid, speaker=speaker, lines=[
+        Line(id=f"L-{tid}-{i}", spoken_text=text, display_text=text) for i, text in enumerate(texts)
+    ])
 
 
 def _setup(tmp_path):
     store = ProjectStore(tmp_path / "projects", debounce_ms=0)
     project = store.create("diff-case")
-    r1 = ScriptRevision(id="R1", turns=[_turn("T1", "A", "第一句"), _turn("T2", "B", "第二句")])
+    r1 = ScriptRevision(id="R1", turns=[_turn("T1", "A", "开头"), _turn("T2", "B", "第二句")])
     r2 = ScriptRevision(id="R2", turns=[
-        _turn("T1", "A", "第一句"), _turn("T2", "B", "第二句改过"), _turn("T3", "A", "新增一句"),
+        _turn("T1", "A", "开头"), _turn("T2", "B", "第二句改过"), _turn("T3", "A", "新增一句"),
     ])
     saved = store.apply(project.id, {
         "script_revisions": [r1, r2], "current_draft_revision": "R2",
@@ -31,48 +33,69 @@ def _setup(tmp_path):
     return store, saved, request, r1, r2
 
 
-def test_diff_reports_changed_and_added(tmp_path):
+def test_diff_reports_line_and_turn_changes(tmp_path):
     _, _, _, r1, r2 = _setup(tmp_path)
-    changes = diff_revisions(r1, r2)
-    by_id = {c["turnId"]: c for c in changes}
-    assert by_id["T2"]["status"] == "changed"
-    assert by_id["T2"]["before"] == "第二句" and by_id["T2"]["after"] == "第二句改过"
-    assert by_id["T3"]["status"] == "added"
-    assert "T1" not in by_id
+    diff = diff_revisions(r1, r2)
+
+    line_changes = {(c["turnId"], c["lineId"]): c for c in diff["lines"]}
+    assert line_changes[("T2", "L-T2-0")]["status"] == "changed"
+    assert line_changes[("T2", "L-T2-0")]["after"] == "第二句改过"
+    # T3 整条新增属于话轮级
+    assert [t["turnId"] for t in diff["turns"] if t["status"] == "added"] == ["T3"]
+    assert diff["counts"]["changed"] == 1
+    assert diff["turnCounts"]["added"] == 1
 
 
-def test_merge_applies_selected_turns_only(tmp_path):
-    store, project, request, _, _ = _setup(tmp_path)
-    result = asyncio.run(merge_script("diff-case", {
-        "baseRevisionId": "R1", "sourceRevisionId": "R2", "turnIds": ["T2"], "label": "只并第二句",
+def test_merge_line_level_inside_same_turn(tmp_path):
+    store = ProjectStore(tmp_path / "projects", debounce_ms=0)
+    project = store.create("line-merge")
+    base = ScriptRevision(id="R1", turns=[_turn("T1", "A", "前半句", "后半句")])
+    left = ScriptRevision(id="R2", turns=[_turn("T1", "A", "前半句改", "后半句")])
+    right = ScriptRevision(id="R3", turns=[_turn("T1", "A", "前半句", "后半句改")])
+    store.apply(project.id, {"script_revisions": [base, left, right], "current_draft_revision": "R3"}, 0)
+    request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(project_store=store)))
+
+    first = asyncio.run(merge_script("line-merge", {
+        "baseRevisionId": "R1", "sourceRevisionId": "R2", "lineIds": ["T1:L-T1-0"],
+        "label": "并入前半句",
     }, request))
+    first_saved = store.load("line-merge")
+    merged1 = next(r for r in first_saved.script_revisions if r.id == first["revisionId"])
+    assert [line.display_text for line in merged1.turns[0].lines] == ["前半句改", "后半句"]
 
-    saved = store.load(project.id)
-    merged = next(r for r in saved.script_revisions if r.id == result["revisionId"])
-    assert merged.parent_revision_id == "R1"
-    assert merged.label == "只并第二句"
-    assert [t.id for t in merged.turns] == ["T1", "T2"]
-    assert merged.turns[1].lines[0].display_text == "第二句改过"
-    # 新增的 T3 没被选中，不应合并
-    assert "T3" not in [t.id for t in merged.turns]
-    assert saved.current_draft_revision == merged.id
+    second = asyncio.run(merge_script("line-merge", {
+        "baseRevisionId": merged1.id, "sourceRevisionId": "R3", "lineIds": ["T1:L-T1-1"],
+        "label": "再并后半句",
+    }, request))
+    second_saved = store.load("line-merge")
+    merged2 = next(r for r in second_saved.script_revisions if r.id == second["revisionId"])
+    assert [line.display_text for line in merged2.turns[0].lines] == ["前半句改", "后半句改"]
 
 
-def test_merge_can_apply_a_deletion(tmp_path):
+def test_merge_turn_level_add_and_delete(tmp_path):
     store, project, request, _, _ = _setup(tmp_path)
-    # base=R2 有 T3，source=R1 没有；选中 T3 表示「采用 source 的删除」
-    result = asyncio.run(merge_script("diff-case", {
+    added = asyncio.run(merge_script("diff-case", {
+        "baseRevisionId": "R1", "sourceRevisionId": "R2", "turnIds": ["T3"], "label": "只要新增句",
+    }, request))
+    saved = store.load("diff-case")
+    merged = next(r for r in saved.script_revisions if r.id == added["revisionId"])
+    assert [t.id for t in merged.turns] == ["T1", "T2", "T3"]
+    # 未选中的改写不进来
+    assert merged.turns[1].lines[0].display_text == "第二句"
+
+    removed = asyncio.run(merge_script("diff-case", {
         "baseRevisionId": "R2", "sourceRevisionId": "R1", "turnIds": ["T3"], "label": "删掉新增句",
     }, request))
-    saved = store.load(project.id)
-    merged = next(r for r in saved.script_revisions if r.id == result["revisionId"])
-    assert [t.id for t in merged.turns] == ["T1", "T2"]
+    saved = store.load("diff-case")
+    merged2 = next(r for r in saved.script_revisions if r.id == removed["revisionId"])
+    assert [t.id for t in merged2.turns] == ["T1", "T2"]
 
 
 def test_diff_endpoint_counts(tmp_path):
     _, _, request, _, _ = _setup(tmp_path)
     payload = asyncio.run(diff_script("diff-case", "R1", "R2", request))
-    assert payload["counts"] == {"added": 1, "removed": 0, "changed": 1}
+    assert payload["counts"]["changed"] == 1
+    assert payload["turnCounts"]["added"] == 1
 
     with pytest.raises(HTTPException) as exc:
         asyncio.run(diff_script("diff-case", "R1", "R99", request))
@@ -89,9 +112,7 @@ class _TTS:
 def test_synthesis_reports_unit_progress(tmp_path):
     store = ProjectStore(tmp_path / "projects", debounce_ms=0)
     project = store.create("progress-case")
-    revision = ScriptRevision(id="R1", turns=[
-        _turn("T1", "A", "一"), _turn("T2", "B", "二"), _turn("T3", "A", "三"),
-    ])
+    revision = ScriptRevision(id="R1", turns=[_turn("T1", "A", "一"), _turn("T2", "B", "二"), _turn("T3", "A", "三")])
     project = store.apply(project.id, {"script_revisions": [revision], "current_draft_revision": "R1"}, 0)
 
     events: list[tuple[int, int]] = []

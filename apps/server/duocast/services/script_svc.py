@@ -67,62 +67,125 @@ def apply_script_revision(store: ProjectStore, project_id: str, revision: Script
     return store.apply(project_id, patch, expected_revision=project.revision)
 
 
-# ---- F5 分支：版本对比与合并 ----
+# ---- F5 分支：版本对比与合并（支持行级） ----
 
 def turn_plain_text(turn: Turn) -> str:
     return "\n".join(line.display_text for line in turn.lines)
 
 
-def diff_revisions(base: ScriptRevision, source: ScriptRevision) -> list[dict[str, Any]]:
-    """对比两个版本：以 base 为基准，列出 source 里新增/删除/改写的话轮。"""
-    base_map = {turn.id: turn for turn in base.turns}
-    source_map = {turn.id: turn for turn in source.turns}
-    changes: list[dict[str, Any]] = []
-    for turn in base.turns:
-        if turn.id not in source_map:
-            changes.append({"turnId": turn.id, "status": "removed", "speaker": turn.speaker,
-                            "before": turn_plain_text(turn), "after": ""})
-    for turn in source.turns:
-        if turn.id not in base_map:
-            changes.append({"turnId": turn.id, "status": "added", "speaker": turn.speaker,
-                            "before": "", "after": turn_plain_text(turn)})
+def diff_revisions(base: ScriptRevision, source: ScriptRevision) -> dict[str, Any]:
+    """对比两个版本：话轮级（增删/说话人变化）+ 行级（新增/删除/改写）。"""
+    base_turns = {turn.id: turn for turn in base.turns}
+    source_turns = {turn.id: turn for turn in source.turns}
+    turns: list[dict[str, Any]] = []
+    lines: list[dict[str, Any]] = []
+
+    for bt in base.turns:
+        st = source_turns.get(bt.id)
+        if st is None:
+            turns.append({"turnId": bt.id, "speaker": bt.speaker, "status": "removed",
+                          "text": turn_plain_text(bt)})
             continue
-        before = base_map[turn.id]
-        if turn_plain_text(before) != turn_plain_text(turn) or before.speaker != turn.speaker:
-            changes.append({"turnId": turn.id, "status": "changed", "speaker": turn.speaker,
-                            "before": turn_plain_text(before), "after": turn_plain_text(turn)})
-    return changes
+        if bt.speaker != st.speaker:
+            turns.append({"turnId": bt.id, "speaker": st.speaker, "status": "changed", "text": ""})
+        source_lines = {line.id: line for line in st.lines}
+        base_line_ids = {line.id for line in bt.lines}
+        for bl in bt.lines:
+            sl = source_lines.get(bl.id)
+            if sl is None:
+                lines.append({"turnId": bt.id, "lineId": bl.id, "status": "removed",
+                              "speaker": bt.speaker, "before": bl.display_text, "after": ""})
+            elif (sl.display_text, sl.spoken_text) != (bl.display_text, bl.spoken_text):
+                lines.append({"turnId": bt.id, "lineId": bl.id, "status": "changed",
+                              "speaker": bt.speaker, "before": bl.display_text, "after": sl.display_text})
+        for sl in st.lines:
+            if sl.id not in base_line_ids:
+                lines.append({"turnId": bt.id, "lineId": sl.id, "status": "added",
+                              "speaker": bt.speaker, "before": "", "after": sl.display_text})
+
+    for st in source.turns:
+        if st.id not in base_turns:
+            turns.append({"turnId": st.id, "speaker": st.speaker, "status": "added",
+                          "text": turn_plain_text(st)})
+
+    counts = {status: sum(1 for item in lines if item["status"] == status)
+              for status in ("added", "removed", "changed")}
+    turn_counts = {status: sum(1 for item in turns if item["status"] == status)
+                   for status in ("added", "removed", "changed")}
+    return {"turns": turns, "lines": lines, "counts": counts, "turnCounts": turn_counts}
 
 
 def merge_revision(project: Project, base: ScriptRevision, source: ScriptRevision,
-                   turn_ids: list[str] | None, label: str = "") -> ScriptRevision:
-    """以 base 为底，把 source 中选中的话轮合并成一个新草稿版本。
+                   turn_ids: list[str] | None, label: str = "",
+                   line_ids: list[str] | None = None) -> ScriptRevision:
+    """以 base 为底，把 source 中选中的话轮/行合并成新草稿版本。
 
-    turn_ids=None 表示合并全部「改写/新增」的话轮（删除类不自动合并，避免误删）。
+    turn_ids 管「整话轮的新增/删除」；line_ids 管「同一话轮内逐行改写/新增/删除」，
+    格式 `T05:L010`。两者都为 None 时，默认合并全部改写/新增（删除需显式选）。
     """
-    changes = diff_revisions(base, source)
-    if turn_ids is None:
-        chosen = {c["turnId"] for c in changes if c["status"] in ("changed", "added")}
+    diff = diff_revisions(base, source)
+    # 显式给了任一选择就按选择执行；两者都不给才用「全部改写/新增」的默认策略。
+    if turn_ids is None and line_ids is None:
+        chosen_turns = {t["turnId"] for t in diff["turns"] if t["status"] == "added"}
+        chosen_lines = {f'{l["turnId"]}:{l["lineId"]}' for l in diff["lines"]
+                        if l["status"] in ("changed", "added")}
     else:
-        chosen = set(turn_ids)
-    source_map = {turn.id: turn for turn in source.turns}
-    turns: list[Turn] = []
-    for turn in base.turns:
-        if turn.id in chosen:
-            # 选中的删除项：source 里没有该话轮 → 从合并结果中移除
-            if turn.id in source_map:
-                turns.append(deepcopy(source_map[turn.id]))
+        chosen_turns = set(turn_ids or [])
+        chosen_lines = set(line_ids or [])
+
+    source_turns = {turn.id: turn for turn in source.turns}
+    result: list[Turn] = [deepcopy(turn) for turn in base.turns]
+    by_id = {turn.id: turn for turn in result}
+
+    # 1) 整话轮的新增 / 删除
+    for turn_id in chosen_turns:
+        if turn_id in by_id and turn_id not in source_turns:
+            result.remove(by_id.pop(turn_id))
+    for st in source.turns:
+        if st.id in chosen_turns and st.id not in by_id:
+            added = deepcopy(st)
+            result.append(added)
+            by_id[st.id] = added
+
+    # 2) 行级改动：按 source 中的顺序处理，保证新增行的插入位置稳定
+    def line_order(token: str) -> tuple[int, int]:
+        turn_id, _, line_id = token.partition(":")
+        st = source_turns.get(turn_id)
+        if st is None:
+            return (1, 0)
+        return (0, next((i for i, line in enumerate(st.lines) if line.id == line_id), 0))
+
+    for token in sorted(chosen_lines, key=line_order):
+        turn_id, _, line_id = token.partition(":")
+        bt, st = by_id.get(turn_id), source_turns.get(turn_id)
+        if bt is None or st is None:
             continue
-        turns.append(deepcopy(turn))
-    base_ids = {turn.id for turn in base.turns}
-    for turn in source.turns:
-        if turn.id in chosen and turn.id not in base_ids:
-            turns.append(deepcopy(turn))
+        source_line = next((line for line in st.lines if line.id == line_id), None)
+        existing = next((line for line in bt.lines if line.id == line_id), None)
+        if source_line is not None:
+            if existing is not None:
+                existing.display_text = source_line.display_text
+                existing.spoken_text = source_line.spoken_text
+            else:
+                new_line = deepcopy(source_line)
+                insert_at = 0
+                for previous in reversed(st.lines[:st.lines.index(source_line)]):
+                    pos = next((i for i, line in enumerate(bt.lines) if line.id == previous.id), None)
+                    if pos is not None:
+                        insert_at = pos + 1
+                        break
+                bt.lines.insert(insert_at, new_line)
+        else:
+            bt.lines = [line for line in bt.lines if line.id != line_id]
+            if not bt.lines:
+                result.remove(bt)
+                by_id.pop(turn_id, None)
+
     return ScriptRevision(
         id=next_revision_id(project),
         source_input=deepcopy(base.source_input),
         content_brief=deepcopy(base.content_brief),
-        turns=turns,
+        turns=result,
         text_api_config_ref=base.text_api_config_ref,
         parent_revision_id=base.id,
         label=(label or f"合并自 {source.id}")[:40],

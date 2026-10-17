@@ -83,10 +83,8 @@ async def diff_script(project_id: str, base: str, source: str, request: Request)
         source_rev = find_revision(project, source)
     except KeyError as exc:
         raise HTTPException(422, "对比的版本不存在") from exc
-    changes = diff_revisions(base_rev, source_rev)
-    counts = {status: sum(1 for c in changes if c["status"] == status)
-              for status in ("added", "removed", "changed")}
-    return {"base": base_rev.id, "source": source_rev.id, "changes": changes, "counts": counts}
+    diff = diff_revisions(base_rev, source_rev)
+    return {"base": base_rev.id, "source": source_rev.id, **diff}
 
 
 @router.post("/merge")
@@ -102,9 +100,13 @@ async def merge_script(project_id: str, payload: dict, request: Request) -> dict
     except KeyError as exc:
         raise HTTPException(422, "合并的版本不存在") from exc
     turn_ids = payload.get("turnIds")
+    line_ids = payload.get("lineIds")
     if turn_ids is not None and (not isinstance(turn_ids, list) or any(not isinstance(t, str) for t in turn_ids)):
         raise HTTPException(422, "turnIds 必须是话轮 id 数组")
-    revision = merge_revision(project, base_rev, source_rev, turn_ids, str(payload.get("label") or ""))
+    if line_ids is not None and (not isinstance(line_ids, list) or any(not isinstance(t, str) or ":" not in t for t in line_ids)):
+        raise HTTPException(422, "lineIds 必须是 `话轮ID:行ID` 数组")
+    revision = merge_revision(project, base_rev, source_rev, turn_ids,
+                              str(payload.get("label") or ""), line_ids)
     saved = apply_script_revision(store, project_id, revision,
                                   expected_project_revision=project.revision)
     return {"revisionId": revision.id, "parentRevisionId": base_rev.id,

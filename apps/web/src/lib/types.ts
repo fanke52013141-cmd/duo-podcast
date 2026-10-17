@@ -64,9 +64,16 @@ export interface Approval {
   revokedReason?: string;
 }
 
-/* F5 版本对比（后端 /script/diff） */
-export interface ScriptDiffChange {
+/* F5 版本对比（后端 /script/diff）：话轮级 + 行级 */
+export interface ScriptDiffTurn {
   turnId: string;
+  speaker: Speaker;
+  status: 'added' | 'removed' | 'changed';
+  text: string;
+}
+export interface ScriptDiffLine {
+  turnId: string;
+  lineId: string;
   status: 'added' | 'removed' | 'changed';
   speaker: Speaker;
   before: string;
@@ -75,8 +82,10 @@ export interface ScriptDiffChange {
 export interface ScriptDiff {
   base: string;
   source: string;
-  changes: ScriptDiffChange[];
+  turns: ScriptDiffTurn[];
+  lines: ScriptDiffLine[];
   counts: { added: number; removed: number; changed: number };
+  turnCounts: { added: number; removed: number; changed: number };
 }
 
 /* ---- 阶段③ 声音三层对象（01 §11.2，与后端 domain/audio.py 对齐） ---- */
