@@ -11,6 +11,7 @@ import {
 import type { AudioTimeline, Job, Project, SynthesisUnit } from '../lib/types';
 import { Alert, Badge, Button, Icon } from '../components/wu';
 import { AppShell, FootBar, StageHead, TimelineBar } from '../components/AppShell';
+import { formatTimecode } from '../lib/format';
 import { useError } from '../lib/useError';
 import { useProjectStore, useServiceStore } from '../stores';
 
@@ -51,13 +52,6 @@ function planSegments(timeline: AudioTimeline): Segment[] {
     });
   }
   return out;
-}
-
-function fmtT(secs: number): string {
-  const m = Math.floor(secs / 60);
-  const s = Math.floor(secs % 60);
-  const ds = Math.floor((secs - Math.floor(secs)) * 10);
-  return `${m}:${String(s).padStart(2, '0')}.${ds}`;
 }
 
 function candidateLabel(job: Job): string {
@@ -326,7 +320,7 @@ export function RenderPage({ projectId }: { projectId: string }) {
           {!!candidateMeta?.continuityTransitions?.length && <details open><summary>同机位续接检查</summary>
             <p className="wu-caption">比较续接窗口内的最大帧间变化，仅用于定位跳变；口型、表情和光流形变仍需观看确认。</p>
             {candidateMeta.continuityTransitions.map((transition, i) => <div key={i}>
-              <p>{fmtT(transition.frameAtSec ?? transition.atSec)} · {transition.qualityCheck
+              <p>{formatTimecode(transition.frameAtSec ?? transition.atSec, { tenths: true })} · {transition.qualityCheck
                 ? `窗口帧差 ${transition.qualityCheck.before.windowMaxMeanGrayChange.toFixed(2)} → ${transition.qualityCheck.after.windowMaxMeanGrayChange.toFixed(2)} · ${transition.qualityCheck.needsReview ? '变化增大，请复查' : '未检测到帧差增大，待画面确认'}`
                 : '旧候选未记录质量检查，重新导出可补充'}</p>
               <Button variant="secondary" onClick={() => {
@@ -358,7 +352,7 @@ export function RenderPage({ projectId }: { projectId: string }) {
           </select>
           <label htmlFor="redo-from">重做起点</label>
           <select id="redo-from" className="wu-input" value={redoFromSec} onChange={e => setRedoFromSec(Number(e.target.value))}>
-            {segments.map(s => <option key={s.id} value={s.outputRange[0]}>{fmtT(s.outputRange[0])}</option>)}
+            {segments.map(s => <option key={s.id} value={s.outputRange[0]}>{formatTimecode(s.outputRange[0], { tenths: true })}</option>)}
           </select>
           <Button variant="secondary" disabled={isOverShoulder || !canRender || !standardSource} onClick={() => handleRender(true)}>从此段重做候选</Button>
         </section>}
@@ -368,7 +362,7 @@ export function RenderPage({ projectId }: { projectId: string }) {
           <section className="hf-summary">
             <div className="hf-summary-t">开始生成前确认 <span className="wu-caption">点击「{simulated ? '运行流程演示' : '生成候选成片'}」时冻结输入快照</span></div>
             <div className="hf-summary-grid">
-              <div className="hf-kv"><div className="k">{simulated ? '演示估算时长' : '实际时长'}</div><div className="v hf-mono">{timeline ? fmtT(totalSecs) : '—'}</div></div>
+              <div className="hf-kv"><div className="k">{simulated ? '演示估算时长' : '实际时长'}</div><div className="v hf-mono">{timeline ? formatTimecode(totalSecs, { tenths: true }) : '—'}</div></div>
               <div className="hf-kv"><div className="k">画布</div><div className="v">{proj?.aspect === 'portrait' ? '竖屏 9:16' : '横屏 16:9'} · {resolution} 导出画布</div></div>
               <div className="hf-kv"><div className="k">语音来源</div><div className="v">{voiceSource}</div></div>
               <div className="hf-kv"><div className="k">视频模式</div><div className="v">{isOverShoulder ? '双机位过肩正反打' : '双人动态同框'}</div></div>
@@ -401,7 +395,7 @@ export function RenderPage({ projectId }: { projectId: string }) {
                         <span className="tt">#{String(i + 1).padStart(2, '0')} {segLabel(sg, i, segments.length, speakers)}</span>
                       </div>
                       <div className="sub">
-                        {fmtT(dur)} · {reused ? '快照一致 ✓' : demoRendered ? '流程演示 · 无真实视频' : `数字人动态视频 · ${resolutionId}`}
+                        {formatTimecode(dur, { tenths: true })} · {reused ? '快照一致 ✓' : demoRendered ? '流程演示 · 无真实视频' : `数字人动态视频 · ${resolutionId}`}
                       </div>
                     </div>
                   );

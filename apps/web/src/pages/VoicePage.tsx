@@ -1,4 +1,4 @@
-/* ============================================================================
+﻿/* ============================================================================
    HF-03 · 阶段③ 试听配音（真实数据流，01 §5 权威）
    主视图：左 语音引擎面板（固定 300px，引擎单选 + A/B 音色绑定）/ 右 配音清单（话轮级）
    底部：时长检查条 + TimelineBar（全应用唯一深色面，05 §1.5）
@@ -10,14 +10,13 @@ import {
 } from '../lib/api';
 import type { AudioTimeline, Job, Project, ScriptRevision, SynthesisUnit, Turn, VoiceBinding } from '../lib/types';
 import { Alert, Badge, Button, Choice, Icon } from '../components/wu';
-import { AppShell, FootBar, StageHead, TimelineBar, fmtDur as sharedFmtDur } from '../components/AppShell';
+import { AppShell, FootBar, StageHead, TimelineBar } from '../components/AppShell';
+import { formatSamples } from '../lib/format';
 import { useError } from '../lib/useError';
+import { SPEAKERS as SPEAKER_NAMES } from '../lib/types';
 import { useProjectStore, useServiceStore } from '../stores';
 
-const SPEAKERS: { id: 'A' | 'B'; name: string; role: string }[] = [
-  { id: 'A', name: '李雷', role: '主持' },
-  { id: 'B', name: '韩梅梅', role: '嘉宾' },
-];
+const SPEAKERS: { id: 'A' | 'B'; name: string; role: string }[] = (['A', 'B'] as const).map((id) => ({ id, ...SPEAKER_NAMES[id] }));
 
 const ENGINES: { id: 'local' | 'minimax'; label: string; profileId: string }[] = [
   { id: 'local', label: '本地引擎（默认）', profileId: 'mock-tts' },
@@ -46,10 +45,6 @@ function defaultBindings(proj: Project): Record<'A' | 'B', VoiceBinding> {
     A: fromProj('A') ?? { id: 'VB-A', characterId: 'A', providerProfileId: 'mock-tts', modelId: VOICE_OPTIONS.A[0], localRefAudio: null, minimaxVoiceId: null, auditionState: 'none' },
     B: fromProj('B') ?? { id: 'VB-B', characterId: 'B', providerProfileId: 'mock-tts', modelId: VOICE_OPTIONS.B[0], localRefAudio: null, minimaxVoiceId: null, auditionState: 'none' },
   };
-}
-
-function fmtDur(samples: number, sampleRate: number): string {
-  return sharedFmtDur(samples, sampleRate);
 }
 
 export function VoicePage({ projectId }: { projectId: string }) {
@@ -263,7 +258,7 @@ export function VoicePage({ projectId }: { projectId: string }) {
     units.forEach((u) => { if (!m.has(u.turnId)) m.set(u.turnId, u); });
     return m;
   }, [units]);
-  const totalSecs = timeline ? fmtDur(timeline.sampleCount, timeline.sampleRate) : '待合成';
+  const totalSecs = timeline ? formatSamples(timeline.sampleCount, timeline.sampleRate) : '待合成';
   const selectedUnit = units.find((u) => u.id === selectedUnitId) ?? null;
   const turns = revision?.turns ?? [];
   const selectedTurnIdx = selectedUnit
@@ -296,7 +291,7 @@ export function VoicePage({ projectId }: { projectId: string }) {
       timeline={
         <TimelineBar
           timeline={timeline}
-          curSecs={timeline ? fmtDur(playheadSamples, timeline.sampleRate) : '00:00.0'}
+          curSecs={timeline ? formatSamples(playheadSamples, timeline.sampleRate) : '00:00.0'}
           labels={[`A 轨（${SPEAKERS[0].name}）`, `B 轨（${SPEAKERS[1].name}）`]}
           speakerOf={(turnId) => revision?.turns.find((t) => t.id === turnId)?.speaker ?? 'A'}
           playPct={playPct}
@@ -312,7 +307,7 @@ export function VoicePage({ projectId }: { projectId: string }) {
                   <b>{selectedUnit.id}</b>
                   <span>合成单元 · {selectedUnit.voiceBindingId}</span>
                   <span className="hf-spacer" />
-                  <span className="wu-caption">时长 {timeline ? fmtDur(selectedUnit.sampleCount, timeline.sampleRate) : '待定'}</span>
+                  <span className="wu-caption">时长 {timeline ? formatSamples(selectedUnit.sampleCount, timeline.sampleRate) : '待定'}</span>
                 </div>
                 <div className="hf-unit">
                   <b>{selectedUnit.turnId}</b>
@@ -527,7 +522,7 @@ export function VoicePage({ projectId }: { projectId: string }) {
             {turns.map((t) => {
               const u = unitByTurn.get(t.id);
               const sel = !!u && u.id === selectedUnitId;
-              const dur = u && timeline ? fmtDur(u.sampleCount, timeline.sampleRate) : null;
+              const dur = u && timeline ? formatSamples(u.sampleCount, timeline.sampleRate) : null;
               const turnIdx = turns.findIndex((x) => x.id === t.id);
               const generating = synthesizing && !u && !!synthJob;
               const genDone = units.filter((x) => turns.findIndex((y) => y.id === x.turnId) <= turnIdx).length;

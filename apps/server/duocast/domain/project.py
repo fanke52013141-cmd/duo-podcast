@@ -74,6 +74,9 @@ class ScriptRevision(BaseModel):
     content_brief: ContentBrief = Field(default_factory=ContentBrief)
     turns: list[Turn] = Field(default_factory=list)
     text_api_config_ref: str = ""
+    # F5 分支：父版本相同即同一分支的不同尝试；label 是用户可见的分支名。
+    parent_revision_id: str = ""
+    label: str = ""
 
 
 class Approval(BaseModel):

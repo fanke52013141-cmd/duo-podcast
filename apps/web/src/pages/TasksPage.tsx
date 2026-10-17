@@ -8,6 +8,7 @@ import { useJobPause, useJobResume, useJobCancel, useJobAbandon, useJobs } from 
 import { JOB_LABEL, type Job, type JobStatus } from '../lib/types';
 import { Alert, Badge, Button } from '../components/wu';
 import { AppShell } from '../components/AppShell';
+import { formatElapsed } from '../lib/format';
 import { useProjectStore } from '../stores';
 
 const RUNNING: JobStatus[] = ['running', 'pause_requested', 'paused', 'recovering', 'waiting_confirmation', 'cancel_requested', 'unknown'];
@@ -52,12 +53,6 @@ function fmtTime(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '—';
   return d.toLocaleString('zh-CN', { hour12: false, month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' });
-}
-
-function fmtDur(sec: number): string {
-  if (sec < 60) return `${Math.max(0, Math.round(sec))}s`;
-  const m = Math.floor(sec / 60);
-  return `${m}:${String(Math.round(sec % 60)).padStart(2, '0')}`;
 }
 
 function elapsedOf(j: Job): number {
@@ -162,8 +157,8 @@ export function TasksPage() {
             <span className="hf-tag">{j.queueClass}</span>
             <span className="hf-task-meta" style={{ margin: 0, marginLeft: 'auto' }}>
               <span>{JOB_LABEL[j.status]}</span>
-              {ok && <span>{fmtDur(elapsedOf(j))} · {fmtTime(j.finishedAt ?? j.createdAt)} 完成</span>}
-              {!ok && RUNNING.includes(j.status) && <span>已 {fmtDur(elapsedOf(j))}</span>}
+              {ok && <span>{formatElapsed(elapsedOf(j))} · {fmtTime(j.finishedAt ?? j.createdAt)} 完成</span>}
+              {!ok && RUNNING.includes(j.status) && <span>已 {formatElapsed(elapsedOf(j))}</span>}
               {j.error && <span className="err">{j.error}</span>}
             </span>
           </div>

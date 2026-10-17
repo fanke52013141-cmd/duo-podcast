@@ -6,12 +6,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import {
-  upsertDraftTurns, useConfirm, useGenerateScript, useJobs, useMachine, useProject, useSaveDraft,
-  useSaveMachine, useScriptRewrite,
+  upsertDraftTurns, useBranchScript, useConfirm, useGenerateScript, useJobs, useMachine, usePatchProject, useProject,
+  useSaveDraft, useSaveMachine, useScriptRewrite,
 } from '../lib/api';
 import { type Job, type Project, type PronunciationEntry, type ScriptRevision, type Turn } from '../lib/types';
 import { Alert, Badge, Button, Choice, Icon, Input, Modal, Textarea } from '../components/wu';
 import { AppShell, FootBar, StageHead } from '../components/AppShell';
+import { formatTimecode } from '../lib/format';
 import { useError } from '../lib/useError';
 import { useProjectStore } from '../stores';
 
@@ -107,12 +108,6 @@ function estimateSecs(turns: Turn[]): number {
   return Math.round(chars * 0.22 + turns.length * 0.32);
 }
 
-function fmtMs(secs: number): string {
-  const m = Math.floor(secs / 60);
-  const s = secs % 60;
-  return `${m}:${String(s).padStart(2, '0')}`;
-}
-
 export function EditScriptPage({ projectId }: { projectId: string }) {
   const project = useProject(projectId);
   const jobs = useJobs(projectId);
@@ -134,6 +129,9 @@ export function EditScriptPage({ projectId }: { projectId: string }) {
   const [editText, setEditText] = useState('');
   const [candidate, setCandidate] = useState<{ turnIds: string[]; turns: Turn[]; jobId: string } | null>(null);
   const [dictOpen, setDictOpen] = useState(false);
+  // F5 分支：从任一版本派生新草稿
+  const [branchOpen, setBranchOpen] = useState(false);
+  const [branchLabel, setBranchLabel] = useState('');
   const { error, setError, dismiss: dismissError } = useError();
   const saveTimer = useRef<number | null>(null);
   // 保存流水线状态：未保存 / 保存中 / 已保存 / 保存失败。确认与改写必须先过保存屏障。
@@ -362,6 +360,36 @@ export function EditScriptPage({ projectId }: { projectId: string }) {
     });
   };
 
+  const branchScript = useBranchScript();
+  const patchProject = usePatchProject();
+
+  /** F5：从当前查看的版本建分支；先落盘挂起编辑，避免复制到旧内容。 */
+  const handleBranch = () => {
+    if (!revision) return;
+    flushDraft().then((ok) => {
+      if (!ok) { setError('保存未完成，已取消建分支：请检查上方保存状态后重试。'); return; }
+      branchScript.mutate(
+        { projectId, fromRevisionId: revision.id, label: branchLabel.trim() },
+        {
+          onSuccess: () => { setBranchOpen(false); setBranchLabel(''); setViewRevId(null); },
+          onError: (e) => setError(`建分支失败：${(e as Error).message}`),
+        },
+      );
+    });
+  };
+
+  /** 把正在查看的历史版本设为当前草稿（分支之间切换）。 */
+  const handleMakeDraft = () => {
+    if (!proj || !revision || viewIsDraft) return;
+    patchProject.mutate(
+      { projectId, patch: { currentDraftRevision: revision.id }, expectedRevision: proj.revision },
+      {
+        onSuccess: () => setViewRevId(null),
+        onError: (e) => setError(`切换草稿失败：${(e as Error).message}`),
+      },
+    );
+  };
+
   const handleRegenerate = () => {
     if (!proj) return;
     if (regenerate.isPending) return;
@@ -523,10 +551,16 @@ export function EditScriptPage({ projectId }: { projectId: string }) {
             onChange={(e) => { setViewRevId(e.target.value); setCandidate(null); }}
           >
             {(proj?.scriptRevisions ?? []).map((r) => (
-              <option key={r.id} value={r.id}>{r.id}{r.id === proj?.currentDraftRevision ? ' · 草稿' : ''}</option>
+              <option key={r.id} value={r.id}>
+                {r.id}{r.label ? ` · ${r.label}` : ''}{r.id === proj?.currentDraftRevision ? ' · 草稿' : ''}
+              </option>
             ))}
           </select>
         </label>
+        <Button variant="secondary" size="sm" icon="plus" disabled={!revision || saving} onClick={() => { setBranchLabel(''); setBranchOpen(true); }}>建分支</Button>
+        {!viewIsDraft && (
+          <Button variant="secondary" size="sm" disabled={patchProject.isPending} onClick={handleMakeDraft}>设为当前草稿</Button>
+        )}
         <Button
           variant="brand" size="sm" icon="check"
           disabled={!revision || scriptApproved || generating || saving || !viewIsDraft}
@@ -703,7 +737,7 @@ export function EditScriptPage({ projectId }: { projectId: string }) {
         <span className="hf-pos">话轮 {turns.length}</span>
         <span>A {speakerCount.A} / B {speakerCount.B}</span>
         <span>字数 {charCount.toLocaleString()}</span>
-        <span>预估 {fmtMs(estimateSecs(turns))}（按默认语速估算）</span>
+        <span>预估 {formatTimecode(estimateSecs(turns))}（按默认语速估算）</span>
         <span className="hf-spacer" />
         <span className="wu-caption">
           {saveState === 'saving' ? '保存中…'
@@ -720,6 +754,35 @@ export function EditScriptPage({ projectId }: { projectId: string }) {
         hintPron={pronCount}
         project={proj ?? null}
       />
+
+      {/* ---- 分支（F5）：从当前查看的版本派生新草稿，原版本与确认记录不动 ---- */}
+      <Modal
+        open={branchOpen}
+        onClose={() => setBranchOpen(false)}
+        title={revision ? `从 ${revision.id} 新建分支` : '新建分支'}
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setBranchOpen(false)}>取消</Button>
+            <Button variant="brand" busy={branchScript.isPending} onClick={handleBranch}>建立分支</Button>
+          </>
+        }
+      >
+        <div style={{ display: 'grid', gap: 10 }}>
+          <p className="wu-caption" style={{ margin: 0 }}>
+            会复制当前查看版本的全部话轮，生成一个新草稿并立即切换过去；原版本、已用版本与确认记录都保持不变。
+          </p>
+          <Input
+            aria-label="分支名称"
+            placeholder="如：开场更活泼版"
+            value={branchLabel}
+            maxLength={40}
+            onChange={(e) => setBranchLabel(e.target.value)}
+          />
+          {branchScript.error && (
+            <Alert tone="danger">建分支失败：{(branchScript.error as Error).message}</Alert>
+          )}
+        </div>
+      </Modal>
     </AppShell>
   );
 }

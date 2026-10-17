@@ -177,6 +177,20 @@ export const useDeleteProject = () => {
   });
 };
 
+/* 从任一版本派生子草稿（F5 分支）：不改动原版本，新版本立刻成为当前草稿。 */
+export const useBranchScript = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ projectId, fromRevisionId, label }: { projectId: string; fromRevisionId: string; label?: string }) =>
+      sendJson<{ revisionId: string; parentRevisionId: string; label: string }>(
+        `/projects/${projectId}/script/branch`, 'POST', { fromRevisionId, label }),
+    onSuccess: (_res, vars) => {
+      qc.invalidateQueries({ queryKey: ['project', vars.projectId] });
+      qc.invalidateQueries({ queryKey: ['projects'] });
+    },
+  });
+};
+
 export interface GenerateScriptInput {
   projectId: string;
   clientToken: string;

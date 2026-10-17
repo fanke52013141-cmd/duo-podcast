@@ -46,6 +46,9 @@ export interface ScriptRevision {
   contentBrief?: ContentBrief;
   turns: Turn[];
   textApiConfigRef: string;
+  /* F5 分支：父版本 + 用户可见分支名 */
+  parentRevisionId?: string;
+  label?: string;
 }
 
 export interface Approval {
