@@ -9,7 +9,9 @@ from fastapi import APIRouter, HTTPException, Request
 
 from ..domain.project import ScriptRevision
 from ..jobs.manager import JobManager
-from ..services.script_svc import apply_script_revision, next_revision_id
+from ..services.script_svc import (
+    apply_script_revision, diff_revisions, merge_revision, next_revision_id,
+)
 from ..services.voice_svc import find_revision
 
 router = APIRouter(prefix="/api/projects/{project_id}/script", tags=["script"])
@@ -67,6 +69,47 @@ async def branch_script(project_id: str, payload: dict, request: Request) -> dic
                                   expected_project_revision=project.revision)
     return {"revisionId": revision.id, "parentRevisionId": base.id,
             "label": revision.label, "currentDraftRevision": saved.current_draft_revision}
+
+
+@router.get("/diff")
+async def diff_script(project_id: str, base: str, source: str, request: Request) -> dict:
+    """版本对比（F5）：以 base 为基准，列出 source 的新增/删除/改写话轮。"""
+    store = request.app.state.project_store
+    project = store.load(project_id)
+    if project is None:
+        raise HTTPException(404, "project not found")
+    try:
+        base_rev = find_revision(project, base)
+        source_rev = find_revision(project, source)
+    except KeyError as exc:
+        raise HTTPException(422, "对比的版本不存在") from exc
+    changes = diff_revisions(base_rev, source_rev)
+    counts = {status: sum(1 for c in changes if c["status"] == status)
+              for status in ("added", "removed", "changed")}
+    return {"base": base_rev.id, "source": source_rev.id, "changes": changes, "counts": counts}
+
+
+@router.post("/merge")
+async def merge_script(project_id: str, payload: dict, request: Request) -> dict:
+    """把另一版本的选中话轮合并成新草稿（F5）：base 为底，source 提供内容。"""
+    store = request.app.state.project_store
+    project = store.load(project_id)
+    if project is None:
+        raise HTTPException(404, "project not found")
+    try:
+        base_rev = find_revision(project, payload.get("baseRevisionId") or project.current_draft_revision)
+        source_rev = find_revision(project, payload.get("sourceRevisionId"))
+    except KeyError as exc:
+        raise HTTPException(422, "合并的版本不存在") from exc
+    turn_ids = payload.get("turnIds")
+    if turn_ids is not None and (not isinstance(turn_ids, list) or any(not isinstance(t, str) for t in turn_ids)):
+        raise HTTPException(422, "turnIds 必须是话轮 id 数组")
+    revision = merge_revision(project, base_rev, source_rev, turn_ids, str(payload.get("label") or ""))
+    saved = apply_script_revision(store, project_id, revision,
+                                  expected_project_revision=project.revision)
+    return {"revisionId": revision.id, "parentRevisionId": base_rev.id,
+            "sourceRevisionId": source_rev.id, "label": revision.label,
+            "currentDraftRevision": saved.current_draft_revision}
 
 
 @router.post("/rewrite")

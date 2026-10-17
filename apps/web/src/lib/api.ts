@@ -6,7 +6,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
   AudioTimeline,
   ArtifactEntry, Capabilities, Character, Job, MachineSettings, ProgramTemplate, Project,
-  PronunciationEntry, ScriptRevision, SourceKind, Turn,
+  PronunciationEntry, ScriptDiff, ScriptRevision, SourceKind, Turn,
 } from './types';
 
 const BASE = '/api';
@@ -184,6 +184,30 @@ export const useBranchScript = () => {
     mutationFn: ({ projectId, fromRevisionId, label }: { projectId: string; fromRevisionId: string; label?: string }) =>
       sendJson<{ revisionId: string; parentRevisionId: string; label: string }>(
         `/projects/${projectId}/script/branch`, 'POST', { fromRevisionId, label }),
+    onSuccess: (_res, vars) => {
+      qc.invalidateQueries({ queryKey: ['project', vars.projectId] });
+      qc.invalidateQueries({ queryKey: ['projects'] });
+    },
+  });
+};
+
+/* F5 版本对比：以 base 为基准看 source 的差异 */
+export const useScriptDiff = (projectId: string, base: string, source: string, enabled: boolean) =>
+  useQuery({
+    queryKey: ['script-diff', projectId, base, source],
+    queryFn: () => getJson<ScriptDiff>(
+      `/projects/${projectId}/script/diff?base=${encodeURIComponent(base)}&source=${encodeURIComponent(source)}`),
+    enabled,
+  });
+
+/* F5 合并：把另一版本的选中话轮合入新草稿 */
+export const useMergeScript = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ projectId, baseRevisionId, sourceRevisionId, turnIds, label }: {
+      projectId: string; baseRevisionId: string; sourceRevisionId: string; turnIds: string[]; label?: string;
+    }) => sendJson<{ revisionId: string }>(`/projects/${projectId}/script/merge`, 'POST',
+      { baseRevisionId, sourceRevisionId, turnIds, label }),
     onSuccess: (_res, vars) => {
       qc.invalidateQueries({ queryKey: ['project', vars.projectId] });
       qc.invalidateQueries({ queryKey: ['projects'] });

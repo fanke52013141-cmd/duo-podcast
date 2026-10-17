@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
 from typing import Any
 
 from ..adapters.base import TextProvider
@@ -24,8 +25,10 @@ def _turn_from_dict(data: dict[str, Any]) -> Turn:
 
 def next_revision_id(project: Project) -> str:
     """顺序版本号（与前端 nextRevisionId 同一口径）：R 后缀数值 + 1。
+
     此前服务端用十六进制随机 id、前端编辑用 R1/R2，同一工程出现两套版本号口径
-    （用户看到 R39A0258285A3 → R1 跳变）；统一为 R1、R2、R3…。"""
+    （用户看到 R39A0258285A3 → R1 跳变）；统一为 R1、R2、R3…。
+    """
     max_num = 0
     for r in project.script_revisions:
         digits = r.id[1:] if r.id.startswith("R") else ""
@@ -62,3 +65,65 @@ def apply_script_revision(store: ProjectStore, project_id: str, revision: Script
     if expected_project_revision is not None and project.revision == expected_project_revision:
         patch["current_draft_revision"] = revision.id
     return store.apply(project_id, patch, expected_revision=project.revision)
+
+
+# ---- F5 分支：版本对比与合并 ----
+
+def turn_plain_text(turn: Turn) -> str:
+    return "\n".join(line.display_text for line in turn.lines)
+
+
+def diff_revisions(base: ScriptRevision, source: ScriptRevision) -> list[dict[str, Any]]:
+    """对比两个版本：以 base 为基准，列出 source 里新增/删除/改写的话轮。"""
+    base_map = {turn.id: turn for turn in base.turns}
+    source_map = {turn.id: turn for turn in source.turns}
+    changes: list[dict[str, Any]] = []
+    for turn in base.turns:
+        if turn.id not in source_map:
+            changes.append({"turnId": turn.id, "status": "removed", "speaker": turn.speaker,
+                            "before": turn_plain_text(turn), "after": ""})
+    for turn in source.turns:
+        if turn.id not in base_map:
+            changes.append({"turnId": turn.id, "status": "added", "speaker": turn.speaker,
+                            "before": "", "after": turn_plain_text(turn)})
+            continue
+        before = base_map[turn.id]
+        if turn_plain_text(before) != turn_plain_text(turn) or before.speaker != turn.speaker:
+            changes.append({"turnId": turn.id, "status": "changed", "speaker": turn.speaker,
+                            "before": turn_plain_text(before), "after": turn_plain_text(turn)})
+    return changes
+
+
+def merge_revision(project: Project, base: ScriptRevision, source: ScriptRevision,
+                   turn_ids: list[str] | None, label: str = "") -> ScriptRevision:
+    """以 base 为底，把 source 中选中的话轮合并成一个新草稿版本。
+
+    turn_ids=None 表示合并全部「改写/新增」的话轮（删除类不自动合并，避免误删）。
+    """
+    changes = diff_revisions(base, source)
+    if turn_ids is None:
+        chosen = {c["turnId"] for c in changes if c["status"] in ("changed", "added")}
+    else:
+        chosen = set(turn_ids)
+    source_map = {turn.id: turn for turn in source.turns}
+    turns: list[Turn] = []
+    for turn in base.turns:
+        if turn.id in chosen:
+            # 选中的删除项：source 里没有该话轮 → 从合并结果中移除
+            if turn.id in source_map:
+                turns.append(deepcopy(source_map[turn.id]))
+            continue
+        turns.append(deepcopy(turn))
+    base_ids = {turn.id for turn in base.turns}
+    for turn in source.turns:
+        if turn.id in chosen and turn.id not in base_ids:
+            turns.append(deepcopy(turn))
+    return ScriptRevision(
+        id=next_revision_id(project),
+        source_input=deepcopy(base.source_input),
+        content_brief=deepcopy(base.content_brief),
+        turns=turns,
+        text_api_config_ref=base.text_api_config_ref,
+        parent_revision_id=base.id,
+        label=(label or f"合并自 {source.id}")[:40],
+    )

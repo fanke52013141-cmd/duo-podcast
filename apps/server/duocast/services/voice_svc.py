@@ -136,11 +136,13 @@ async def synthesize_timeline(
     artifacts_root: Path | None = None,
     target_turn_ids: list[str] | None = None,
     pronunciation: list[dict] | None = None,
+    progress=None,
 ) -> AudioTimeline:
     """逐单元请求 TTS，累积整数样本偏移，构造并写回 AudioTimeline。
 
     真实引擎（返回 audioPath）时在写回前拼接整期母轨（关口 A：③页直接试听）。
     pronunciation 为提交时冻结的读音词典（全局 + 本工程合并），合成前应用替换。
+    progress(done, total)：每处理完一个单元回调一次，供任务中心/阶段③显示真实进度。
     """
     bindings = _effective_bindings(project, bindings)
     if not tts.capabilities.get("simulated", True):
@@ -239,6 +241,11 @@ async def synthesize_timeline(
         if index < len(gaps):
             offset += gaps[index] * 48
         timeline.units.append(unit)
+        if progress is not None:
+            try:
+                progress(index + 1, len(units))
+            except Exception:  # noqa: BLE001 - 进度回调失败不能影响合成
+                pass
     timeline.sample_count = offset + tail_out_ms * 48
 
     if is_full_synthesis and artifact_store is not None and artifacts_root is not None:

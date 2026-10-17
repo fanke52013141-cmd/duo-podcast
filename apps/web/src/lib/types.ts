@@ -64,6 +64,21 @@ export interface Approval {
   revokedReason?: string;
 }
 
+/* F5 版本对比（后端 /script/diff） */
+export interface ScriptDiffChange {
+  turnId: string;
+  status: 'added' | 'removed' | 'changed';
+  speaker: Speaker;
+  before: string;
+  after: string;
+}
+export interface ScriptDiff {
+  base: string;
+  source: string;
+  changes: ScriptDiffChange[];
+  counts: { added: number; removed: number; changed: number };
+}
+
 /* ---- 阶段③ 声音三层对象（01 §11.2，与后端 domain/audio.py 对齐） ---- */
 export interface VoiceBinding {
   id: string;

@@ -88,6 +88,8 @@ def _job_runner(manager: JobManager, store: ProjectStore, artifacts: ArtifactSto
                 pronunciation=job.input_snapshot.get("pronunciation"),
                 artifact_store=artifacts,
                 artifacts_root=artifacts.root,
+                # 单元级进度：写入 job.stage 并随 SSE 推给阶段③/任务中心
+                progress=lambda done, total: manager.set_stage(job, f"unit {done}/{total}"),
             )
             unit_ids = [asset_id for u in timeline.units for asset_id in u.candidate_audio_asset_ids]
             master_ids = [timeline.master_audio_asset_id] if timeline.master_audio_asset_id else []

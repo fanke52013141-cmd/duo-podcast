@@ -6,8 +6,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import {
-  upsertDraftTurns, useBranchScript, useConfirm, useGenerateScript, useJobs, useMachine, usePatchProject, useProject,
-  useSaveDraft, useSaveMachine, useScriptRewrite,
+  upsertDraftTurns, useBranchScript, useConfirm, useGenerateScript, useJobs, useMachine, useMergeScript,
+  usePatchProject, useProject, useSaveDraft, useSaveMachine, useScriptDiff, useScriptRewrite,
 } from '../lib/api';
 import { type Job, type Project, type PronunciationEntry, type ScriptRevision, type Turn } from '../lib/types';
 import { Alert, Badge, Button, Choice, Icon, Input, Modal, Textarea } from '../components/wu';
@@ -132,6 +132,11 @@ export function EditScriptPage({ projectId }: { projectId: string }) {
   // F5 分支：从任一版本派生新草稿
   const [branchOpen, setBranchOpen] = useState(false);
   const [branchLabel, setBranchLabel] = useState('');
+  // F5 对比/合并
+  const [diffOpen, setDiffOpen] = useState(false);
+  const [diffBase, setDiffBase] = useState('');
+  const [diffSource, setDiffSource] = useState('');
+  const [diffSelected, setDiffSelected] = useState<string[]>([]);
   const { error, setError, dismiss: dismissError } = useError();
   const saveTimer = useRef<number | null>(null);
   // 保存流水线状态：未保存 / 保存中 / 已保存 / 保存失败。确认与改写必须先过保存屏障。
@@ -362,6 +367,44 @@ export function EditScriptPage({ projectId }: { projectId: string }) {
 
   const branchScript = useBranchScript();
   const patchProject = usePatchProject();
+  const mergeScript = useMergeScript();
+  const diff = useScriptDiff(projectId, diffBase, diffSource, diffOpen && !!diffBase && !!diffSource);
+
+  // 打开对比面板时：基准=当前草稿，对比=正在查看的版本；两者一致则自动挑一个真正有差异的版本。
+  const openDiff = () => {
+    const latest = proj?.scriptRevisions ?? [];
+    const level = (r: ScriptRevision) =>
+      r.turns.map((t) => `${t.id}:${t.speaker}:${t.lines.map((l) => l.displayText).join("\n")}`).join('|');
+    const base = proj?.currentDraftRevision ?? latest[latest.length - 1]?.id ?? '';
+    const baseRev = latest.find((r) => r.id === base);
+    const viewed = revision?.id && revision.id !== base ? revision.id : '';
+    const viewedRev = latest.find((r) => r.id === viewed);
+    const differs = (r?: ScriptRevision) => !!r && !!baseRev && level(r) !== level(baseRev);
+    const differing = latest.filter((r) => r.id !== base && differs(r));
+    const source = differs(viewedRev) ? viewed : (differing.slice(-1)[0]?.id ?? base);
+    setDiffBase(base);
+    setDiffSource(source);
+    setDiffSelected([]);
+    setDiffOpen(true);
+  };
+
+  useEffect(() => {
+    if (!diff.data) return;
+    // 默认勾选「改写 + 新增」，删除类不自动合并（避免误删）
+    setDiffSelected(diff.data.changes.filter((c) => c.status !== 'removed').map((c) => c.turnId));
+  }, [diff.data]);
+
+  const handleMerge = () => {
+    if (!diffBase || !diffSource) return;
+    mergeScript.mutate(
+      { projectId, baseRevisionId: diffBase, sourceRevisionId: diffSource, turnIds: diffSelected,
+        label: `合并自 ${diffSource}` },
+      {
+        onSuccess: () => { setDiffOpen(false); setViewRevId(null); },
+        onError: (e) => setError(`合并失败：${(e as Error).message}`),
+      },
+    );
+  };
 
   /** F5：从当前查看的版本建分支；先落盘挂起编辑，避免复制到旧内容。 */
   const handleBranch = () => {
@@ -558,6 +601,7 @@ export function EditScriptPage({ projectId }: { projectId: string }) {
           </select>
         </label>
         <Button variant="secondary" size="sm" icon="plus" disabled={!revision || saving} onClick={() => { setBranchLabel(''); setBranchOpen(true); }}>建分支</Button>
+        <Button variant="secondary" size="sm" disabled={!proj || (proj.scriptRevisions?.length ?? 0) < 2} onClick={openDiff}>版本对比</Button>
         {!viewIsDraft && (
           <Button variant="secondary" size="sm" disabled={patchProject.isPending} onClick={handleMakeDraft}>设为当前草稿</Button>
         )}
@@ -781,6 +825,63 @@ export function EditScriptPage({ projectId }: { projectId: string }) {
           {branchScript.error && (
             <Alert tone="danger">建分支失败：{(branchScript.error as Error).message}</Alert>
           )}
+        </div>
+      </Modal>
+
+      {/* ---- 版本对比与合并（F5）：两种方案之间按话轮取舍 ---- */}
+      <Modal
+        open={diffOpen}
+        onClose={() => setDiffOpen(false)}
+        title="版本对比与合并"
+        footer={
+          <>
+            <span className="wu-caption">已选 {diffSelected.length} 项</span>
+            <span className="hf-spacer" />
+            <Button variant="ghost" onClick={() => setDiffOpen(false)}>取消</Button>
+            <Button variant="brand" busy={mergeScript.isPending} disabled={!diffSelected.length} onClick={handleMerge}>
+              合并为新草稿
+            </Button>
+          </>
+        }
+      >
+        <div style={{ display: 'grid', gap: 10 }}>
+          <div className="wu-row" style={{ gap: 8 }}>
+            <label className="wu-label" htmlFor="diff-base">基准</label>
+            <select id="diff-base" className="wu-input" value={diffBase} onChange={(e) => setDiffBase(e.target.value)}>
+              {(proj?.scriptRevisions ?? []).map((r) => (
+                <option key={r.id} value={r.id}>{r.id}{r.label ? ` · ${r.label}` : ''}</option>
+              ))}
+            </select>
+            <label className="wu-label" htmlFor="diff-source">对比</label>
+            <select id="diff-source" className="wu-input" value={diffSource} onChange={(e) => setDiffSource(e.target.value)}>
+              {(proj?.scriptRevisions ?? []).map((r) => (
+                <option key={r.id} value={r.id}>{r.id}{r.label ? ` · ${r.label}` : ''}</option>
+              ))}
+            </select>
+          </div>
+          {diff.isError && <Alert tone="danger">读取差异失败：{(diff.error as Error).message}</Alert>}
+          {diff.data && diff.data.changes.length === 0 && <p className="wu-caption">两个版本内容一致。</p>}
+          <div style={{ display: 'grid', gap: 6, maxHeight: 300, overflow: 'auto' }}>
+            {diff.data?.changes.map((c) => (
+              <label key={c.turnId} className="wu-row" style={{ alignItems: 'flex-start', gap: 8, padding: '6px 8px', border: '1px solid var(--wu-semantic-border)', borderRadius: 8 }}>
+                <input
+                  type="checkbox"
+                  checked={diffSelected.includes(c.turnId)}
+                  onChange={(e) => setDiffSelected((prev) => e.target.checked ? [...prev, c.turnId] : prev.filter((x) => x !== c.turnId))}
+                />
+                <span style={{ display: 'grid', gap: 2 }}>
+                  <span>
+                    <Badge tone={c.status === 'added' ? 'success' : c.status === 'removed' ? 'danger' : 'warning'}>
+                      {c.status === 'added' ? '新增' : c.status === 'removed' ? '删除' : '改写'}
+                    </Badge>{' '}
+                    <span className="hf-mono">{c.turnId}</span> · {c.speaker}
+                  </span>
+                  {c.before && <span className="wu-caption">原：{c.before.slice(0, 60)}</span>}
+                  {c.after && <span className="wu-caption">新：{c.after.slice(0, 60)}</span>}
+                </span>
+              </label>
+            ))}
+          </div>
         </div>
       </Modal>
     </AppShell>

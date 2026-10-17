@@ -84,6 +84,11 @@ export function VoicePage({ projectId }: { projectId: string }) {
     (j) => j.kind === 'tts.synthesize' && ['queued', 'running', 'recovering'].includes(j.status),
   );
   const synthesizing = !!synthJob;
+  // 后端每合成完一个单元写一次 job.stage = "unit n/total"，SSE 推给前端。
+  const unitProgress = (() => {
+    const m = /unit (\d+)\/(\d+)/.exec(synthJob?.stage ?? '');
+    return m ? { done: Number(m[1]), total: Number(m[2]) } : null;
+  })();
   // 最近一次成功的整期合成是否真的写回了当前时间轨。False = 合成期间脚本被改动，
   // 结果只存进音频历史（后端 meta.applied=false），必须提示而不是显示"成功但没变"。
   const lastSynth = (jobs.data ?? []).find((j) => j.kind === 'tts.synthesize' && j.status === 'succeeded');
@@ -540,7 +545,7 @@ export function VoicePage({ projectId }: { projectId: string }) {
                     <Badge tone={t.speaker === 'A' ? 'info' : 'speaker-b'}>{t.speaker}</Badge>
                     <span className="hf-turn-text">{turnText(t)}</span>
                     {dur && <Badge tone="success">✓ {dur}</Badge>}
-                    {generating && <Badge tone="info">生成中 {genDone}/{turnCount}</Badge>}
+                    {generating && <Badge tone="info">生成中 {unitProgress ? `${unitProgress.done}/${unitProgress.total}` : `${genDone}/${turnCount}`}</Badge>}
                     {u?.candidateAudioAssetIds.length ? <Badge tone="info">候选 {u.candidateAudioAssetIds.length}</Badge> : null}
                   </div>
                   {generating && <div className="hf-prog" style={{ marginTop: 6 }}><i style={{ width: `${Math.round((genDone / Math.max(1, turnCount)) * 100)}%` }} /></div>}
