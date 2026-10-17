@@ -1,8 +1,7 @@
 /* ============================================================================
    页面级错误状态（第五轮实测 A9）：
    - 错误横幅 12s 后自动清除，不再永久驻留遮挡后续成功反馈；
-   - dismiss() 供 Alert 关闭按钮立即清除；
-   - clearOnSuccess() 在同一页面下一个成功操作后立刻清掉旧错误。
+   - dismiss() 供 Alert 关闭按钮立即清除。
    ========================================================================== */
 import { useCallback, useRef, useState } from 'react';
 
@@ -12,7 +11,6 @@ export function useError(): {
   error: string | null;
   setError: (msg: string | null) => void;
   dismiss: () => void;
-  clearOnSuccess: () => void;
 } {
   const [error, setErrorState] = useState<string | null>(null);
   const timer = useRef<number | null>(null);
@@ -28,10 +26,5 @@ export function useError(): {
     setErrorState(null);
   }, []);
 
-  const clearOnSuccess = useCallback(() => {
-    if (timer.current) window.clearTimeout(timer.current);
-    setErrorState(null);
-  }, []);
-
-  return { error, setError, dismiss, clearOnSuccess };
+  return { error, setError, dismiss };
 }

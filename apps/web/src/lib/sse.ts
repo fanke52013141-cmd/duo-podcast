@@ -7,14 +7,10 @@ import type { ServerEvent } from './types';
 
 export interface SseHandle {
   stop: () => void;
-  lastSeq: () => number;
 }
 
 export function startSse(onEvent: (ev: ServerEvent) => void, onResync?: () => void): SseHandle {
-  let lastSeq = 0;
-  let es: EventSource | null = null;
-
-  es = new EventSource('/api/events');
+  const es = new EventSource('/api/events');
   es.onmessage = (msg) => {
     if (msg.data === ': keepalive') return;
     let ev: ServerEvent;
@@ -23,7 +19,6 @@ export function startSse(onEvent: (ev: ServerEvent) => void, onResync?: () => vo
     } catch {
       return;
     }
-    if (typeof ev.seq === 'number' && ev.seq > lastSeq) lastSeq = ev.seq;
     if (ev.type === 'system.resync') {
       onResync?.();
       return;
@@ -34,8 +29,5 @@ export function startSse(onEvent: (ev: ServerEvent) => void, onResync?: () => vo
     // EventSource 自动重连；服务端按 Last-Event-ID 补发，无需额外处理
   };
 
-  return {
-    stop: () => es?.close(),
-    lastSeq: () => lastSeq,
-  };
+  return { stop: () => es.close() };
 }

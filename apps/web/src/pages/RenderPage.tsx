@@ -98,7 +98,7 @@ export function RenderPage({ projectId }: { projectId: string }) {
   const timeline: AudioTimeline | null = proj?.audioTimeline ?? null;
   const segments = useMemo(() => (timeline ? planSegments(timeline) : []), [timeline]);
   const outputVersion = proj?.selectedOutputVersion ?? proj?.outputVersion ?? null;
-  const sampleApproved = proj?.approvals.some((a) => a.kind === 'sample' && a.decision === 'accepted') ?? false;
+  const sampleApproved = proj?.stageProgress.visual === 'done';
   const eligibleVariants = proj?.visualVariants.filter(v => v.aspect === (proj.aspect ?? 'landscape') && (v.mode !== 'overShoulder' || v.cameraGroups?.some(g => g.cameraAssets.some(c => c.subjectSpeaker === 'A') && g.cameraAssets.some(c => c.subjectSpeaker === 'B')))) ?? [];
   const latestVariant = eligibleVariants.find(v => v.id === proj?.selectedVisualVariantId) ?? eligibleVariants[eligibleVariants.length - 1] ?? null;
 
@@ -255,8 +255,8 @@ export function RenderPage({ projectId }: { projectId: string }) {
           <div className="hf-ins-sec">
             <h4>阶段状态</h4>
             <ul className="hf-ins-list">
-              <li>脚本确认：{proj?.approvals.some((a) => a.kind === 'script' && a.decision === 'accepted') ? '已通过' : '未确认'}</li>
-              <li>配音确认：{proj?.approvals.some((a) => a.kind === 'voice' && a.decision === 'accepted') ? '已通过' : '未确认'}</li>
+              <li>脚本确认：{proj?.stageProgress.script === 'done' ? '已通过' : '未确认'}</li>
+              <li>配音确认：{proj?.stageProgress.voice === 'done' ? '已通过' : '未确认'}</li>
               <li>样片确认：{sampleApproved ? '已通过' : '未确认'}</li>
             </ul>
           </div>

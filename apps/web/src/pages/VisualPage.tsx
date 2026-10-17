@@ -119,10 +119,10 @@ export function VisualPage({ projectId }: { projectId: string }) {
   const sampleSimulated = (jobs.data ?? []).some(
     (j) => j.kind === 'sample.generate' && j.status === 'succeeded' && j.result?.simulated !== false,
   );
-  const voiceApproved = proj?.approvals.some((a) => a.kind === 'voice' && a.decision === 'accepted') ?? false;
-  const sampleApproved = proj?.approvals.some(
-    (a) => a.kind === 'sample' && a.decision === 'accepted' && proj.currentDraftRevision && a.inputRevisionId === proj.currentDraftRevision,
-  ) ?? false;
+  // 两个确认态统一取后端 stageProgress（F3）：确认记录被撤销、或样片/时间轨已过期时，
+  // 阶段状态会是 pending_confirm / stale，页脚不会再单独显示「已确认」。
+  const voiceApproved = proj?.stageProgress.voice === 'done';
+  const sampleApproved = proj?.stageProgress.visual === 'done';
 
   const canGenerate = !!proj && !!proj.currentDraftRevision && !generating;
   // 样片当前只承载「生成成功与否」：接受门槛 = 有主图变体 + 样片任务成功。

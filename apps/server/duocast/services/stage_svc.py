@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 from ..domain.job import JobStatus
-from .render_inputs import dependency_hash, audio_inputs_match
+from .render_inputs import dependency_hash, audio_inputs_match, visual_dependency_hash
 from ..domain.project import Project, StageId, StageState
 
 # 阶段 → 所需产物/确认（01 §13.1 精简）
@@ -25,7 +25,7 @@ def derive_stage_states(project: Project, jobs: list | None = None, pronunciatio
                                                            JobStatus.PAUSE_REQUESTED, JobStatus.RECOVERING)
     }
     latest = {a.kind: a for a in project.approvals
-              if a.input_revision_id == project.current_draft_revision}
+              if a.input_revision_id == project.current_draft_revision and not a.revoked_at}
     approved = {kind for kind, a in latest.items() if a.decision == "accepted"}
     has_script = bool(project.current_draft_revision)
     has_voice = bool(getattr(project, "audio_timeline", None))
@@ -76,8 +76,11 @@ def derive_stage_states(project: Project, jobs: list | None = None, pronunciatio
                 if has_render:
                     states["render"] = StageState.STALE
     sample_approval = latest.get("sample")
-    if sample_approval and sample_approval.spec.get("dependencyHash") and sample_approval.spec["dependencyHash"] != current_hash:
-        states["visual"] = StageState.STALE
+    # 样片绑定的是「画面依赖」（F4）；旧数据里可能是整份依赖哈希，两种都认。
+    if sample_approval and sample_approval.spec.get("dependencyHash"):
+        declared = sample_approval.spec["dependencyHash"]
+        if declared not in (visual_dependency_hash(project), current_hash):
+            states["visual"] = StageState.STALE
     output_hash = ((project.output_manifest or {}).get("meta") or {}).get("dependencyHash")
     if output_hash and output_hash != current_hash and "renders" not in running_kinds:
         states["render"] = StageState.STALE

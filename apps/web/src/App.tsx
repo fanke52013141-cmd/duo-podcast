@@ -6,7 +6,7 @@ import { Component, useEffect, type ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useCapabilities, useProject } from './lib/api';
 import { startSse } from './lib/sse';
-import { useJobStore, useProjectStore, useServiceStore, saveSession } from './stores';
+import { useProjectStore, useServiceStore, saveSession } from './stores';
 import { AppShell } from './components/AppShell';
 import { Empty, Button } from './components/wu';
 import { HomePage } from './pages/HomePage';
@@ -88,8 +88,6 @@ export default function App() {
   const qc = useQueryClient();
   const { currentProjectId, view } = useProjectStore();
   const setCapabilities = useServiceStore((s) => s.setCapabilities);
-  const noteSeq = useJobStore((s) => s.noteSeq);
-  const touch = useJobStore((s) => s.touch);
 
   // 能力快照 → serviceStore（UI 门控）
   const caps = useCapabilities();
@@ -101,10 +99,8 @@ export default function App() {
   useEffect(() => {
     const handle = startSse(
       (ev) => {
-        noteSeq(ev.seq);
         if (typeof ev.type === 'string' && ev.type.startsWith('job.')) {
-          const jobId = typeof ev.jobId === 'string' ? ev.jobId : '';
-          if (jobId) touch(jobId, String(ev.status ?? 'running') as never);
+          // 任务事件只触发查询失效；活动任务集合由各页从 /api/jobs 派生，避免第三份状态源。
           qc.invalidateQueries({ queryKey: ['jobs'] });
           if (currentProjectId) qc.invalidateQueries({ queryKey: ['project', currentProjectId] });
         }
@@ -115,7 +111,7 @@ export default function App() {
       },
     );
     return handle.stop;
-  }, [qc, currentProjectId, noteSeq, touch]);
+  }, [qc, currentProjectId]);
 
   // 会话持久化：写回。恢复由 stores 初始化时同步完成（避免首帧先渲染首页再跳转）。
   useEffect(() => {

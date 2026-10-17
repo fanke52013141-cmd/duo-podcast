@@ -94,7 +94,7 @@ def _job_runner(manager: JobManager, store: ProjectStore, artifacts: ArtifactSto
             return {
                 "artifactIds": [*unit_ids, *master_ids],
                 "meta": {"sampleRate": timeline.sample_rate, "sampleCount": timeline.sample_count,
-                         "units": len(timeline.units),
+                         "units": len(timeline.units), "reused": len(timeline.reused_unit_ids),
                          "applied": getattr(timeline, "applied", True),
                          "masterAudioAssetId": timeline.master_audio_asset_id},
             }

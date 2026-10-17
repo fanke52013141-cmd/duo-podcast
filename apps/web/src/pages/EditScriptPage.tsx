@@ -381,7 +381,7 @@ export function EditScriptPage({ projectId }: { projectId: string }) {
   // ---- 派生 ----
   const saving = saveState === 'saving';
   const scriptApproved = proj?.approvals.some(
-    (a) => a.kind === 'script' && a.decision === 'accepted' && revision && a.inputRevisionId === revision.id,
+    (a) => a.kind === 'script' && a.decision === 'accepted' && !a.revokedAt && revision && a.inputRevisionId === revision.id,
   ) ?? false;
   const { hints, pronCount } = useMemo(() => countHints(turns), [turns]);
   const charCount = useMemo(() => turns.reduce((n, t) => n + turnText(t).length, 0), [turns]);

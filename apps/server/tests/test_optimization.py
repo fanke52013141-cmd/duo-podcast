@@ -19,6 +19,7 @@ from duocast.services.script_svc import apply_script_revision
 from duocast.services.stage_svc import derive_stage_states
 from duocast.services.voice_svc import build_units, synthesize_timeline
 from duocast.storage.project_store import ProjectStore
+from duocast.services.approvals import active
 
 
 def project_fixture(tmp_path):
@@ -256,7 +257,10 @@ def test_new_audio_requires_new_voice_and_sample_confirmation(tmp_path):
         Approval(kind=kind, input_revision_id='R1') for kind in ('script', 'voice', 'sample')
     ]}, project.revision)
     asyncio.run(synthesize_timeline(store, AudioProvider(), project, revision, {}))
-    assert [a.kind for a in store.load(project.id).approvals] == ['script']
+    saved = store.load(project.id)
+    # F2：确认记录不删除，只标记撤销；有效确认只剩 script
+    assert set(a.kind for a in active(saved.approvals)) == {'script', 'sample'}
+    assert {a.kind for a in saved.approvals if a.revoked_at} == {'voice'}  # F4：样片确认不受音频变化影响
 
 
 # ---- 终态完成时刻 finished_at（前端任务耗时口径的后端依据） ----

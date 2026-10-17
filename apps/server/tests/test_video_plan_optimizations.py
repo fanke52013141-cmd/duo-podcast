@@ -10,6 +10,7 @@ from duocast.domain.project import Project, ScriptRevision, Turn, Line
 from duocast.domain.audio import AudioTimeline
 from duocast.services.video_plans import camera_plan, clipped_camera_plan, adaptive_prompt
 from duocast.services.render_inputs import validate_render_options
+from duocast.services.approvals import active
 
 
 def episode():
@@ -124,7 +125,10 @@ def test_retiming_preserves_adopted_samples_and_removes_approvals(tmp_path):
     assert pcm[:96000]==b'\x01\x00'*48000
     assert pcm[96000:113280]==bytes(17280)
     assert pcm[113280:]==b'\x02\x00'*48000
-    assert [a.kind for a in store.load('test').approvals]==['script']
+    saved = store.load('test')
+    # F2：撤销而非删除
+    assert set(a.kind for a in active(saved.approvals))=={'script','sample'}
+    assert {a.kind for a in saved.approvals if a.revoked_at}=={'voice'}  # F4
 
 
 def test_legacy_profile_detects_same_revision_text_edit():

@@ -14,6 +14,32 @@ def dependency_hash(project):
         **({"shotCameraOverrides":data["shotCameraOverrides"]} if data.get("shotCameraOverrides") else {})}, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
 
 
+def visual_dependency_hash(project):
+    """只含「画面」相关输入：脚本、视觉变体、选定机位/模式。
+
+    F4：样片确认绑定的是它，而不是整份依赖。改配音/调间隔不再让 ④ 的样片作废，
+    只有脚本或画面本身变了才要求重新接受样片。
+    """
+    data = project.model_dump(mode="json", by_alias=True) if hasattr(project, "model_dump") else project
+    revision = next((r for r in data["scriptRevisions"] if r["id"] == data["currentDraftRevision"]), None)
+    return hashlib.sha256(json.dumps({
+        "script": revision, "visual": data.get("visualVariants"),
+        "selectedVisual": data.get("selectedVisualVariantId"), "cameraMode": data.get("cameraMode"),
+        **({"performanceMode": data["performanceMode"]} if data.get("performanceMode", "legacy") != "legacy" else {}),
+        **({"shotCameraOverrides": data["shotCameraOverrides"]} if data.get("shotCameraOverrides") else {}),
+    }, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
+
+
+def audio_dependency_hash(project):
+    """只含「声音」相关输入：脚本、时间轨、声线绑定、读音词典。"""
+    data = project.model_dump(mode="json", by_alias=True) if hasattr(project, "model_dump") else project
+    revision = next((r for r in data["scriptRevisions"] if r["id"] == data["currentDraftRevision"]), None)
+    return hashlib.sha256(json.dumps({
+        "script": revision, "audio": data.get("audioTimeline"),
+        "bindings": data.get("voiceBindings"), "pronunciation": data.get("pronunciationDict"),
+    }, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
+
+
 def resolve_visual_id(project, payload):
     selected = payload.get("visualVariantId") or project.selected_visual_variant_id
     if selected:

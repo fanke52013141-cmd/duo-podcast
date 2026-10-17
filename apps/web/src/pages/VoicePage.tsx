@@ -117,12 +117,9 @@ export function VoicePage({ projectId }: { projectId: string }) {
   // 阶段状态由后端 stage_svc 权威推导为 stale，前端只展示。
   const timelineStale = !!timeline && !!proj && (timeline.revisionId !== proj.currentDraftRevision || proj.stageProgress.voice === 'stale');
 
-  // 已确认 = 对**当前**时间轨版本的 voice 确认记录。过期时间轨上的历史确认不算
-  // （此前把旧时间轨的确认当作已确认：阶段轨显示「已过期」的同时按钮显示「已确认」、
-  // 下一步放行，两条口径互相矛盾）。
-  const voiceApproved = !timelineStale && !!proj?.approvals.some(
-    (a) => a.kind === 'voice' && a.decision === 'accepted' && timeline && a.inputRevisionId === timeline.revisionId,
-  );
+  // 已确认 = 后端 stage_svc 判定阶段③ 为 done（含"确认绑定当前时间轨 + 输入指纹一致"）。
+  // 前端不再自算确认条件，避免「轨道已过期、按钮仍显示已确认」的两套口径（F3）。
+  const voiceApproved = !timelineStale && proj?.stageProgress.voice === 'done';
 
   // 合成许可：有工程、有话轮、没有正在进行的合成任务即可。
   // 已确认的配音也允许重做（11 报告 P2-16 + v3.1 死锁解除：重合成会替换当前时间轨
@@ -388,7 +385,7 @@ export function VoicePage({ projectId }: { projectId: string }) {
           <div className="hf-ins-sec">
             <h4>依赖提示</h4>
             <ul className="hf-ins-list">
-              <li>阶段② 脚本确认：{proj?.approvals.some((a) => a.kind === 'script' && a.decision === 'accepted') ? '已通过' : '未确认'}</li>
+              <li>阶段② 脚本确认：{proj?.stageProgress.script === 'done' ? '已通过' : '未确认'}</li>
               <li>时间轨过期：{timelineStale ? '是 · 脚本话轮改动后需重新合成' : '否 · 时间轨与当前草稿一致'}</li>
             </ul>
           </div>

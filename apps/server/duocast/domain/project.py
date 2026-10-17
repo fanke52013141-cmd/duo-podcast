@@ -85,6 +85,9 @@ class Approval(BaseModel):
     reason_target: Optional[StageId] = None
     note: str = ""
     at: str = ""
+    # F2：确认是审计记录，不物理删除；因上游变更失效时打上撤销时间与原因。
+    revoked_at: Optional[str] = None
+    revoked_reason: str = ""
 
 
 class Project(BaseModel):
