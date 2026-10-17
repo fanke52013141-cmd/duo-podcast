@@ -89,6 +89,10 @@ export function VoicePage({ projectId }: { projectId: string }) {
     (j) => j.kind === 'tts.synthesize' && ['queued', 'running', 'recovering'].includes(j.status),
   );
   const synthesizing = !!synthJob;
+  // 最近一次成功的整期合成是否真的写回了当前时间轨。False = 合成期间脚本被改动，
+  // 结果只存进音频历史（后端 meta.applied=false），必须提示而不是显示"成功但没变"。
+  const lastSynth = (jobs.data ?? []).find((j) => j.kind === 'tts.synthesize' && j.status === 'succeeded');
+  const synthNotApplied = (lastSynth?.result?.meta as { applied?: boolean } | undefined)?.applied === false;
   // voiceApproved 的推导放在 timelineStale 之后（见下方注释：过期时间轨上的历史确认不算）。
 
   const bindingsPayload = useMemo(() => {
@@ -148,6 +152,11 @@ export function VoicePage({ projectId }: { projectId: string }) {
       }
     } else if (j.status === 'failed') {
       setError(`试听失败：${j.error ?? '引擎不可用'}`);
+    } else if (j.status === 'cancelled' || j.status === 'cancel_requested') {
+      // 取消也要终结本地状态：否则按钮会永久停在 disabled，只能刷新页面。
+      setError('试听已取消，可重新发起。');
+    } else if (j.status === 'unknown') {
+      setError('试听任务状态未知（可能已被清理），可重新发起。');
     } else return;
     setAuditionJob(null);
   }, [audJob.data, auditionJob]);
@@ -417,6 +426,12 @@ export function VoicePage({ projectId }: { projectId: string }) {
 
       <div className="hf-body">
         {error && <Alert tone="danger" onClose={dismissError}>{error}</Alert>}
+        {synthNotApplied && (
+          <Alert tone="warning">
+            上一次整期合成期间脚本被改动：结果已存入音频历史，但<b>没有替换当前时间轨</b>。
+            请基于最新脚本重新生成整期配音后再确认。
+          </Alert>
+        )}
         {!proj?.scriptRevisions.length && (
           <Alert tone="warning">
             还没有脚本。请先在阶段①创建本期并生成对话。

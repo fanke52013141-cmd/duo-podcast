@@ -5,12 +5,28 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException, Query, Request
 
 from ..jobs.manager import JobManager
+from ..storage.project_store import InvalidProjectInput
 
 router = APIRouter(prefix="/api/jobs", tags=["jobs"])
 
 
 def _manager(request: Request) -> JobManager:
     return request.app.state.job_manager
+
+
+def _project_exists(store, project_id: str) -> bool | None:
+    """任务所属工程是否存在；None = 无法判定（损坏清单的占位任务）。
+
+    占位任务的 project_id 可能是空串或非法 id，直接 store.load 会抛
+    InvalidProjectInput，让整个 /api/jobs 变成 422。这类任务必须保留在列表里
+    （否则它在 UI 上凭空消失），只是不参与工程过滤。
+    """
+    if not project_id:
+        return None
+    try:
+        return store.load(project_id) is not None
+    except InvalidProjectInput:
+        return None
 
 
 @router.get("")
@@ -23,7 +39,8 @@ async def list_jobs(request: Request, project_id: str | None = Query(None, alias
     store = request.app.state.project_store
     out = []
     for j in jobs:
-        if store.load(j.project_id) is None:
+        # None = 占位任务（工程 id 损坏/为空）：保留在列表里，否则会在 UI 上凭空消失。
+        if _project_exists(store, j.project_id) is False:
             continue
         d = j.model_dump(mode="json", by_alias=True)
         # 排队位次（12 报告 C-1）：前端任务卡显示「队列第 N 位」

@@ -39,7 +39,8 @@ def apply_pronunciation(texts: list[str], pronunciation: list[dict] | None) -> l
     """读音词典替换（01 §4.2）：按词条顺序把 term 替换为 read。空词条与空读法跳过。"""
     entries = [(str(e.get("term", "")), str(e.get("read", "")))
                for e in (pronunciation or []) if isinstance(e, dict)]
-    entries = [(t, r) for t, r in entries if t]
+    # 空读法必须一起跳过：只过滤空 term 时，read="" 会把 term 从朗读文本里整段删掉。
+    entries = [(t, r) for t, r in entries if t and r]
     if not entries:
         return texts
     out = []
@@ -234,14 +235,18 @@ async def synthesize_timeline(
     if current is None:
         raise KeyError(project.id)
     patch = {"audio_history": [*current.audio_history, timeline]}
+    applied = False
     # 旧任务始终保留结果，但不可替换已经编辑过的当前配音。
     if (is_full_synthesis and current.revision == project.revision
             and current.current_draft_revision == revision.id):
+        applied = True
         patch.update(audio_timeline=timeline, voice_bindings=voice_bindings,
                      approvals=[a for a in current.approvals if a.kind not in ('voice', 'sample')])
     elif (not is_full_synthesis and current.current_draft_revision == revision.id):
         # 候选本身不替换母轨，但采用时必须按产生候选时的声线配置校验输入指纹。
+        applied = True
         patch["voice_bindings"] = voice_bindings
+    timeline.applied = applied
     store.apply(project.id, patch, expected_revision=current.revision)
     return timeline
 
