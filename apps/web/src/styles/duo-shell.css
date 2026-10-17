@@ -133,7 +133,7 @@ body { margin:0; background:var(--wu-semantic-canvas); color:var(--wu-semantic-t
 @keyframes wu-prog { from { opacity:.55; } to { opacity:1; } }
 
 /* ==================== HF-02 · 编辑对话 ==================== */
-.hf-list { width:100%; max-width:760px; margin:0 auto; }
+.hf-list { width:100%; max-width:760px; margin:0 auto; padding-bottom:28px; }
 .hf-stats { flex:none; display:flex; align-items:center; gap:14px; padding:8px 20px; background:var(--wu-semantic-surface); border-top:1px solid var(--wu-semantic-border); font-size:12px; color:var(--wu-semantic-secondary); flex-wrap:wrap; }
 .hf-toolbar { display:flex; align-items:center; gap:8px; flex-wrap:wrap; background:var(--wu-semantic-surface); border:1px solid var(--wu-semantic-border); border-radius:var(--wu-global-radius-md); padding:8px 12px; margin-bottom:12px; }
 .hf-toolbar .cap { font-size:11.5px; color:var(--wu-semantic-caption); }
@@ -209,6 +209,8 @@ body { margin:0; background:var(--wu-semantic-canvas); color:var(--wu-semantic-t
 
 /* TimelineBar · 全应用唯一深色面（05 §1.5 令牌例外），取值同 hf/vendor/duo-shell.css */
 .hf-timeline { flex:none; height:56px; background:#20242d; display:flex; align-items:center; gap:14px; padding:0 20px; color:#9AA3B2; font-size:12px; position:relative; }
+.hf-tl-playbtn { display:inline-flex; align-items:center; justify-content:center; width:26px; height:26px; background:transparent; color:#cfd6e2; border:1px solid rgba(255,255,255,.18); border-radius:6px; cursor:pointer; }
+.hf-tl-playbtn:hover { background:rgba(255,255,255,.08); color:#fff; }
 .hf-tl-time { display:inline-flex; align-items:center; gap:6px; font-family:var(--wu-global-mono); font-size:11.5px; white-space:nowrap; }
 .hf-tl-tracks { flex:1; display:grid; gap:5px; min-width:0; }
 .hf-tl-track { height:12px; border-radius:6px; background:#2B303B; position:relative; overflow:hidden; }

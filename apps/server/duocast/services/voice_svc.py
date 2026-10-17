@@ -433,15 +433,19 @@ def retime_adopted_audio(store, project_id, gaps, artifacts):
     if not isinstance(gaps, list) or len(gaps) != max(0, len(timeline.units)-1) or any(type(g) is not int or not 0 <= g <= 2000 for g in gaps):
         raise ValueError("间隔必须与话轮数量一致，且为0–2000毫秒整数")
     paths = _paths_for_adopted_units(timeline, artifacts)
-    if len(paths) != len(timeline.units):
-        raise ValueError("已采用的单元音频缺失")
-    for unit in timeline.units:
-        entry = artifacts.by_id(unit.adopted_audio_asset_id)
-        if artifacts._hash_file(paths[unit.id]) != entry["fileHash"]:
-            raise ValueError("单元音频完整性校验失败")
-        with wave.open(paths[unit.id]) as reader:
-            if reader.getnframes() != unit.sample_count or reader.getframerate() != timeline.sample_rate:
-                raise ValueError("单元音频样本数与时间轨不一致")
+    # 演示模式（第五轮实测 A2）：mock TTS 不产出音频文件，全部单元都没有采用音频。
+    # 此时只按新间隔重建偏移与总长；真实引擎下缺文件仍然报错，不能静默降级。
+    demo_retime = not any(unit.adopted_audio_asset_id for unit in timeline.units)
+    if not demo_retime:
+        if len(paths) != len(timeline.units):
+            raise ValueError("已采用的单元音频缺失：请回到「生成整期配音」重新合成后再调整间隔")
+        for unit in timeline.units:
+            entry = artifacts.by_id(unit.adopted_audio_asset_id)
+            if artifacts._hash_file(paths[unit.id]) != entry["fileHash"]:
+                raise ValueError("单元音频完整性校验失败")
+            with wave.open(paths[unit.id]) as reader:
+                if reader.getnframes() != unit.sample_count or reader.getframerate() != timeline.sample_rate:
+                    raise ValueError("单元音频样本数与时间轨不一致")
     result = timeline.model_copy(deep=True)
     result.transition_gap_ms = gaps
     offset = round(result.lead_in_ms * result.sample_rate / 1000)
@@ -451,7 +455,8 @@ def retime_adopted_audio(store, project_id, gaps, artifacts):
         if index < len(gaps):
             offset += round(gaps[index] * result.sample_rate / 1000)
     result.sample_count = offset + round(result.tail_out_ms * result.sample_rate / 1000)
-    result.master_audio_asset_id = _build_master_track(result, paths, result.revision_id, artifacts, artifacts.root)
+    if not demo_retime:
+        result.master_audio_asset_id = _build_master_track(result, paths, result.revision_id, artifacts, artifacts.root)
     store.apply(project_id, {"audio_timeline":result,"audio_history":[*project.audio_history,result],
                 "approvals":[a for a in project.approvals if a.kind not in ("voice","sample")]}, expected_revision=project.revision)
     return result

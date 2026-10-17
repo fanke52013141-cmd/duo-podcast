@@ -9,6 +9,7 @@ import {
 import { STAGE_META, type SourceKind } from '../lib/types';
 import { Alert, Badge, Button, Choice, Field, Icon, Input, SegControl, Tabs, Textarea } from '../components/wu';
 import { AppShell, StageHead } from '../components/AppShell';
+import { useError } from '../lib/useError';
 import { useProjectStore } from '../stores';
 
 type DurationMode = 'auto' | 'approx';
@@ -40,7 +41,7 @@ export function CreateEpisodePage({ projectId }: { projectId: string }) {
   const [approxMinutes, setApproxMinutes] = useState(3);
   const [aspect, setAspect] = useState<'landscape' | 'portrait'>('landscape');
   const [title, setTitle] = useState('');
-  const [error, setError] = useState<string | null>(null);
+  const { error, setError, dismiss: dismissError } = useError();
 
   const proj = project.data;
   useEffect(() => {
@@ -57,8 +58,11 @@ export function CreateEpisodePage({ projectId }: { projectId: string }) {
     return j && (j.status === 'queued' || j.status === 'running' || j.status === 'succeeded' || j.status === 'failed') ? j : undefined;
   }, [jobs.data]);
   const generating = !!genJob && (genJob.status === 'queued' || genJob.status === 'running');
-  const genDone = !!genJob && genJob.status === 'succeeded';
-  const genFailed = !!genJob && genJob.status === 'failed';
+  // 「已生成」必须以工程真实存在脚本为准（第五轮验证：仅看任务成功会被
+  // 工程 ID 复用后的残留任务骗成假成功，阶段②实际为空）。
+  const hasScript = (proj?.scriptRevisions?.length ?? 0) > 0;
+  const genDone = !!genJob && genJob.status === 'succeeded' && hasScript;
+  const genFailed = !!genJob && genJob.status === 'failed' && !hasScript;
 
   const handleGenerate = async () => {
     setError(null);
@@ -103,8 +107,8 @@ export function CreateEpisodePage({ projectId }: { projectId: string }) {
     >
       <StageHead title="创建本期">
         {stageState && stageState !== 'ready' && <Badge tone={STAGE_META[stageState].tone}>{STAGE_META[stageState].label}</Badge>}
+        {/* 版本号（revision）是内部概念，第五轮实测 B3：不再在页头展示。 */}
         <span className="hf-spacer" />
-        {proj && <span className="hf-mono wu-caption">revision {proj.revision}</span>}
       </StageHead>
 
       <div className="hf-cols">
@@ -186,7 +190,7 @@ export function CreateEpisodePage({ projectId }: { projectId: string }) {
                     <a className="hf-link" onClick={() => setView('services')}>去服务设置</a>
                   </Alert>
                 )}
-                {error && <Alert tone="danger">生成失败：{error}</Alert>}
+                {error && <Alert tone="danger" onClose={dismissError}>生成失败：{error}</Alert>}
                 <Button variant="brand" icon="sparkle" disabled={!canGenerate} onClick={handleGenerate}>
                   生成对话
                 </Button>

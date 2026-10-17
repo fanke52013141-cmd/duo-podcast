@@ -16,7 +16,7 @@ from ..domain.project import Project
 from ..services.stage_svc import derive_stage_states
 from ..services.render_inputs import dependency_hash, validate_render_options
 from .voice import _merged_pronunciation
-from ..storage.project_store import ProjectAlreadyExists, ProjectRevisionConflict, ProjectStore
+from ..storage.project_store import InvalidProjectInput, ProjectAlreadyExists, ProjectRevisionConflict, ProjectStore
 
 router = APIRouter(prefix="/api/projects", tags=["projects"])
 
@@ -109,6 +109,28 @@ async def get_project(project_id: str, request: Request) -> dict:
     return _inject_states(request, proj)
 
 
+@router.delete("/{project_id}")
+async def delete_project(project_id: str, request: Request) -> dict:
+    """软删除：工程目录移入 storage/trash/（保留可人工恢复），不从磁盘抹除内容。
+
+    同时把该工程的全部任务记录搬进同一回收站目录（第五轮验证：否则工程 ID 复用后，
+    新工程会看到被删工程的任务历史，阶段①出现「幽灵任务已生成」的假状态）。
+    """
+    store: ProjectStore = _init_store(request)
+    try:
+        # 先移工程、再移任务：用 delete 返回的实际回收站目录做任务落点，
+        # 两者必须同处一个目录，恢复时才能整体搬回（否则只恢复半套数据）。
+        trash_dir = store.delete(project_id)
+        moved_jobs = request.app.state.job_manager.purge_project(project_id, trash_dir)
+    except KeyError as exc:
+        raise HTTPException(404, f"工程不存在: {project_id}") from exc
+    except InvalidProjectInput as exc:
+        raise HTTPException(422, str(exc)) from exc
+    except OSError as exc:
+        raise HTTPException(500, f"删除失败（目录被占用或权限不足）: {exc}") from exc
+    return {"deleted": project_id, "jobsMoved": moved_jobs}
+
+
 def _validate_confirm_bindings(store: ProjectStore, project_id: str, approvals: list) -> None:
     """新增的默认确认点必须绑定当前草稿；历史确认原样透传（只追加不改写，01 §13.2）。"""
     current = store.load(project_id)
@@ -155,10 +177,20 @@ async def patch_project(project_id: str, payload: dict, request: Request) -> dic
         if approval.get("kind") == "sample" and spec.get("sampleJobId"):
             job = request.app.state.job_manager.get(spec["sampleJobId"])
             current = store.load(project_id)
+            result = (job.result if job is not None else None) or {}
+            # 演示样片无真实产物（artifactIds 为空）：只要求任务成功且依赖一致；
+            # 真实样片仍必须携带与任务产物一致的 sampleArtifactId（第五轮实测 A1：
+            # 演示模式下前端传空 artifactId，"None not in []" 恒真导致接受永远 409）。
+            demo_sample = bool(result.get("simulated")) and not result.get("artifactIds")
+            artifact_ok = demo_sample or spec.get("sampleArtifactId") in result.get("artifactIds", [])
             if (job is None or job.project_id != project_id or job.status.value != "succeeded"
-                    or spec.get("sampleArtifactId") not in (job.result or {}).get("artifactIds", [])
+                    or not artifact_ok
                     or job.input_snapshot.get("dependencyHash") != dependency_hash(current)):
-                raise HTTPException(409, "样片与当前声画输入不一致，请重新预览")
+                raise HTTPException(
+                    409,
+                    "样片无法接受：任务不存在、未成功、产物不符，或生成样片后脚本/配音/构图又改动过。"
+                    "请重新生成样片后再接受；若反复出现，请回到阶段②③检查是否还有未确认的改动。",
+                )
             spec["dependencyHash"] = dependency_hash(current)
             validate_render_options(current, {}, _merged_pronunciation(request, current), real_video=False)
     try:

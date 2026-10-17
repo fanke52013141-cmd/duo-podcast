@@ -11,6 +11,7 @@ import {
 import type { AudioTimeline, Job, Project, SynthesisUnit } from '../lib/types';
 import { Alert, Badge, Button, Icon } from '../components/wu';
 import { AppShell, FootBar, StageHead, TimelineBar } from '../components/AppShell';
+import { useError } from '../lib/useError';
 import { useProjectStore, useServiceStore } from '../stores';
 
 const RESOLUTION_OPTIONS = [
@@ -92,7 +93,7 @@ export function RenderPage({ projectId }: { projectId: string }) {
   const [resolutionId, setResolutionId] = useState('480p');
   const [codec, setCodec] = useState(CODECS[0]);
   const [fps, setFps] = useState(25);
-  const [error, setError] = useState<string | null>(null);
+  const { error, setError, dismiss: dismissError } = useError();
 
   const timeline: AudioTimeline | null = proj?.audioTimeline ?? null;
   const segments = useMemo(() => (timeline ? planSegments(timeline) : []), [timeline]);
@@ -281,7 +282,7 @@ export function RenderPage({ projectId }: { projectId: string }) {
         {simulated && <Alert tone="warning">当前为流程演示，不生成 MP4、WAV 或 SRT；下方分段为示意，真实模型效果与规格尚未验证。</Alert>}
         {timeline && totalSecs > 300 && <Alert tone="danger">完整音轨超过 5 分钟，请先精简内容，不会自动截断尾句。</Alert>}
         {timeline && timeline.revisionId !== proj?.currentDraftRevision && <Alert tone="warning">当前配音属于旧脚本，请先生成或采用当前版本配音。</Alert>}
-        {error && <Alert tone="danger">{error}</Alert>}
+        {error && <Alert tone="danger" onClose={dismissError}>{error}</Alert>}
         {!timeline && (
           <Alert tone="warning">
             还没有时间轨，无法渲染。请先在阶段③合成并确认配音。

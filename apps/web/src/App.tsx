@@ -2,7 +2,7 @@
    DuoCast 前端 · 应用路由（视图切换）+ SSE 事件接线 + 能力快照同步
    视图：home（无工程全屏）｜五阶段（01 §3）｜资产库 / 服务设置 / 任务中心
    ========================================================================== */
-import { useEffect } from 'react';
+import { Component, useEffect, type ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useCapabilities, useProject } from './lib/api';
 import { startSse } from './lib/sse';
@@ -18,6 +18,36 @@ import { RenderPage } from './pages/RenderPage';
 import { AssetsPage } from './pages/AssetsPage';
 import { ServicesPage } from './pages/ServicesPage';
 import { TasksPage } from './pages/TasksPage';
+
+/* 页面渲染崩溃兜底（第五轮实测 A6：打开工程偶发整页白屏）。
+   捕获渲染期异常后给出可操作的恢复界面，而不是无提示白屏。 */
+class PageErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
+  state = { error: null as Error | null };
+
+  static getDerivedStateFromError(error: Error) {
+    return { error };
+  }
+
+  render() {
+    if (this.state.error) {
+      return (
+        <div className="wu-empty" style={{ minHeight: '60vh' }}>
+          <h3>页面出现了一个错误</h3>
+          <p className="wu-muted" style={{ maxWidth: 520, margin: '8px auto 16px' }}>
+            {this.state.error.message || '未知渲染错误'}。你的工程数据已保存；重试或返回工程列表均可继续。
+          </p>
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
+            <Button variant="brand" onClick={() => this.setState({ error: null })}>重试</Button>
+            <Button variant="secondary" onClick={() => { useProjectStore.getState().leaveProject(); this.setState({ error: null }); }}>
+              返回工程列表
+            </Button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 function WorkspacePage({ projectId, view }: { projectId: string; view: string }) {
   const project = useProject(projectId);
@@ -99,5 +129,9 @@ export default function App() {
   if (!currentProjectId || view === 'home') {
     return <HomePage />;
   }
-  return <WorkspacePage projectId={currentProjectId} view={view} />;
+  return (
+    <PageErrorBoundary>
+      <WorkspacePage projectId={currentProjectId} view={view} />
+    </PageErrorBoundary>
+  );
 }

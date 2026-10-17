@@ -11,13 +11,42 @@ import type {
 
 const BASE = '/api';
 
+/* 带状态码的错误对象：humanizeError 会改写 message 文案，不能再靠
+   message 前缀判断状态码（否则冲突重放等按码分支全部失效）。 */
+export class ApiError extends Error {
+  status: number;
+  constructor(status: number, message: string) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+  }
+}
+
 function is409(err: unknown): boolean {
-  return err instanceof Error && err.message.startsWith('409');
+  return err instanceof ApiError && err.status === 409;
+}
+
+/* 错误可读化（第五轮实测 A9）：把「409 {"detail":"..."}」原文翻译成
+   「人话结论 + 状态码 + 服务端原因」，各页面 Alert 直接展示该文案。 */
+export function humanizeError(status: number, bodyText: string): string {
+  let detail = bodyText;
+  try {
+    const parsed = JSON.parse(bodyText) as { detail?: unknown };
+    if (parsed && typeof parsed.detail === 'string') detail = parsed.detail;
+    else if (parsed) detail = JSON.stringify(parsed.detail ?? parsed);
+  } catch { /* 非 JSON 响应体，原样展示 */ }
+  const head = status === 400 ? '请求无效'
+    : status === 404 ? '目标不存在（可能已被删除）'
+    : status === 409 ? '操作被拒绝：当前状态不允许'
+    : status === 422 ? '提交的内容未通过校验'
+    : status >= 500 ? '服务内部错误'
+    : '请求失败';
+  return `${head}（${status}）：${detail}`;
 }
 
 async function getJson<T>(path: string): Promise<T> {
   const res = await fetch(`${BASE}${path}`);
-  if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
+  if (!res.ok) throw new ApiError(res.status, humanizeError(res.status, await res.text()));
   return res.json() as Promise<T>;
 }
 
@@ -27,7 +56,7 @@ async function sendJson<T>(path: string, method: 'POST' | 'PATCH' | 'DELETE', bo
     headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
-  if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
+  if (!res.ok) throw new ApiError(res.status, humanizeError(res.status, await res.text()));
   return res.json() as Promise<T>;
 }
 
@@ -140,6 +169,18 @@ export const usePatchProject = () => {
     onSuccess: (proj) => {
       qc.setQueryData(['project', proj.id], proj);
       qc.invalidateQueries({ queryKey: ['projects'] });
+    },
+  });
+};
+
+/* 删除工程（软删除：服务端移入 storage/trash/，可人工恢复）。 */
+export const useDeleteProject = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (projectId: string) => sendJson<{ deleted: string }>(`/projects/${projectId}`, 'DELETE'),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['projects'] });
+      qc.removeQueries({ queryKey: ['project'] });
     },
   });
 };
@@ -438,7 +479,7 @@ async function uploadFile<T>(path: string, file: File, extra?: Record<string, st
   fd.append('file', file);
   Object.entries(extra ?? {}).forEach(([k, v]) => fd.append(k, v));
   const res = await fetch(`${BASE}${path}`, { method: 'POST', body: fd });
-  if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
+  if (!res.ok) throw new ApiError(res.status, humanizeError(res.status, await res.text()));
   return res.json() as Promise<T>;
 }
 

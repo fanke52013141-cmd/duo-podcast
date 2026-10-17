@@ -37,6 +37,16 @@ export function TopBar({ project }: { project: Project | null }) {
       <button type="button" className="hf-brand" onClick={leaveProject}>
         <span className="hf-mark"><i /><i /></span>双声播客工坊
       </button>
+      {/* 显式返回入口（第五轮实测 A7）：logo 点击之外再给一条稳定路径，
+          用户不再只依赖不明显的品牌按钮返回工程列表。 */}
+      {project && (
+        <button
+          type="button"
+          className="hf-link"
+          style={{ background: 'none', border: 'none', padding: 0, fontSize: 12.5, cursor: 'pointer' }}
+          onClick={leaveProject}
+        >‹ 工程列表</button>
+      )}
       {project && <span className="hf-proj">{project.id} · {project.title}</span>}
       <span className="hf-spacer" />
       <span className="hf-vram">{banner}</span>
@@ -131,6 +141,28 @@ export function TimelineBar({
   curSecs?: string;
   labels?: React.ReactNode[];
 }) {
+  // 演示播放（第五轮实测 A5）：真实音频接入前，播放按钮驱动播放头匀速走完时间轨，
+  // 让「试听」阶段有可感知的播放反馈；真实引擎接入后此按钮可切换为播放母轨产物。
+  const [demoPlaying, setDemoPlaying] = React.useState(false);
+  const [demoSecs, setDemoSecs] = React.useState(0);
+  const totalSecs = timeline && timeline.sampleRate > 0 ? timeline.sampleCount / timeline.sampleRate : 0;
+  React.useEffect(() => {
+    if (!demoPlaying) return;
+    const id = window.setInterval(() => {
+      setDemoSecs((s) => {
+        if (s + 0.1 >= totalSecs) {
+          setDemoPlaying(false);
+          return 0;
+        }
+        return s + 0.1;
+      });
+    }, 100);
+    return () => window.clearInterval(id);
+  }, [demoPlaying, totalSecs]);
+  React.useEffect(() => { setDemoPlaying(false); setDemoSecs(0); }, [timeline?.revisionId]);
+  const showDemo = demoPlaying || demoSecs > 0;
+  const shownPct = showDemo && totalSecs > 0 ? (demoSecs / totalSecs) * 100 : playPct;
+
   if (!timeline) return null;
   const units = timeline.units ?? [];
   const total = timeline.sampleCount || 0;
@@ -146,18 +178,33 @@ export function TimelineBar({
     };
   }).filter(Boolean) as { id: string; spk: string; left: number; width: number; mark: number }[];
 
+  const fmt = (secs: number) => {
+    const m = Math.floor(secs / 60);
+    const s = Math.floor(secs % 60);
+    const d = Math.floor((secs - Math.floor(secs)) * 10);
+    return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}.${d}`;
+  };
+
   return (
     <div className="hf-timeline" aria-label="时间轨">
       <span className="hf-tl-time">
-        <Icon name="play" size={16} />
-        {curSecs} / {fmtDur(total, timeline.sampleRate)}
+        <button
+          type="button"
+          className="hf-tl-playbtn"
+          aria-label={demoPlaying ? '暂停演示播放' : '演示播放（无声音，播放头走动）'}
+          title={demoPlaying ? '暂停' : '演示播放：真实音频接入前，用播放头走动预览时间轴'}
+          onClick={() => setDemoPlaying((p) => !p)}
+        >
+          <Icon name={demoPlaying ? 'pause' : 'play'} size={16} />
+        </button>
+        {showDemo ? fmt(demoSecs) : curSecs} / {fmtDur(total, timeline.sampleRate)}
       </span>
       <div className="hf-tl-tracks">
         <div className="hf-tl-track">
           {segs.map((s) => (
             <span key={s.id} className={`hf-tl-seg ${s.spk}`} style={{ left: `${s.left}%`, width: `${s.width}%` }} />
           ))}
-          <span className="hf-tl-play" style={{ left: `${playPct}%` }} />
+          <span className="hf-tl-play" style={{ left: `${shownPct}%` }} />
         </div>
         <div className="hf-tl-track" style={{ height: 8 }}>
           {segs.map((s) => (

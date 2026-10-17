@@ -17,8 +17,14 @@ def _manager(request: Request) -> JobManager:
 async def list_jobs(request: Request, project_id: str | None = Query(None, alias="projectId")) -> list[dict]:
     manager = _manager(request)
     jobs = manager.list(project_id)
+    # 工程已删除的任务不再返回（第五轮验证：工程 ID 复用后，残留任务会让
+    # 新工程在阶段①看到「幽灵任务已生成」的假状态；删除时已随工程入回收站，
+    # 此处兜底过滤历史遗留数据）。
+    store = request.app.state.project_store
     out = []
     for j in jobs:
+        if store.load(j.project_id) is None:
+            continue
         d = j.model_dump(mode="json", by_alias=True)
         # 排队位次（12 报告 C-1）：前端任务卡显示「队列第 N 位」
         d["queuePosition"] = manager.queue_position(j)

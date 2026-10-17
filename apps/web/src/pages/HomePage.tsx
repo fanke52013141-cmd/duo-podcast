@@ -12,9 +12,9 @@
      .wu-caption  → 「最后编辑 MM-DD」
      .wu-btn      → 默认(primary) sm 实心「继续制作」，撑满卡片宽度
    ========================================================================== */
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
-  useCreateProject, useCreateTemplate, useJobs, usePatchProject, useProjects, useTemplates,
+  useCreateProject, useCreateTemplate, useDeleteProject, useJobs, usePatchProject, useProjects, useTemplates,
 } from '../lib/api';
 import {
   currentStageOf, formatEditedAt, outputVersionLabel, SPEAKERS, type Job, type ProgramTemplate,
@@ -90,6 +90,7 @@ export function HomePage() {
   const { data: jobs } = useJobs();
   const createProject = useCreateProject();
   const patchProject = usePatchProject();
+  const deleteProject = useDeleteProject();
   const createTemplate = useCreateTemplate();
   const templates = useTemplates();
   const tplList: ProgramTemplate[] = templates.data ?? [];
@@ -98,6 +99,17 @@ export function HomePage() {
   const [templateId, setTemplateId] = useState<string>('blank');
   const [opsTarget, setOpsTarget] = useState<Project | null>(null);
   const [renameTo, setRenameTo] = useState('');
+  // 工程管理（第五轮实测 A8）：搜索 + 阶段筛选 + 软删除
+  const [searchText, setSearchText] = useState('');
+  const [stageFilter, setStageFilter] = useState('all');
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const filteredProjects = useMemo(() => projects.filter((p) => {
+    const q = searchText.trim().toLowerCase();
+    if (q && !`${p.id} ${p.title}`.toLowerCase().includes(q)) return false;
+    if (stageFilter !== 'all' && currentStageOf(p).id !== stageFilter) return false;
+    return true;
+  }), [projects, searchText, stageFilter]);
   // 保存为模板：从既有工程提取配置（画幅 + A/B 声线引用）
   const [saveTplOpen, setSaveTplOpen] = useState(false);
   const [saveTplProjectId, setSaveTplProjectId] = useState<string>('');
@@ -147,6 +159,8 @@ export function HomePage() {
   const openOps = (p: Project) => {
     setOpsTarget(p);
     setRenameTo(p.title);
+    setDeleteError(null);
+    setConfirmDelete(false);
   };
 
   const handleRename = () => {
@@ -160,6 +174,17 @@ export function HomePage() {
         onError: () => { /* 冲突/失败保留弹层，错误提示见下方 alert */ },
       },
     );
+  };
+
+  // 删除采用应用内两步确认（第五轮实测 A8）：第一次点变「确认删除」，再点才执行；
+  // 不用 window.confirm——阻塞式原生框点击一次后按钮无变化，用户容易困惑。
+  const handleDelete = () => {
+    if (!opsTarget) return;
+    if (!confirmDelete) { setConfirmDelete(true); return; }
+    deleteProject.mutate(opsTarget.id, {
+      onSuccess: () => { setOpsTarget(null); setDeleteError(null); setConfirmDelete(false); },
+      onError: (e) => { setDeleteError((e as Error).message); setConfirmDelete(false); },
+    });
   };
 
   return (
@@ -199,8 +224,27 @@ export function HomePage() {
             <section>
               <div className="hf-sec-head">
                 <h2>最近工程</h2>
-                <span className="wu-caption">{projects.length} 个</span>
+                <span className="wu-caption">{filteredProjects.length}{searchText || stageFilter !== 'all' ? ` / ${projects.length}` : ''} 个</span>
                 <span className="hf-spacer" />
+                <Input
+                  aria-label="搜索工程"
+                  placeholder="搜索工程 ID 或名称"
+                  value={searchText}
+                  onChange={(e) => setSearchText(e.target.value)}
+                  style={{ width: 180, height: 30 }}
+                />
+                <select
+                  className="wu-input" aria-label="按阶段筛选"
+                  value={stageFilter} onChange={(e) => setStageFilter(e.target.value)}
+                  style={{ width: 'auto', height: 30 }}
+                >
+                  <option value="all">全部阶段</option>
+                  <option value="create">① 创建本期</option>
+                  <option value="script">② 编辑对话</option>
+                  <option value="voice">③ 试听配音</option>
+                  <option value="visual">④ 预览画面</option>
+                  <option value="render">⑤ 生成导出</option>
+                </select>
                 <Button
                   variant="secondary" size="sm" icon="folder"
                   onClick={() => alert('打开工程目录：暂未开放（设计稿为调起系统资源管理器定位工程目录）')}
@@ -208,9 +252,13 @@ export function HomePage() {
                   打开工程目录
                 </Button>
               </div>
-              <div className="hf-grid3">
-                {projects.map((p) => <ProjectCard key={p.id} p={p} jobs={jobs} onOps={openOps} />)}
-              </div>
+              {filteredProjects.length === 0 && projects.length > 0 ? (
+                <Empty title="没有匹配的工程" desc="换个关键词，或把阶段筛选切回「全部阶段」。" />
+              ) : (
+                <div className="hf-grid3">
+                  {filteredProjects.map((p) => <ProjectCard key={p.id} p={p} jobs={jobs} onOps={openOps} />)}
+                </div>
+              )}
             </section>
 
             <section>
@@ -366,6 +414,12 @@ export function HomePage() {
         title={opsTarget ? `${opsTarget.id} · 工程操作` : '工程操作'}
         footer={
           <>
+            <Button
+              variant="danger" size="sm" icon="trash" busy={deleteProject.isPending}
+              disabled={patchProject.isPending} onClick={handleDelete}
+              title={confirmDelete ? '再次点击确认删除（软删除，可人工恢复）' : undefined}
+            >{confirmDelete ? '确认删除？' : '删除工程'}</Button>
+            <span className="hf-spacer" />
             <Button variant="ghost" onClick={() => setOpsTarget(null)}>取消</Button>
             <Button variant="brand" busy={patchProject.isPending} onClick={handleRename}>保存名称</Button>
           </>
@@ -380,8 +434,11 @@ export function HomePage() {
             重命名失败：{(patchProject.error as Error)?.message}
           </div>
         )}
+        {deleteError && (
+          <div className="wu-alert" data-tone="danger">删除失败：{deleteError}</div>
+        )}
         <div className="wu-alert" data-tone="muted">
-          「打开工程目录」「删除工程」尚未接入后端（后者属危险操作，需先有软删除与回收站语义）。
+          删除为软删除：工程目录移入 storage/trash/，可人工恢复。「打开工程目录」尚未开放。
         </div>
       </Modal>
     </div>

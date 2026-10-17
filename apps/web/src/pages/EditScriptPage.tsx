@@ -12,6 +12,7 @@ import {
 import { type Job, type Project, type PronunciationEntry, type ScriptRevision, type Turn } from '../lib/types';
 import { Alert, Badge, Button, Choice, Icon, Input, Modal, Textarea } from '../components/wu';
 import { AppShell, FootBar, StageHead } from '../components/AppShell';
+import { useError } from '../lib/useError';
 import { useProjectStore } from '../stores';
 
 const INTENTS: { id: Turn['intent']; label: string }[] = [
@@ -133,7 +134,7 @@ export function EditScriptPage({ projectId }: { projectId: string }) {
   const [editText, setEditText] = useState('');
   const [candidate, setCandidate] = useState<{ turnIds: string[]; turns: Turn[]; jobId: string } | null>(null);
   const [dictOpen, setDictOpen] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { error, setError, dismiss: dismissError } = useError();
   const saveTimer = useRef<number | null>(null);
   // 保存流水线状态：未保存 / 保存中 / 已保存 / 保存失败。确认与改写必须先过保存屏障。
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
@@ -533,7 +534,7 @@ export function EditScriptPage({ projectId }: { projectId: string }) {
               <a className="hf-link" onClick={() => setView('voice')}>前往阶段③ 试听配音</a>
             </Alert>
           )}
-          {error && <Alert tone="danger">{error}</Alert>}
+          {error && <Alert tone="danger" onClose={dismissError}>{error}</Alert>}
           {!viewIsDraft && revision && (
             <Alert tone="warning">正在查看历史版本 {revision.id}（非当前草稿）；编辑将基于该版本创建新草稿。</Alert>
           )}
@@ -673,11 +674,7 @@ export function EditScriptPage({ projectId }: { projectId: string }) {
 
             <div className="wu-row" style={{ gap: 12, margin: '2px 0 8px' }}>
               <Button variant="secondary" size="sm" icon="plus" onClick={addTurn}>发言</Button>
-              
-            </div>
-            <div className="wu-row" style={{ gap: 12, marginBottom: 6 }}>
               <Button variant="secondary" size="sm" icon="edit" onClick={() => setDictOpen(true)}>读音词典</Button>
-              
             </div>
           </div>
         </div>
@@ -689,7 +686,7 @@ export function EditScriptPage({ projectId }: { projectId: string }) {
         <span className="hf-pos">话轮 {turns.length}</span>
         <span>A {speakerCount.A} / B {speakerCount.B}</span>
         <span>字数 {charCount.toLocaleString()}</span>
-        <span>预估 {fmtMs(estimateSecs(turns))}（基于历史语速）</span>
+        <span>预估 {fmtMs(estimateSecs(turns))}（按默认语速估算）</span>
         <span className="hf-spacer" />
         <span className="wu-caption">
           {saveState === 'saving' ? '保存中…'
@@ -802,7 +799,7 @@ function DictModal({ open, onClose, hintPron, project }: {
           </div>
         ))}
         {projectEntries.length === 0 && globalEntries.length === 0 && (
-          <p className="wu-caption">还没有词条。新增后立即保存：本工程随工程落盘，全局存机器设置。</p>
+          <p className="wu-caption">还没有词条。新增后立即保存：本工程词条随工程一起保存，全局词条对所有工程生效。</p>
         )}
       </div>
     </Modal>

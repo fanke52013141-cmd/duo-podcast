@@ -149,6 +149,29 @@ class JobManager:
             jobs = [j for j in jobs if j.project_id == project_id]
         return sorted(jobs, key=lambda j: j.created_at, reverse=True)
 
+    def purge_project(self, project_id: str, trash_dir) -> int:
+        """工程删除时把其全部任务记录移入回收站（第五轮验证发现：工程 ID 复用后，
+        新工程会看到被删工程的成功任务，阶段①被「幽灵任务」误标为已生成）。
+
+        内存态剔除 + 磁盘任务目录整体搬移；返回搬移的任务数。trash_dir 由调用方给到
+        本次删除对应的回收站目录，任务记录与工程数据放同一处，便于一起恢复。
+        """
+        moved = 0
+        trash_path = Path(trash_dir)
+        for job in [j for j in self._jobs.values() if j.project_id == project_id]:
+            src = self.root / job.id
+            if src.exists():
+                (trash_path / "jobs").mkdir(parents=True, exist_ok=True)
+                dest = trash_path / "jobs" / job.id
+                try:
+                    os.replace(src, dest)
+                except OSError:
+                    import shutil
+                    shutil.move(str(src), str(dest))
+            self._jobs.pop(job.id, None)
+            moved += 1
+        return moved
+
     def _find_by_token(self, client_token: str, project_id: str, kind: str) -> Optional[Job]:
         if not client_token:
             return None

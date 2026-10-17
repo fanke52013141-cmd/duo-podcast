@@ -11,6 +11,7 @@ import {
 import type { Job, ScriptRevision, VisualVariant } from '../lib/types';
 import { Alert, Badge, Button, Icon } from '../components/wu';
 import { AppShell, FootBar, StageHead, TimelineBar } from '../components/AppShell';
+import { useError } from '../lib/useError';
 import { useProjectStore, useServiceStore } from '../stores';
 
 const ASPECTS: { id: 'landscape' | 'portrait'; label: string }[] = [
@@ -70,7 +71,7 @@ export function VisualPage({ projectId }: { projectId: string }) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [tab, setTab] = useState<'compose' | 'shot' | 'sample'>('compose');
   const [preset, setPreset] = useState(SHOT_PRESETS[0]);
-  const [error, setError] = useState<string | null>(null);
+  const { error, setError, dismiss: dismissError } = useError();
   const [visualMode, setVisualMode] = useState<VisualMode>(() => localStorage.getItem(`duocast-visual-mode-${projectId}`) === 'overShoulder' ? 'overShoulder' : 'twoShot');
   useEffect(() => { localStorage.setItem(`duocast-visual-mode-${projectId}`, visualMode); }, [projectId, visualMode]);
   const [lockedCameras, setLockedCameras] = useState<Record<'A' | 'B', boolean>>({ A: false, B: false });
@@ -347,19 +348,22 @@ export function VisualPage({ projectId }: { projectId: string }) {
             </p>
           </div>
 
-          <div className="hf-ins-sec">
-            <h4>坐标信息</h4>
-            <div className="hf-coords"><span>原图</span><b>{aspect === 'portrait' ? '1080 × 1920' : '1920 × 1080'}</b></div>
-            <div className="hf-coords"><span>规范化</span><b>0–1 · 人物区域</b></div>
-            <div className="hf-coords">
-              <span>{visualMode === 'twoShot' ? '模型输入' : '机位状态'}</span>
-              <b>{visualMode === 'twoShot' ? (selected ? `scale ${selected.modelInputTransform.scale} · pad ${selected.modelInputTransform.pad}` : '—') : (otsReady ? 'A / B 两机位已准备' : '等待两机位素材')}</b>
+          {/* 坐标信息是底层实现细节（第五轮实测 C1）：默认折叠，需要核对坐标时再展开。 */}
+          <details className="hf-ins-sec">
+            <summary style={{ cursor: 'pointer', fontWeight: 600, fontSize: 13 }}>坐标信息（高级）</summary>
+            <div style={{ marginTop: 6 }}>
+              <div className="hf-coords"><span>原图</span><b>{aspect === 'portrait' ? '1080 × 1920' : '1920 × 1080'}</b></div>
+              <div className="hf-coords"><span>规范化</span><b>0–1 · 人物区域</b></div>
+              <div className="hf-coords">
+                <span>{visualMode === 'twoShot' ? '模型输入' : '机位状态'}</span>
+                <b>{visualMode === 'twoShot' ? (selected ? `scale ${selected.modelInputTransform.scale} · pad ${selected.modelInputTransform.pad}` : '—') : (otsReady ? 'A / B 两机位已准备' : '等待两机位素材')}</b>
+              </div>
+              <div className="hf-coords">
+                <span>{visualMode === 'twoShot' ? '变换' : '锁定镜头'}</span>
+                <b>{visualMode === 'twoShot' ? (selected ? `偏移 (${selected.modelInputTransform.offsetX}, ${selected.modelInputTransform.offsetY})` : '线性仿射 · 底图与 mask 同一几何变换') : `${lockedCameras.A ? 'A 已锁定' : 'A 可调整'} · ${lockedCameras.B ? 'B 已锁定' : 'B 可调整'}`}</b>
+              </div>
             </div>
-            <div className="hf-coords">
-              <span>{visualMode === 'twoShot' ? '变换' : '锁定镜头'}</span>
-              <b>{visualMode === 'twoShot' ? (selected ? `偏移 (${selected.modelInputTransform.offsetX}, ${selected.modelInputTransform.offsetY})` : '线性仿射 · 底图与 mask 同一几何变换') : `${lockedCameras.A ? 'A 已锁定' : 'A 可调整'} · ${lockedCameras.B ? 'B 已锁定' : 'B 可调整'}`}</b>
-            </div>
-          </div>
+          </details>
 
           <div className="hf-ins-sec">
             <h4>确认点</h4>
@@ -416,7 +420,7 @@ export function VisualPage({ projectId }: { projectId: string }) {
       </StageHead>
 
       <div className="hf-body" ref={bodyRef}>
-        {error && <Alert tone="danger">{error}</Alert>}
+        {error && <Alert tone="danger" onClose={dismissError}>{error}</Alert>}
         {otsNotice && visualMode === 'overShoulder' && <Alert tone="info">{otsNotice}</Alert>}
         {!voiceApproved && (
           <Alert tone="warning">

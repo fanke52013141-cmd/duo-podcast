@@ -257,10 +257,15 @@ export function TasksPage() {
 
           {selected?.result && (
             <div className="hf-ins-sec">
-              <h4>结果</h4>
-              <pre className="hf-mono" style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', background: 'var(--wu-semantic-muted)', padding: 8, borderRadius: 8, margin: 0, fontSize: 10.5 }}>
-                {JSON.stringify(selected.result, null, 2)}
-              </pre>
+              {/* 结果 JSON 是技术细节（第五轮实测 C2）：默认折叠，与「输入快照」一致的可展开口径 */}
+              <details className="hf-adv">
+                <summary>原始结果（JSON）</summary>
+                <div className="hf-adv-body">
+                  <pre className="hf-mono" style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', background: 'var(--wu-semantic-muted)', padding: 8, borderRadius: 8, margin: 0, fontSize: 10.5 }}>
+                    {JSON.stringify(selected.result, null, 2)}
+                  </pre>
+                </div>
+              </details>
             </div>
           )}
 

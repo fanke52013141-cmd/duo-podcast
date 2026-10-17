@@ -150,6 +150,35 @@ class ProjectStore:
             return
         self._debounce_task = loop.create_task(self._flush_later())
 
+    # ---- 软删除（第五轮实测 A8：工程列表只增不减，用户无法清理） ----
+    def trash_dir_for(self, project_id: str) -> Path:
+        """确定性回收站目录：storage/trash/<id>-<utc时间戳>；工程与任务记录同处。"""
+        stamp = _now_iso().replace(":", "").replace("-", "").replace(".", "").replace("+", "")
+        return self.root.parent / "trash" / f"{project_id}-{stamp}"
+
+    def delete(self, project_id: str, trash_dir: Path | None = None) -> Path:
+        """把工程目录整体移入回收站（root 同级 trash/），可人工恢复；内存态同步剔除。
+
+        返回实际使用的回收站目录：调用方（API 层）据此把该工程的任务记录搬进
+        同一个目录，避免工程与任务分落两处、只能分别恢复。
+
+        Windows 上 os.replace 不能以已存在目录为目标（WinError 5），因此目标目录
+        必须不存在；已存在时（如同秒重复删除）自动追加随机后缀。
+        """
+        if self.load(project_id) is None:
+            raise KeyError(f"project not found: {project_id}")
+        src = self._path(project_id).parent
+        import uuid as _uuid
+        base = trash_dir if trash_dir is not None else self.trash_dir_for(project_id)
+        dest = base if not base.exists() else base.parent / f"{base.name}-{_uuid.uuid4().hex[:6]}"
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        if src.exists():
+            os.replace(src, dest)
+        self._projects.pop(project_id, None)
+        self._dirty.discard(project_id)
+        logger.info("project moved to trash", extra={"ctx": {"id": project_id}})
+        return dest
+
     async def _flush_later(self) -> None:
         await asyncio.sleep(self.debounce_ms / 1000)
         self.flush()

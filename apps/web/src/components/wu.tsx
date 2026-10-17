@@ -120,10 +120,20 @@ export function Card({
   );
 }
 
-export function Alert({ tone, children }: { tone: Tone; children: React.ReactNode }) {
+export function Alert({ tone, children, onClose }: { tone: Tone; children: React.ReactNode; onClose?: () => void }) {
   return (
-    <div className="wu-alert" data-tone={tone}>
+    <div className="wu-alert" data-tone={tone} style={onClose ? { position: 'relative', paddingRight: 36 } : undefined}>
       {children}
+      {onClose && (
+        <button
+          type="button"
+          className="wu-icon-btn"
+          data-size="sm"
+          aria-label="关闭提示"
+          onClick={onClose}
+          style={{ position: 'absolute', right: 8, top: 8 }}
+        ><Icon name="close" size={14} /></button>
+      )}
     </div>
   );
 }

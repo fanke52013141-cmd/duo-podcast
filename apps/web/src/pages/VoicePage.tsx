@@ -11,6 +11,7 @@ import {
 import type { AudioTimeline, Job, Project, ScriptRevision, SynthesisUnit, Turn, VoiceBinding } from '../lib/types';
 import { Alert, Badge, Button, Choice, Icon } from '../components/wu';
 import { AppShell, FootBar, StageHead, TimelineBar, fmtDur as sharedFmtDur } from '../components/AppShell';
+import { useError } from '../lib/useError';
 import { useProjectStore, useServiceStore } from '../stores';
 
 const SPEAKERS: { id: 'A' | 'B'; name: string; role: string }[] = [
@@ -71,7 +72,7 @@ export function VoicePage({ projectId }: { projectId: string }) {
   const [refNames, setRefNames] = useState<Record<'A' | 'B', string>>({ A: '', B: '' });
   const [selectedUnitId, setSelectedUnitId] = useState<string | null>(null);
   const [gapOverride, setGapOverride] = useState<number | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const { error, setError, dismiss: dismissError } = useError();
   const [auditionJob, setAuditionJob] = useState<{ id: string; spk: 'A' | 'B' } | null>(null);
   const fileInput = useRef<Record<'A' | 'B', HTMLInputElement | null>>({ A: null, B: null });
 
@@ -415,7 +416,7 @@ export function VoicePage({ projectId }: { projectId: string }) {
       </StageHead>
 
       <div className="hf-body">
-        {error && <Alert tone="danger">{error}</Alert>}
+        {error && <Alert tone="danger" onClose={dismissError}>{error}</Alert>}
         {!proj?.scriptRevisions.length && (
           <Alert tone="warning">
             还没有脚本。请先在阶段①创建本期并生成对话。
@@ -503,6 +504,10 @@ export function VoicePage({ projectId }: { projectId: string }) {
                 {synthesizing ? '合成中…' : voiceApproved ? '重新生成整期配音' : timelineStale ? '重新合成（脚本已改动）' : '生成整期配音'}
               </Button>
             </div>
+            <p className="wu-caption" style={{ marginTop: 10, lineHeight: 1.6 }}>
+              演示模式使用内置声线；换音色、绑定参考音频与音色试听在
+              <a className="hf-link" onClick={() => setView('assets')}>资产库 · 角色</a>中维护。
+            </p>
           </section>
 
           {/* ---- 右：配音清单（话轮级） ---- */}
