@@ -176,6 +176,7 @@ export interface ArtifactEntry {
 export interface PronunciationEntry { term: string; read: string; }
 
 export interface Project {
+  generationMode?: 'standard' | 'fast';
   schemaVersion: number;
   id: string;
   title: string;

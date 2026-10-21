@@ -57,6 +57,7 @@ async def generate(project_id: str, payload: dict, request: Request) -> dict:
         "listeningSeed": payload.get("listeningSeed", 1),
         "resolution": payload.get("resolution", "1920x1080"),
         "fps": payload.get("fps", 30),
+        "fastQuality": payload.get("fastQuality", "original"),
         "projectId": project_id,
     }
     job = manager.submit(

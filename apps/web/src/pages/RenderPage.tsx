@@ -55,9 +55,9 @@ function planSegments(timeline: AudioTimeline): Segment[] {
 }
 
 function candidateLabel(job: Job): string {
-  const meta = job.result?.meta as { generationProfile?: string; performanceMode?: string; visualMode?: string } | undefined;
+  const meta = job.result?.meta as { generationMode?: string; generationProfile?: string; performanceMode?: string; visualMode?: string } | undefined;
   if (meta?.visualMode === 'overShoulder') return '过肩正反打';
-  return meta?.generationProfile === 'dialogue' ? '按对话倾听' : meta?.generationProfile === 'listener' ? '分层倾听' : meta?.generationProfile === 'reference' ? '动作参考' : meta?.generationProfile === 'matched' ? '模型匹配' : meta?.performanceMode === 'adaptive' ? '角色编排' : '原有配置';
+  return meta?.generationMode === 'fast' ? '快速模式' : meta?.generationProfile === 'dialogue' ? '按对话倾听' : meta?.generationProfile === 'listener' ? '分层倾听' : meta?.generationProfile === 'reference' ? '动作参考' : meta?.generationProfile === 'matched' ? '模型匹配' : meta?.performanceMode === 'adaptive' ? '角色编排' : '原有配置';
 }
 
 function segLabel(seg: Segment, idx: number, total: number, speakers: Map<string, 'A' | 'B'>): string {
@@ -84,9 +84,11 @@ export function RenderPage({ projectId }: { projectId: string }) {
   const simulated = useServiceStore((s) => s.capabilities?.video.mode === 'mock');
 
   const proj: Project | undefined = project.data;
+  const isFast = proj?.generationMode === 'fast';
   const [resolutionId, setResolutionId] = useState('480p');
   const [codec, setCodec] = useState(CODECS[0]);
   const [fps, setFps] = useState(25);
+  const [fastQuality, setFastQuality] = useState<'original' | 'clear' | 'crisp'>('clear');
   const { error, setError, dismiss: dismissError } = useError();
 
   const timeline: AudioTimeline | null = proj?.audioTimeline ?? null;
@@ -113,7 +115,7 @@ export function RenderPage({ projectId }: { projectId: string }) {
   const resolution = RESOLUTION_OPTIONS.find((r) => r.id === resolutionId)?.value ?? '854x480';
   const totalSecs = timeline ? timeline.sampleCount / (timeline.sampleRate || 48000) : 0;
   const isOverShoulder = latestVariant?.mode === 'overShoulder';
-  const standardSource = !!proj?.outputManifest
+  const standardSource = !isFast && !!proj?.outputManifest
     && (proj.outputManifest.meta.performanceMode ?? 'legacy') === 'legacy'
     && (proj.outputManifest.meta.generationProfile ?? 'accepted') === 'accepted';
 
@@ -130,6 +132,7 @@ export function RenderPage({ projectId }: { projectId: string }) {
       fps,
       performanceMode: 'legacy',
       generationProfile: 'accepted',
+      fastQuality: isFast ? fastQuality : undefined,
       candidate: true,
       reuseMotionArtifactId: !isOverShoulder && standardSource ? proj.outputManifest?.artifactIds[0] : undefined,
       redoFromSec: localRedo ? redoFromSec : undefined,
@@ -151,7 +154,7 @@ export function RenderPage({ projectId }: { projectId: string }) {
   const candidates = (jobs.data ?? []).filter(j => j.kind === 'renders' && j.status === 'succeeded' && (j.result?.meta as { candidate?: boolean } | undefined)?.candidate === true && !adoptedArtifacts.has(j.result?.artifactIds?.[0] ?? ''));
   const otsCompleted = (jobs.data ?? []).find(j => j.kind === 'renders' && j.status === 'succeeded' && j.inputSnapshot.visualVariantId === latestVariant?.id && (j.result?.meta as { visualMode?: string } | undefined)?.visualMode === 'overShoulder');
   const candidate = candidates.find(j => j.id === candidateId) ?? candidates[0];
-  const candidateMeta = candidate?.result?.meta as { generationStats?: { generated: number; composited?: number; cached: number; retained: number }; performanceMode?: string; generationProfile?: string; automaticReferenceArtifactIds?: string[]; listeningPlan?: ListeningPlan; continuityTransitions?: { atSec: number; frameAtSec?: number; cameraAssetId: string; qualityCheck?: { before: { windowMaxMeanGrayChange: number }; after: { windowMaxMeanGrayChange: number }; needsReview: boolean } }[] } | undefined;
+  const candidateMeta = candidate?.result?.meta as { generationStats?: { wallSeconds?: number; generated: number; composited?: number; cached: number; retained: number }; performanceMode?: string; generationProfile?: string; automaticReferenceArtifactIds?: string[]; listeningPlan?: ListeningPlan; continuityTransitions?: { atSec: number; frameAtSec?: number; cameraAssetId: string; qualityCheck?: { before: { windowMaxMeanGrayChange: number }; after: { windowMaxMeanGrayChange: number }; needsReview: boolean } }[] } | undefined;
   const comparisonStart = typeof candidate?.inputSnapshot.redoFromSec === 'number' ? candidate.inputSnapshot.redoFromSec : candidateMeta?.listeningPlan?.segments.find(s => s.eligible)?.start;
   const lastMeta = recentRender?.result?.meta as { outputVersion?: string; resolution?: string; fps?: number } | undefined;
   // 演示渲染已跑过（模拟通道）：分段卡与快照状态按「演示完成」展示，不再永远停在「待生成」
@@ -205,6 +208,15 @@ export function RenderPage({ projectId }: { projectId: string }) {
               </select>
             </div>
             <div className="hf-fld">
+              {isFast && <div className="hf-fld">
+                <label htmlFor="fast-quality">画面清晰度</label>
+                <select id="fast-quality" className="wu-input" value={fastQuality} onChange={e => setFastQuality(e.target.value as 'original' | 'clear' | 'crisp')}>
+                  <option value="original">原始 · 不增强</option>
+                  <option value="clear">清晰 · 轻度锐化与低压缩（推荐）</option>
+                  <option value="crisp">更清晰 · 较强锐化与低压缩</option>
+                </select>
+                <p className="wu-caption">动作素材的原生分辨率决定细节上限，特写放大会损失细节。增强会增大文件，较强锐化可能产生边缘光晕；不会恢复原本缺失的细节。</p>
+              </div>}
               <label>编码</label>
               <select className="wu-input" aria-label="编码" value={codec} onChange={(e) => setCodec(e.target.value)}>
                 {CODECS.map((c) => <option key={c} value={c}>{c}</option>)}
@@ -316,7 +328,8 @@ export function RenderPage({ projectId }: { projectId: string }) {
           <p>待比较候选 · {candidateLabel(candidate)} · 画面待人工验收</p>
           <video ref={candidateVideo} controls preload="metadata" style={{ width: '100%', maxHeight: 540 }} src={`/api/artifacts/${candidate.result.artifactIds[0]}/file`} />
           <a className="hf-link" href={`/api/artifacts/${candidate.result.artifactIds[0]}/file`} download={`candidate-${candidate.id}.mp4`}>下载候选视频</a>
-          {candidateMeta?.generationStats && <p>实际处理：新生成 {candidateMeta.generationStats.generated} 段 · 合成 {candidateMeta.generationStats.composited ?? 0} 段 · 缓存 {candidateMeta.generationStats.cached} 段 · 保留 {candidateMeta.generationStats.retained} 段</p>}
+          {candidateMeta?.generationStats?.wallSeconds != null && <p>快速模式：画面处理耗时 {candidateMeta.generationStats.wallSeconds.toFixed(1)} 秒</p>}
+          {candidateMeta?.generationStats && candidateMeta.generationStats.wallSeconds == null && <p>实际处理：新生成 {candidateMeta.generationStats.generated} 段 · 合成 {candidateMeta.generationStats.composited ?? 0} 段 · 缓存 {candidateMeta.generationStats.cached} 段 · 保留 {candidateMeta.generationStats.retained} 段</p>}
           {!!candidateMeta?.continuityTransitions?.length && <details open><summary>同机位续接检查</summary>
             <p className="wu-caption">比较续接窗口内的最大帧间变化，仅用于定位跳变；口型、表情和光流形变仍需观看确认。</p>
             {candidateMeta.continuityTransitions.map((transition, i) => <div key={i}>
@@ -351,10 +364,10 @@ export function RenderPage({ projectId }: { projectId: string }) {
             {versions.map(v => <option key={v.version} value={v.version}>{v.version}</option>)}
           </select>
           <label htmlFor="redo-from">重做起点</label>
-          <select id="redo-from" className="wu-input" value={redoFromSec} onChange={e => setRedoFromSec(Number(e.target.value))}>
+          <select id="redo-from" className="wu-input" disabled={isFast} value={redoFromSec} onChange={e => setRedoFromSec(Number(e.target.value))}>
             {segments.map(s => <option key={s.id} value={s.outputRange[0]}>{formatTimecode(s.outputRange[0], { tenths: true })}</option>)}
           </select>
-          <Button variant="secondary" disabled={isOverShoulder || !canRender || !standardSource} onClick={() => handleRender(true)}>从此段重做候选</Button>
+          <Button variant="secondary" disabled={isFast || isOverShoulder || !canRender || !standardSource} onClick={() => handleRender(true)}>从此段重做候选</Button>
         </section>}
 
         <div className="hf-s5">
@@ -365,8 +378,8 @@ export function RenderPage({ projectId }: { projectId: string }) {
               <div className="hf-kv"><div className="k">{simulated ? '演示估算时长' : '实际时长'}</div><div className="v hf-mono">{timeline ? formatTimecode(totalSecs, { tenths: true }) : '—'}</div></div>
               <div className="hf-kv"><div className="k">画布</div><div className="v">{proj?.aspect === 'portrait' ? '竖屏 9:16' : '横屏 16:9'} · {resolution} 导出画布</div></div>
               <div className="hf-kv"><div className="k">语音来源</div><div className="v">{voiceSource}</div></div>
-              <div className="hf-kv"><div className="k">视频模式</div><div className="v">{isOverShoulder ? '双机位过肩正反打' : '双人动态同框'}</div></div>
-              <div className="hf-kv"><div className="k">分段</div><div className="v">{isOverShoulder ? '按发言话轮，长话轮均匀分段' : demoRendered ? `演示完成 ${segments.length} 段（无真实输出）` : realRendered ? `已完成 ${segments.length} 段` : `复用 ${reusedCount} · 待生成 ${Math.max(0, segments.length - reusedCount)}`}</div></div>
+              <div className="hf-kv"><div className="k">视频模式</div><div className="v">{isFast ? '快速模式 · 双人演播室' : isOverShoulder ? '双机位过肩正反打' : '双人动态同框'}</div></div>
+              <div className="hf-kv"><div className="k">分段</div><div className="v">{isFast ? '按整条配音更新口型' : isOverShoulder ? '按发言话轮，长话轮均匀分段' : demoRendered ? `演示完成 ${segments.length} 段（无真实输出）` : realRendered ? `已完成 ${segments.length} 段` : `复用 ${reusedCount} · 待生成 ${Math.max(0, segments.length - reusedCount)}`}</div></div>
               <div className="hf-kv"><div className="k">预估</div><div className="v">{renderJob ? '生成中' : '尚未测定'}</div></div>
               <div className="hf-kv"><div className="k">磁盘预算</div><div className="v">尚未测定</div></div>
               <div className="hf-kv">
@@ -379,7 +392,7 @@ export function RenderPage({ projectId }: { projectId: string }) {
           {/* 分段进度网格（01 §7.2） */}
           <section>
             <div className="hf-zone-t">分段进度</div>
-            {isOverShoulder ? <p>{renderJob?.stage ?? (otsCompleted ? '过肩视频已完成，可在候选区播放比较。' : '按发言话轮生成 A/B 机位，等待生成。')}</p> : segments.length === 0 ? (
+            {isFast ? <p>{renderJob?.stage ?? (realRendered ? '快速模式成片已完成，可播放和下载。' : '等待按当前配音生成。')}</p> : isOverShoulder ? <p>{renderJob?.stage ?? (otsCompleted ? '过肩视频已完成，可在候选区播放比较。' : '按发言话轮生成 A/B 机位，等待生成。')}</p> : segments.length === 0 ? (
               <Alert tone="muted">合成时间轨后在此展示分段计划。</Alert>
             ) : (
               <div className="hf-seg-grid">

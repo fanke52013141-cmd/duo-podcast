@@ -18,6 +18,7 @@ from fastapi.staticfiles import StaticFiles
 from .adapters.base import CapabilityRegistry, TTSProvider
 from .adapters.comfyui_tts import ComfyUITTSProvider
 from .adapters.comfyui_video import ComfyUIVideoProvider
+from .adapters.musetalk_video import ModeVideoProvider, engine_root
 from .adapters.mock import MockImageProvider, MockTextProvider, MockTTSProvider, MockVideoProvider
 from .adapters.toapis_image import ToAPIsImageProvider
 from .adapters.toapis_text import ToAPIsTextProvider
@@ -244,6 +245,8 @@ async def lifespan(app: FastAPI):
     video = (ComfyUIVideoProvider(base_url=settings.video_url, input_dir=settings.video_input,
                                 artifact_store=artifacts)
              if settings.video_provider == "comfyui" else MockVideoProvider())
+    if engine_root() and not video.capabilities.get("simulated", True):
+        video = ModeVideoProvider(video, artifacts)
     capabilities = CapabilityRegistry(
         text=text_api.capabilities,
         image=image_api.capabilities,

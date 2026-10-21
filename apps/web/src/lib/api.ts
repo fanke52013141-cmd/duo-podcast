@@ -121,7 +121,7 @@ export const useTestProvider = () =>
   });
 
 // ---------- 变更 ----------
-export interface CreateProjectInput { id?: string; title: string; templateId?: string; }
+export interface CreateProjectInput { id?: string; title: string; templateId?: string; generationMode?: 'standard' | 'fast'; }
 
 export const useCreateProject = () => {
   const qc = useQueryClient();
@@ -552,6 +552,7 @@ export const useUploadMasterImage = () => {
 };
 
 export interface RenderGenInput {
+  fastQuality?: 'original' | 'clear' | 'crisp';
   generationProfile?: 'accepted' | 'matched' | 'reference' | 'listener' | 'dialogue';
   listeningSeed?: number;
   motionReferenceArtifactId?: string;
@@ -585,6 +586,7 @@ export const useRenderGenerate = () => {
         reuseMotionArtifactId: input.reuseMotionArtifactId,
         redoFromSec: input.redoFromSec,
         candidate: input.candidate,
+        fastQuality: input.fastQuality,
         fps: input.fps,
       }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['jobs'] }),

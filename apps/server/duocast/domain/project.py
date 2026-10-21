@@ -105,6 +105,7 @@ class Project(BaseModel):
     aspect: Literal["landscape", "portrait"] = "landscape"
     selected_visual_variant_id: Optional[str] = None
     camera_mode: Literal["speaker", "twoShot"] = "speaker"
+    generation_mode: Literal["standard", "fast"] = "standard"
     performance_mode: Literal["legacy", "adaptive"] = "legacy"
     shot_camera_overrides: dict[str, Literal["twoShot", "A", "B"]] = Field(default_factory=dict)
     script_revisions: list[ScriptRevision] = Field(default_factory=list)

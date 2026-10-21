@@ -75,3 +75,9 @@ apps/server/_run_dev_toapis.cmd
 
 # ===== 走查截图（每轮 30+ 张 PNG、十几 MB；正文引用见 19/20/21 报告）=====
 链路实测/ux-walkthrough-*/
+
+# External fast-mode assets and model weights stay local
+scripts/fast-mode/runtime/
+scripts/fast-mode/venv/
+scripts/fast-mode/models/
+scripts/fast-mode/vendor/

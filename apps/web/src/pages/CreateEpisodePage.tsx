@@ -106,6 +106,7 @@ export function CreateEpisodePage({ projectId }: { projectId: string }) {
       footer={null}
     >
       <StageHead title="创建本期">
+        {proj && <Badge>{proj.generationMode === 'fast' ? '快速模式 · 双人演播室' : '原有模式'}</Badge>}
         {stageState && stageState !== 'ready' && <Badge tone={STAGE_META[stageState].tone}>{STAGE_META[stageState].label}</Badge>}
         {/* 版本号（revision）是内部概念，第五轮实测 B3：不再在页头展示。 */}
         <span className="hf-spacer" />
@@ -236,7 +237,7 @@ export function CreateEpisodePage({ projectId }: { projectId: string }) {
           <Field label="比例">
             <div className="wu-row">
               <Choice checked={aspect === 'landscape'} onChange={() => handleAspect('landscape')} label="横屏 16:9" />
-              <Choice checked={aspect === 'portrait'} onChange={() => handleAspect('portrait')} label="竖屏" />
+              {proj?.generationMode !== 'fast' && <Choice checked={aspect === 'portrait'} onChange={() => handleAspect('portrait')} label="竖屏" />}
             </div>
           </Field>
           {aspect === 'portrait' && (

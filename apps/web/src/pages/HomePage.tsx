@@ -12,9 +12,9 @@
      .wu-caption  → 「最后编辑 MM-DD」
      .wu-btn      → 默认(primary) sm 实心「继续制作」，撑满卡片宽度
    ========================================================================== */
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
-  useCreateProject, useCreateTemplate, useDeleteProject, useJobs, usePatchProject, useProjects, useTemplates,
+  useCapabilities, useCreateProject, useCreateTemplate, useDeleteProject, useJobs, usePatchProject, useProjects, useTemplates,
 } from '../lib/api';
 import {
   currentStageOf, formatEditedAt, outputVersionLabel, SPEAKERS, type Job, type ProgramTemplate,
@@ -94,6 +94,9 @@ export function HomePage() {
   const { data: projects = [], isLoading } = useProjects();
   const { data: jobs } = useJobs();
   const createProject = useCreateProject();
+  const capabilities = useCapabilities();
+  const availableModes = capabilities.data?.video.capabilities.generationModes;
+  const fastAvailable = Array.isArray(availableModes) && availableModes.includes('fast');
   const patchProject = usePatchProject();
   const deleteProject = useDeleteProject();
   const createTemplate = useCreateTemplate();
@@ -102,6 +105,8 @@ export function HomePage() {
   const openProject = useProjectStore((s) => s.openProject);
   const [modalOpen, setModalOpen] = useState(false);
   const [templateId, setTemplateId] = useState<string>('blank');
+  const [generationMode, setGenerationMode] = useState<'fast' | 'standard'>('fast');
+  useEffect(() => { if (capabilities.data && !fastAvailable) setGenerationMode('standard'); }, [capabilities.data, fastAvailable]);
   const [opsTarget, setOpsTarget] = useState<Project | null>(null);
   const [renameTo, setRenameTo] = useState('');
   // 工程管理（第五轮实测 A8）：搜索 + 阶段筛选 + 软删除
@@ -140,6 +145,7 @@ export function HomePage() {
       const proj = await createProject.mutateAsync({
         title: tpl ? `${tpl.name} · 未命名节目` : '未命名节目',
         templateId: tpl ? tpl.id : undefined,
+        generationMode,
       });
       setModalOpen(false);
       openProject(proj.id);
@@ -329,6 +335,18 @@ export function HomePage() {
         }
       >
         <p className="wu-muted hf-hint">从模板开始，或创建空白工程——选择模板会带入模板名前缀、画幅与 A/B 声线引用，内容从零开始。</p>
+        <fieldset className="hf-fieldset">
+          <legend>制作模式</legend>
+          <label className="wu-choice">
+            <input type="radio" name="generation-mode" disabled={!fastAvailable} checked={generationMode === 'fast'} onChange={() => setGenerationMode('fast')} />
+            <span><b>快速模式</b> <span className="wu-caption">{fastAvailable ? '使用已验证的双人演播室动作模板，按新对白更新口型' : '本机快速引擎未就绪，请选择原有模式'}</span></span>
+          </label>
+          <label className="wu-choice">
+            <input type="radio" name="generation-mode" checked={generationMode === 'standard'} onChange={() => setGenerationMode('standard')} />
+            <span><b>原有模式</b> <span className="wu-caption">沿用当前的完整画面与动作生成流程</span></span>
+          </label>
+        </fieldset>
+
         <fieldset className="hf-fieldset">
           <legend>选择起点</legend>
           <label className="wu-choice">

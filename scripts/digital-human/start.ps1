@@ -26,6 +26,7 @@ if (-not $engineReady) {
     }
     if (-not $engineReady) { throw "Engine did not start; inspect $runStamp-engine.stderr.log" }
 }
+if ($runtimeConfig.fastEngineRoot) { $env:DUOCAST_FAST_ENGINE = $runtimeConfig.fastEngineRoot }
 $env:DUOCAST_VIDEO_PROVIDER = 'comfyui'
 $env:DUOCAST_VIDEO_URL = 'http://127.0.0.1:8191'
 $env:DUOCAST_VIDEO_INPUT = Join-Path $engineHome 'input'

@@ -10,6 +10,7 @@ def dependency_hash(project):
     return hashlib.sha256(json.dumps({"script": revision, "audio": data.get("audioTimeline"),
         "visual": data.get("visualVariants"), "bindings": data.get("voiceBindings"),
         "pronunciation": data.get("pronunciationDict"), "selectedVisual": data.get("selectedVisualVariantId"), "cameraMode": data.get("cameraMode"),
+        **({"generationMode": "fast"} if data.get("generationMode") == "fast" else {}),
         **({"performanceMode": data["performanceMode"]} if data.get("performanceMode", "legacy") != "legacy" else {}),
         **({"shotCameraOverrides":data["shotCameraOverrides"]} if data.get("shotCameraOverrides") else {})}, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
 
@@ -25,6 +26,7 @@ def visual_dependency_hash(project):
     return hashlib.sha256(json.dumps({
         "script": revision, "visual": data.get("visualVariants"),
         "selectedVisual": data.get("selectedVisualVariantId"), "cameraMode": data.get("cameraMode"),
+        **({"generationMode": "fast"} if data.get("generationMode") == "fast" else {}),
         **({"performanceMode": data["performanceMode"]} if data.get("performanceMode", "legacy") != "legacy" else {}),
         **({"shotCameraOverrides": data["shotCameraOverrides"]} if data.get("shotCameraOverrides") else {}),
     }, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
@@ -100,6 +102,17 @@ def validate_motion_source(project, payload, artifacts):
         raise HTTPException(409, "改变生成配置需要重新生成或指定局部重做起点")
 
 def validate_render_options(project, payload, pronunciation=None, real_video=True):
+    from .fast_quality import quality_options
+    try:
+        quality_options(payload.get("fastQuality", "original"))
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    if project.generation_mode == "fast":
+        from ..adapters.musetalk_video import validate_fast_options
+        try:
+            validate_fast_options(project, payload)
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
     if payload.get("generationProfile", "accepted") not in {"accepted", "matched", "reference", "listener", "dialogue"}:
         raise HTTPException(422, "未知生成配置")
     if payload.get("performanceMode", project.performance_mode) not in {"legacy", "adaptive"}:

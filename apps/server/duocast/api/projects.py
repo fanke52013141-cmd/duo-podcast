@@ -52,6 +52,23 @@ async def list_projects(request: Request) -> list[dict]:
 async def create_project(request: Request, payload: dict) -> dict:
     store: ProjectStore = _init_store(request)
     title = payload.get("title", "未命名节目")
+    generation_mode = payload.get("generationMode", "standard")
+    if generation_mode not in ("standard", "fast"):
+        raise HTTPException(422, "生成模式必须为 standard 或 fast")
+    fast_visual = None
+    if generation_mode == "fast":
+        from ..adapters.musetalk_video import template_variant
+        try:
+            fast_visual = template_variant(request.app.state.artifacts)
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
+    template_id = payload.get("templateId")
+    if isinstance(template_id, str) and template_id:
+        tpl = request.app.state.template_store.get(template_id)
+        if tpl is None:
+            raise HTTPException(422, f"模板不存在: {template_id}")
+        if generation_mode == "fast" and (tpl.get("config") or {}).get("aspect", "landscape") != "landscape":
+            raise HTTPException(422, "快速模式暂只支持横屏双人演播室模板")
     # ID 白名单（P1-4 路径穿越）：显式 ID 先过正则，非法直接 422。
     project_id = payload.get("id")
     if project_id is not None:
@@ -97,6 +114,9 @@ async def create_project(request: Request, payload: dict) -> dict:
             patch["voiceBindings"] = bindings
         if patch:
             proj = store.apply(proj.id, patch, expected_revision=proj.revision)
+    if fast_visual:
+        proj = store.apply(proj.id, {"generation_mode": "fast", "visual_variants": [fast_visual],
+            "selected_visual_variant_id": fast_visual["id"], "aspect": "landscape", "camera_mode": "twoShot"}, expected_revision=proj.revision)
     return _inject_states(request, proj)
 
 

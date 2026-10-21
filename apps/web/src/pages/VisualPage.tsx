@@ -62,6 +62,8 @@ export function VisualPage({ projectId }: { projectId: string }) {
   const setView = useProjectStore((s) => s.setView);
 
   const proj = project.data;
+  const isFast = proj?.generationMode === 'fast';
+  useEffect(() => { if (isFast) setVisualMode('twoShot'); }, [isFast]);
   const [aspect, setAspect] = useState<'landscape' | 'portrait'>('landscape');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [tab, setTab] = useState<'compose' | 'shot' | 'sample'>('compose');
@@ -119,7 +121,7 @@ export function VisualPage({ projectId }: { projectId: string }) {
   const voiceApproved = proj?.stageProgress.voice === 'done';
   const sampleApproved = proj?.stageProgress.visual === 'done';
 
-  const canGenerate = !!proj && !!proj.currentDraftRevision && !generating;
+  const canGenerate = !!proj && !isFast && !!proj.currentDraftRevision && !generating;
   // 样片当前只承载「生成成功与否」：接受门槛 = 有主图变体 + 样片任务成功。
   const canAccept = !!selected && sampleDone;
   const cameraStatus = useMemo<Record<'A' | 'B', CameraStatus>>(() => {
@@ -278,7 +280,7 @@ export function VisualPage({ projectId }: { projectId: string }) {
                 <div style={{ display: 'flex', gap: 8 }}>
                   <Button variant="secondary" size="sm" busy={generating} disabled={!canGenerate} onClick={handleGenerate}>生成</Button>
                   <Button
-                  variant="secondary" size="sm" icon="upload" busy={uploadMaster.isPending}
+                  variant="secondary" size="sm" icon="upload" busy={uploadMaster.isPending} disabled={isFast}
                   title="上传本地底图（PNG/JPEG ≤10MB），登记为主图变体"
                   onClick={() => masterFileRef.current?.click()}
                   >上传</Button>
@@ -393,6 +395,7 @@ export function VisualPage({ projectId }: { projectId: string }) {
             <button
               key={mode.id}
               type="button"
+              disabled={isFast && mode.id !== 'twoShot'}
               aria-pressed={visualMode === mode.id}
               onClick={() => setVisualMode(mode.id)}
             >{mode.label}</button>
@@ -416,6 +419,7 @@ export function VisualPage({ projectId }: { projectId: string }) {
 
       <div className="hf-body" ref={bodyRef}>
         {error && <Alert tone="danger" onClose={dismissError}>{error}</Alert>}
+        {isFast && <Alert tone="info">快速模式使用已验证的双人演播室模板，可调整对白、配音和镜头裁切。更换人物或场景请新建原有模式节目。</Alert>}
         {otsNotice && visualMode === 'overShoulder' && <Alert tone="info">{otsNotice}</Alert>}
         {!voiceApproved && (
           <Alert tone="warning">
@@ -485,7 +489,7 @@ export function VisualPage({ projectId }: { projectId: string }) {
                     </select>
                   </span>
                   <span className="item">场景
-                    <select className="hf-mini-select" aria-label="场景" defaultValue="录音棚 · 资产库">
+                    <select className="hf-mini-select" aria-label="场景" defaultValue="录音棚 · 资产库" disabled={isFast}>
                       <option>录音棚 · 资产库</option>
                       <option>生成新场景</option>
                       <option>上传</option>
