@@ -74,6 +74,16 @@
 
 ## 正式API真实准备验收：进行中
 
-隔离存储`.review/formal-motion-storage`、API端口8137、独立ComfyUI端口8191；已通过正式图片导入/创建动作包/prepare接口提交真实I2V。包`MP-277121ff7dad49cb`，任务`JFDCAC15D33`，外部任务`3b71f0f7-a0fc-412b-9d32-5b99f71a9476`。最新GET job及引擎queue确认running；没有重提或把等待当失败。证据账在`.review/formal-preparation-state.json`，任务未完成，尚无采用/效果结论。
+隔离存储`.review/formal-motion-storage`、API端口8137、独立ComfyUI端口8191；已通过正式图片导入/创建动作包/prepare接口提交真实I2V。包`MP-277121ff7dad49cb`，任务`JFDCAC15D33`，外部任务`3b71f0f7-a0fc-412b-9d32-5b99f71a9476`已succeeded。实际登记视频864x480/25fps/61帧/2.44秒，下载SHA256与清单一致，完整解码通过。排除脸后结构分0.355、背景0.240、阈值0.719，结论WEAK_STRUCTURAL_EVIDENCE/needs_review，仍不采用；不能把引擎成功当动作通过。证据账在`.review/formal-preparation-state.json`。
+
+已对同包同机位提交一条显式4秒更明确关节动作候选，任务`JE5BBCDB264`/外部`62469aa7-5562-47ee-9354-bb3ffdc3a9bf`，最近GET确认running；不是对未知任务盲重采样，首候选保留。账本`.review/formal-stronger-submission.json`可据原token找回，不得重复POST。
 
 专家模式只读排查确认旧reference配置可能在MultiTalk long-loop下绕过动作latent，正在开发专用短窗口V2V+音频工作流；当前仅builder测试，不能算专家模式已实现或已有动作保留。
+
+## 批次5：正式API验收工具与GPU取消实测
+
+- 新增分阶段本机API验收CLI及操作说明，默认plan零HTTP/零模型；模型调用和人工采用/确认分开显式触发。丢响应按原token只读reconcile，下载核验实际登记SHA256，媒体通过不自动写质量通过。
+- CLI账本跨进程锁覆盖读取、HTTP和写入，真实并发测试第二CLI被拒且后续复用receipt、POST总数仍1；强杀/异常后OS释放锁。专项20项通过，20.46秒。
+- 修复后真实GPU常驻握手/冷1+预热1+热1执行并退出，3份媒体解码通过，单一runtimeIdentity；不是替代5冷/5热基准。
+- 真正GPU摄像机编码中取消：常驻进程释放、原PCM输入哈希不变、保留partial视频、没有触发one-shot fallback。另CPU延迟writer测试证明整个子进程树退出。
+- 脱敏事实摘要见measurements/formal-preparation-and-gpu-cancel-20261027.json。完整工程生成/人工采用/页面端到端以及专家模式等仍未完成；继续保持全目标未完成。

@@ -1,0 +1,100 @@
+{
+  "formatVersion": 1,
+  "scope": "partial_formal_API_and_isolated_GPU_evidence_not_full_acceptance",
+  "formalPreparation": {
+    "jobId": "JFDCAC15D33",
+    "providerTaskId": "3b71f0f7-a0fc-412b-9d32-5b99f71a9476",
+    "artifactId": "VID-MOTION-JFDCAC15D33",
+    "fileHash": "4fdca495474764b69462ae64a066d7d8ba81b402fe85c2990813601673649f06",
+    "simulated": false,
+    "adopted": false,
+    "native": {
+      "width": 864,
+      "height": 480,
+      "fps": 25.0,
+      "frames": 61,
+      "durationSec": 2.44
+    }
+  },
+  "mediaPassed": true,
+  "qualityStatus": "needs_review",
+  "qualityIssues": [
+    "WEAK_STRUCTURAL_EVIDENCE",
+    "VISUAL_REVIEW_REQUIRED"
+  ],
+  "qualityMetrics": {
+    "uniqueSampleFrames": 24,
+    "fullFrameMaxDifference": 1.2939814814814814,
+    "fullFrameP90Difference": 1.0266203703703705,
+    "structuralMotionScore": 0.35545556805399325,
+    "backgroundResidualScore": 0.23953488372093024,
+    "structuralThreshold": 0.7186046511627907,
+    "structuralPixels": 1778,
+    "backgroundPixels": 430,
+    "translatedSamplePairs": 0,
+    "bodyDifferenceMax": 0.5753655793025871
+  },
+  "annotations": {
+    "bodyRegions": [
+      {
+        "x": 0.02,
+        "y": 0.01,
+        "width": 0.44,
+        "height": 0.89
+      }
+    ],
+    "exclusionRegions": [
+      {
+        "x": 0.28,
+        "y": 0.13,
+        "width": 0.17,
+        "height": 0.38
+      }
+    ],
+    "backgroundRegion": {
+      "x": 0.48,
+      "y": 0.04,
+      "width": 0.1,
+      "height": 0.78
+    }
+  },
+  "visibilityVerified": false,
+  "candidateAcceptedForMotion": false,
+  "GPUCancel": {
+    "scope": "isolated_real_GPU_cancel_only",
+    "cancelledDuringCameraEncoding": true,
+    "allInputHashesUnchanged": true,
+    "residentProcessReleased": true,
+    "partialFilesRetained": [
+      "camera_dual.partial.mp4"
+    ],
+    "noOneShotFallback": true
+  },
+  "ownedResidentSmoke": {
+    "passed": true,
+    "summary": {
+      "cold": {
+        "count": 1,
+        "medianSeconds": 21.04506019999826,
+        "maxSeconds": 21.04506019999826
+      },
+      "warm": {
+        "count": 1,
+        "medianSeconds": 6.316978299997572,
+        "maxSeconds": 6.316978299997572
+      }
+    },
+    "allMediaPassed": true,
+    "runtimeIdentityConsistent": true
+  },
+  "sourceReportHashes": {
+    "formal-preparation-candidate.json": "c5936ccb08fb5645fde82790b95252ec421376ad0ab5770a351cf3b67ec56710",
+    "gpu-cancel-check.json": "9d4a5a81c21e3179149b5005aec84ae64a1b55b0bf0c88887d2096c98129823b",
+    "owned-runtime-gpu-smoke.json": "a8aff5149e09de44df12e5ec16691b296d2079f3af3420d0052c46b8e35a961c"
+  },
+  "limitations": [
+    "Candidate structural movement is weak and remains unadopted",
+    "No inference of full facial visibility or naturalness from decoded media",
+    "Formal project/audio/sample/render chain and browser verification remain incomplete"
+  ]
+}
