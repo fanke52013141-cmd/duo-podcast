@@ -11,6 +11,7 @@ import { pauseAudio, playAudio, usePlayer } from '../lib/player';
 
 const ENTRY_VIEWS: { id: View; label: string; icon: 'folder' | 'gear' | 'task' }[] = [
   { id: 'assets', label: '资产库', icon: 'folder' },
+  { id: 'motionPacks', label: '动作资产审看', icon: 'folder' },
   { id: 'services', label: '服务设置', icon: 'gear' },
   { id: 'tasks', label: '任务中心', icon: 'task' },
 ];

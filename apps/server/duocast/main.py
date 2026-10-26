@@ -46,10 +46,15 @@ setup_logging()
 
 def _job_runner(manager: JobManager, store: ProjectStore, artifacts: ArtifactStore,
                 text_provider: MockTextProvider | ToAPIsTextProvider, image_provider: MockImageProvider,
-                tts_provider: TTSProvider, video_provider: MockVideoProvider | ComfyUIVideoProvider | None = None, machine=None):
+                tts_provider: TTSProvider, video_provider: MockVideoProvider | ComfyUIVideoProvider | None = None, machine=None,
+                motion_preparation=None):
     """Job 执行分派：按 kind 路由到对应 service（06 §6.1 runner 装配）。"""
 
     async def runner(job):
+        if job.kind == "motion.prepare":
+            if motion_preparation is None:
+                raise RuntimeError("动作准备服务未装配")
+            return await motion_preparation.run(job)
         checkpoint = lambda: manager.checkpoint(job) if manager is not None else None
         remember = (lambda: manager._persist(job)) if manager else None
         text_api = ControlledProvider(text_provider, checkpoint, job.completed_calls, remember)
@@ -204,7 +209,7 @@ def _job_runner(manager: JobManager, store: ProjectStore, artifacts: ArtifactSto
     kind_channel = {"script.generate": "text", "script.rewrite": "text",
                     "tts.synthesize": "tts", "tts.audition": "tts",
                     "visual.generate": "image", "renders": "video",
-                    "sample.generate": "video"}
+                    "sample.generate": "video", "motion.prepare": "video"}
     channel_provider = {
         "text": text_provider, "image": image_provider,
         "tts": tts_provider, "video": video_provider,
@@ -288,6 +293,8 @@ async def lifespan(app: FastAPI):
     app.state.project_store = project_store
     app.state.artifacts = artifacts
     app.state.motion_pack_store = MotionPackStore(settings.storage_root / "motion-packs", artifacts.by_id)
+    if isinstance(video, ModeVideoProvider):
+        video.fast.motion_store = app.state.motion_pack_store
     app.state.machine = machine
     app.state.cache = cache
     app.state.template_store = TemplateStore(settings.storage_root / "templates")
@@ -295,7 +302,11 @@ async def lifespan(app: FastAPI):
     app.state.event_bus = event_bus
     app.state.job_manager = job_manager
     app.state.capabilities = capabilities
-    job_manager.set_runner(_job_runner(job_manager, project_store, artifacts, text_api, image_api, local_tts, video, machine))
+    from .services.motion_preparation import MotionPreparationService
+    app.state.motion_preparation_service = MotionPreparationService(
+        app.state.motion_pack_store, artifacts, job_manager, getattr(video, "standard", video))
+    job_manager.set_runner(_job_runner(job_manager, project_store, artifacts, text_api, image_api, local_tts, video, machine,
+                                      app.state.motion_preparation_service))
 
     # ---- 启动自检（02 §7.4 最小版） ----
     recovered = recover_on_startup(settings.storage_root / "jobs")
@@ -348,10 +359,14 @@ from .api import visual as visual_api
 from .api import voice as voice_api
 from .api import motion_media as motion_media_api
 from .api import motion_packs as motion_packs_api
+from .api import motion_preparation as motion_preparation_api
+from .api import motion_coordinates as motion_coordinates_api
 
 app.include_router(projects_api.router)
 app.include_router(motion_media_api.router)
 app.include_router(motion_packs_api.router)
+app.include_router(motion_preparation_api.router)
+app.include_router(motion_coordinates_api.router)
 app.include_router(providers_api.router)
 app.include_router(assets_api.router)
 app.include_router(diagnostics_api.router)

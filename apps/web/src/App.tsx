@@ -18,6 +18,7 @@ import { RenderPage } from './pages/RenderPage';
 import { AssetsPage } from './pages/AssetsPage';
 import { ServicesPage } from './pages/ServicesPage';
 import { TasksPage } from './pages/TasksPage';
+import { MotionPacksPage } from './pages/MotionPacksPage';
 
 /* 页面渲染崩溃兜底（第五轮实测 A6：打开工程偶发整页白屏）。
    捕获渲染期异常后给出可操作的恢复界面，而不是无提示白屏。 */
@@ -126,6 +127,7 @@ export default function App() {
   }, [currentProjectId, view]);
 
   if (view === 'services') return <PageErrorBoundary><ServicesPage /></PageErrorBoundary>;
+  if (view === 'motionPacks') return <PageErrorBoundary><MotionPacksPage /></PageErrorBoundary>;
   if (!currentProjectId || view === 'home') {
     return <HomePage />;
   }

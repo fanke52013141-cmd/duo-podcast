@@ -7,7 +7,7 @@ import { create } from 'zustand';
 import { navigate } from '../lib/navigation';
 import type { Capabilities, StageId } from '../lib/types';
 
-export type View = 'home' | StageId | 'assets' | 'services' | 'tasks';
+export type View = 'home' | StageId | 'assets' | 'services' | 'tasks' | 'motionPacks';
 
 interface ProjectState {
   currentProjectId: string | null;

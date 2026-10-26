@@ -217,6 +217,7 @@ export function HomePage() {
         <span className="hf-brand"><span className="hf-mark"><i /><i /></span>双声播客工坊</span>
         <span className="hf-spacer" />
         <Button variant="secondary" icon="gear" onClick={() => setView('services')}>环境检查与服务设置</Button>
+        <Button variant="secondary" icon="folder" onClick={() => setView('motionPacks')}>动作资产库与审看</Button>
         <Button
           variant="secondary" icon="upload" disabled={importBusy}
           onClick={() => importFile.current?.click()}

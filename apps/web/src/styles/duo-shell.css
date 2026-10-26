@@ -399,3 +399,11 @@ button:focus-visible, a:focus-visible, summary:focus-visible { outline:2px solid
 .hf-ph-row .nm { flex:1; min-width:0; }
 .hf-ph-row .nm small { display:block; font-size:10.5px; color:var(--wu-semantic-caption); }
 .hf-ph-row .val { font-family:var(--wu-global-mono); font-size:11px; color:var(--wu-semantic-caption); }
+/* 动作审看台沿用现有表单和纸面布局。 */
+.motion-library { max-width: 1280px; }
+.motion-library fieldset,.motion-library section { margin: 18px 0; padding: 18px; border: 1px solid #d6d9dd; border-radius: 8px; min-width: 0; }
+.motion-library label { display: block; margin: 10px 0; }
+.motion-library input:not([type=file]),.motion-library select,.motion-library textarea { display: block; width: 100%; max-width: 100%; padding: 8px; border: 1px solid #c8cdd3; border-radius: 4px; background: #fff; color: #182938; }
+.motion-library pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+.motion-library .wu-row { flex-wrap: wrap; align-items: end; gap: 12px; }
+.motion-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(260px,1fr)); gap: 16px; }

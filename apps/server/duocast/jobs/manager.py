@@ -315,6 +315,37 @@ class JobManager:
         self.transition(job, JobStatus.CANCEL_REQUESTED)
         return job
 
+    def resume_external(self, job_id: str) -> Job:
+        """Resume querying one known motion I2V task; never submit a new task.
+
+        This explicit recovery operation is restricted to server-frozen motion
+        jobs. It does not relax ordinary terminal-state retry semantics.
+        """
+        from ..domain.motion_pack import content_hash
+        job = self._require(job_id)
+        record = job.completed_calls.get("motionPreparation", {})
+        workflow = job.input_snapshot.get("workflow")
+        if (job.kind != "motion.prepare" or job.owner_type != "motionPack"
+                or not job.input_snapshot.get("resumableMotionPreparation")
+                or not isinstance(workflow, dict) or not record.get("promptId")
+                or record.get("promptId") != job.provider_task_id
+                or record.get("workflowHash") != content_hash(workflow)
+                or record.get("externalTerminalFailure")):
+            raise ValueError("No verified resumable external motion task")
+        if job.status in (JobStatus.QUEUED, JobStatus.RUNNING, JobStatus.RECOVERING, JobStatus.SUCCEEDED):
+            return job
+        if job.status not in (JobStatus.FAILED, JobStatus.UNKNOWN, JobStatus.PAUSED):
+            raise ValueError("Motion task cannot be resumed from current status")
+        # A completed local wait may be FAILED while its paid external task is
+        # still running. Reopen that same query, preserving its external ID.
+        job.status = JobStatus.QUEUED
+        job.stage = "recovering known external motion task"
+        job.error, job.finished_at, job.retryable = None, None, False
+        self._persist(job)
+        self.bus.publish("job.queued", jobId=job.id, kind=job.kind, **self._owner_fields(job))
+        self._queues[job.queue_class].put(job)
+        return job
+
     # ---- 调度（三队列，06 §6.1） ----
     async def _worker(self, queue_class: str) -> None:
         queue = self._queues[queue_class]
