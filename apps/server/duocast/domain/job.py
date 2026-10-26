@@ -52,6 +52,8 @@ class Job(BaseModel):
     model_config = dc_config()
     id: str
     project_id: str = ""
+    owner_type: Literal["project", "motionPack"] = "project"
+    owner_id: str = ""
     kind: str = "generic"  # script.generate / tts.synthesize / renders / ...
     queue_class: QueueClass = "cpu"
     client_token: str = ""

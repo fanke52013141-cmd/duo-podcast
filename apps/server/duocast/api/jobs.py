@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Literal
+
 from fastapi import APIRouter, HTTPException, Query, Request
 
 from ..jobs.manager import JobManager
@@ -30,9 +32,11 @@ def _project_exists(store, project_id: str) -> bool | None:
 
 
 @router.get("")
-async def list_jobs(request: Request, project_id: str | None = Query(None, alias="projectId")) -> list[dict]:
+async def list_jobs(request: Request, project_id: str | None = Query(None, alias="projectId"),
+                    owner_type: Literal["project", "motionPack"] | None = Query(None, alias="ownerType"),
+                    owner_id: str | None = Query(None, alias="ownerId")) -> list[dict]:
     manager = _manager(request)
-    jobs = manager.list(project_id)
+    jobs = manager.list(project_id, owner_type=owner_type, owner_id=owner_id)
     # 工程已删除的任务不再返回（第五轮验证：工程 ID 复用后，残留任务会让
     # 新工程在阶段①看到「幽灵任务已生成」的假状态；删除时已随工程入回收站，
     # 此处兜底过滤历史遗留数据）。
@@ -40,7 +44,7 @@ async def list_jobs(request: Request, project_id: str | None = Query(None, alias
     out = []
     for j in jobs:
         # None = 占位任务（工程 id 损坏/为空）：保留在列表里，否则会在 UI 上凭空消失。
-        if _project_exists(store, j.project_id) is False:
+        if j.owner_type == "project" and _project_exists(store, j.project_id) is False:
             continue
         d = j.model_dump(mode="json", by_alias=True)
         # 排队位次（12 报告 C-1）：前端任务卡显示「队列第 N 位」

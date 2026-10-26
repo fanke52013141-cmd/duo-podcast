@@ -6,6 +6,7 @@ import asyncio
 import heapq
 import json
 import os
+import re
 import tempfile
 import uuid
 from copy import deepcopy
@@ -132,15 +133,27 @@ class JobManager:
                 self._queues[job.queue_class].put(job)
 
     def submit(self, kind: str, project_id: str, queue_class: str, client_token: str,
-               input_snapshot: dict[str, Any], attempt: int = 0) -> Job:
+               input_snapshot: dict[str, Any], attempt: int = 0,
+               owner_type: str = "project", owner_id: str = "") -> Job:
+        if owner_type not in {"project", "motionPack"}:
+            raise ValueError("Unknown job owner type")
+        if owner_type == "motionPack":
+            if project_id or not re.fullmatch(r"[A-Za-z0-9_-]{1,128}", owner_id):
+                raise ValueError("Motion-pack jobs require a pack owner and no project ID")
+        else:
+            if owner_id and owner_id != project_id:
+                raise ValueError("Project job owner must match project ID")
+            owner_id = project_id
         # 幂等（01 §12.1：相同请求连续点击只创建一项任务）
-        existing = self._find_by_token(client_token, project_id, kind)
+        existing = self._find_by_token(client_token, project_id, kind, owner_type, owner_id)
         if existing is not None:
             return existing
         queue_class = self._resolve_class(queue_class)
         job = Job(
             id=f"J{uuid.uuid4().hex[:10].upper()}",
             project_id=project_id,
+            owner_type=owner_type,
+            owner_id=owner_id,
             kind=kind,
             queue_class=queue_class,
             client_token=client_token,
@@ -151,17 +164,22 @@ class JobManager:
         )
         self._jobs[job.id] = job
         self._persist(job)
-        self.bus.publish("job.queued", jobId=job.id, kind=job.kind)
+        self.bus.publish("job.queued", jobId=job.id, kind=job.kind, **self._owner_fields(job))
         self._queues[queue_class].put(job)
         return job
 
     def get(self, job_id: str) -> Optional[Job]:
         return self._jobs.get(job_id)
 
-    def list(self, project_id: str | None = None) -> list[Job]:
+    def list(self, project_id: str | None = None, *, owner_type: str | None = None,
+             owner_id: str | None = None) -> list[Job]:
         jobs = list(self._jobs.values())
         if project_id:
-            jobs = [j for j in jobs if j.project_id == project_id]
+            jobs = [j for j in jobs if j.owner_type == "project" and j.project_id == project_id]
+        if owner_type is not None:
+            jobs = [j for j in jobs if j.owner_type == owner_type]
+        if owner_id is not None:
+            jobs = [j for j in jobs if (j.owner_id or j.project_id) == owner_id]
         return sorted(jobs, key=lambda j: j.created_at, reverse=True)
 
     def purge_project(self, project_id: str, trash_dir) -> int:
@@ -173,7 +191,7 @@ class JobManager:
         """
         moved = 0
         trash_path = Path(trash_dir)
-        for job in [j for j in self._jobs.values() if j.project_id == project_id]:
+        for job in [j for j in self._jobs.values() if j.owner_type == "project" and j.project_id == project_id]:
             # 先登记为丢弃：运行中的任务收尾时不再落盘，排队的任务出队后直接跳过。
             self._discarded.add(job.id)
             for queue in self._queues.values():
@@ -194,11 +212,20 @@ class JobManager:
             moved += 1
         return moved
 
-    def _find_by_token(self, client_token: str, project_id: str, kind: str) -> Optional[Job]:
+    def _find_by_token(self, client_token: str, project_id: str, kind: str,
+                       owner_type: str = "project", owner_id: str | None = None) -> Optional[Job]:
         if not client_token:
             return None
+        expected_owner = project_id if owner_id is None else owner_id
         return next((j for j in self._jobs.values() if j.client_token == client_token
-                     and j.project_id == project_id and j.kind == kind), None)
+                     and j.project_id == project_id and j.kind == kind
+                     and j.owner_type == owner_type
+                     and (j.owner_id or j.project_id) == expected_owner), None)
+
+    @staticmethod
+    def _owner_fields(job: Job) -> dict[str, str]:
+        return {"projectId": job.project_id, "ownerType": job.owner_type,
+                "ownerId": job.owner_id or job.project_id}
 
     # ---- 状态机（唯一执行者） ----
     _TERMINAL_STATUSES = frozenset({JobStatus.SUCCEEDED, JobStatus.FAILED, JobStatus.CANCELLED})
@@ -220,20 +247,22 @@ class JobManager:
         for k, v in extra.items():
             setattr(job, k, v)
         self._persist(job)
-        self.bus.publish("job.stage", jobId=job.id, stage=job.stage, status=job.status.value)
+        self.bus.publish("job.stage", jobId=job.id, stage=job.stage, status=job.status.value,
+                         **self._owner_fields(job))
         if target == JobStatus.SUCCEEDED:
             self.bus.publish("job.done", jobId=job.id, status=job.status.value,
-                             artifactIds=(job.result or {}).get("artifactIds", []))
+                             artifactIds=(job.result or {}).get("artifactIds", []), **self._owner_fields(job))
         elif target in (JobStatus.FAILED,):
             self.bus.publish("job.failed", jobId=job.id, status=job.status.value,
-                             error=job.error or "", retryable=job.retryable)
+                             error=job.error or "", retryable=job.retryable, **self._owner_fields(job))
         return True
 
     def set_stage(self, job: Job, stage: str, message: str | None = None) -> None:
         self.checkpoint(job)
         job.stage = stage
         self._persist(job)
-        self.bus.publish("job.stage", jobId=job.id, stage=stage, message=message)
+        self.bus.publish("job.stage", jobId=job.id, stage=stage, message=message,
+                         **self._owner_fields(job))
 
     def checkpoint(self, job: Job) -> None:
         if job.id in self._discarded or job.status in (JobStatus.CANCEL_REQUESTED, JobStatus.PAUSE_REQUESTED):
