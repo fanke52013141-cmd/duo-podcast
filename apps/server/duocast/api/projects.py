@@ -13,6 +13,7 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import ValidationError
 
 from ..domain.project import Project
+from ..services.motion_binding import resolve_motion_binding
 from ..services.stage_svc import derive_stage_states
 from ..services.render_inputs import dependency_hash, validate_render_options, visual_dependency_hash
 from .voice import _merged_pronunciation
@@ -22,7 +23,7 @@ router = APIRouter(prefix="/api/projects", tags=["projects"])
 
 # 客户端可修改的字段（11 报告 P2-5：拒绝注入 revision/id/audioTimeline 等内部字段）
 ALLOWED_PATCH_FIELDS = {"title", "aspect", "scriptRevisions", "currentDraftRevision",
-                        "approvals", "voiceBindings", "pronunciationDict", "selectedVisualVariantId", "cameraMode", "performanceMode", "shotCameraOverrides", "creationDraft", "characterBindings", "renderSpec"}
+                        "approvals", "voiceBindings", "pronunciationDict", "selectedVisualVariantId", "cameraMode", "performanceMode", "shotCameraOverrides", "creationDraft", "characterBindings", "renderSpec", "motionPack", "shotStyle"}
 # 三个默认确认点必须绑定当前草稿（11 报告 P1-6；stage_svc 的推导口径与此一致）
 CONFIRM_KINDS = {"script", "voice", "sample"}
 # 工程 id 白名单：字母/数字/下划线/连字符/空格/中文，不含路径分隔符与点号（P1-4 路径穿越）
@@ -65,8 +66,19 @@ async def create_project(request: Request, payload: dict) -> dict:
     generation_mode = payload.get("generationMode", "standard")
     if generation_mode not in ("standard", "fast"):
         raise HTTPException(422, "生成模式必须为 standard 或 fast")
+    shot_style = payload.get("shotStyle", "twoShot")
+    if shot_style not in ("twoShot", "overShoulder", "mixed"):
+        raise HTTPException(422, "无效镜头类型")
+    motion_pin = None
+    if payload.get("motionPack") is not None:
+        if generation_mode != "fast":
+            raise HTTPException(422, "动作包目前仅支持快速模式")
+        try:
+            motion_pin = resolve_motion_binding(request.app.state.motion_pack_store, payload["motionPack"], shot_style)
+        except (ValueError, OSError) as exc:
+            raise HTTPException(422, str(exc)) from exc
     fast_visual = None
-    if generation_mode == "fast":
+    if generation_mode == "fast" and motion_pin is None:
         from ..adapters.musetalk_video import template_variant
         from ..services.fast_catalog import selected_root
         try:
@@ -128,6 +140,11 @@ async def create_project(request: Request, payload: dict) -> dict:
             patch["voiceBindings"] = bindings
         if patch:
             proj = store.apply(proj.id, patch, expected_revision=proj.revision)
+    if motion_pin:
+        proj = store.apply(proj.id, {"motion_pack": motion_pin.model_dump(), "shot_style": shot_style,
+            "generation_mode": generation_mode}, expected_revision=proj.revision)
+    elif "shotStyle" in payload:
+        proj = store.apply(proj.id, {"shot_style": shot_style}, expected_revision=proj.revision)
     if fast_visual:
         from ..adapters.musetalk_video import template_identity, require_engine
         proj = store.apply(proj.id, {"generation_mode": "fast", "visual_variants": [fast_visual],
@@ -210,6 +227,19 @@ async def patch_project(project_id: str, payload: dict, request: Request) -> dic
     if "approvals" in patch and isinstance(patch["approvals"], list):
         _validate_confirm_bindings(store, project_id, patch["approvals"])
     saved_project = store.load(project_id)
+    if "motionPack" in patch or "shotStyle" in patch:
+        style = patch.get("shotStyle", saved_project.shot_style if saved_project else "twoShot")
+        if style not in ("twoShot", "overShoulder", "mixed"):
+            raise HTTPException(422, "无效镜头类型")
+        binding = patch.get("motionPack", saved_project.motion_pack.model_dump() if saved_project and saved_project.motion_pack else None)
+        if binding is not None:
+            if saved_project is not None and saved_project.generation_mode != "fast":
+                raise HTTPException(422, "动作包目前仅支持快速模式")
+            try:
+                pin = resolve_motion_binding(request.app.state.motion_pack_store, binding, style)
+                patch["motionPack"] = pin.model_dump()
+            except (ValueError, OSError) as exc:
+                raise HTTPException(422, str(exc)) from exc
     # 只和「有效确认」去重：已撤销的旧记录不应阻止用户重新确认（F2）。
     saved_approvals = {json.dumps(a.model_dump(mode="json", by_alias=True), sort_keys=True, ensure_ascii=False)
                        for a in saved_project.approvals if not a.revoked_at} if saved_project else set()

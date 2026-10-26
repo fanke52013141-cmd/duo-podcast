@@ -9,6 +9,11 @@ export type MotionDraft = { name: string; description: string; characters: Parti
 export type MotionReport = { status: 'passed'|'failed'|'needs_review'; hardFailures: string[]; issues: { code: string; message: string; startFrame?: number; endFrame?: number; severity?: string }[]; native: Record<string, unknown>; metrics: Record<string, unknown>; evidence: Record<string, unknown> };
 export type MotionPack = MotionDraft & { id: string; revision: number; version: string; checks: Record<string, {contentHash: string; report: MotionReport}>; reviews: Record<string, {accepted: boolean; reason: string}> };
 export type MotionReadiness = {ready: boolean; missing: string[]; clipIds: string[]};
+export function explicitMotionPin(pack:{id:string;version:string}){return {id:pack.id,version:pack.version};}
+export function motionGenerationAllowed(pin:unknown,ready:boolean|undefined){return !pin||ready===true;}
+export function motionPinsMatch(left:{motionPack?:{id:string;version:string}|null;shotStyle?:string},right:{motionPack?:{id:string;version:string}|null;shotStyle?:string}){
+  return (left.motionPack?.id??null)===(right.motionPack?.id??null)&&(left.motionPack?.version??null)===(right.motionPack?.version??null)&&(left.shotStyle??'twoShot')===(right.shotStyle??'twoShot');
+}
 export type InspectionRegions = {bodyRegions: Region[]; exclusionRegions: Region[]; backgroundRegion: Region};
 export type FaceBox = [number,number,number,number];
 export function selectedFixedBoxes(clip:MotionClip,box:FaceBox):(FaceBox|null)[]{

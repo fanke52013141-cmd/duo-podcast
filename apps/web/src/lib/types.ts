@@ -176,6 +176,8 @@ export interface ArtifactEntry {
 export interface PronunciationEntry { term: string; read: string; }
 
 export interface Project {
+  motionPack?: {id:string;version:string}|null;
+  shotStyle?: 'twoShot'|'overShoulder'|'mixed';
   creationDraft?: { sourceKind?: SourceKind; content?: string; durationMode?: 'auto' | 'approx'; approxMinutes?: number; title?: string };
   characterBindings?: Partial<Record<Speaker, Character>>;
   renderSpec?: { resolution?: string; fps?: number; fastQuality?: 'original' | 'clear' | 'crisp' };
@@ -210,6 +212,8 @@ export interface Project {
 }
 
 export interface Job {
+  ownerType?: 'project'|'motionPack';
+  ownerId?: string;
   id: string;
   projectId: string;
   kind: string;

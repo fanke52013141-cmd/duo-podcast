@@ -20,6 +20,17 @@ def require_engine(pinned_root=None):
         raise ValueError('快速模式引擎未安装完整，请检查本机配置')
     return root
 
+
+def require_motion_engine():
+    root = engine_root()
+    required = ['worker.py', 'motion_worker.py', 'quality.py', 'render_geometry.py',
+                'venv/Scripts/python.exe', 'assets/parsing_bisenet.pth',
+                'models/musetalkV15/unet.pth', 'models/sd-vae/diffusion_pytorch_model.bin',
+                'models/whisper/pytorch_model.bin']
+    if root is None or any(not (root / name).is_file() for name in required):
+        raise ValueError('动作包口型运行时尚未安装完整，请安装当前版本运行时')
+    return root
+
 def template_identity(root):
     files = ['worker.py', 'quality.py', 'render_geometry.py', 'assets/stage.png', 'assets/manifest.json',
              'assets/template_A.mp4', 'assets/template_B.mp4', 'assets/face_coordinates.json']
@@ -34,6 +45,8 @@ def template_identity(root):
     return {'id': 'studio-' + version[:12], 'version': version, 'runtimeRoot': str(root), 'fileHashes': hashes}
 
 def project_engine(project):
+    if project.motion_pack is not None:
+        return require_motion_engine()
     pinned = project.fast_template
     root = require_engine(pinned.get('runtimeRoot'))
     if pinned and template_identity(root)['version'] != pinned.get('version'):
@@ -53,6 +66,10 @@ def template_variant(artifacts, runtime_root=None):
 def validate_fast_options(project, payload):
     if project.generation_mode != 'fast': return
     root = project_engine(project)
+    if project.motion_pack is not None:
+        if payload.get('generationProfile', 'accepted') != 'accepted' or payload.get('reuseMotionArtifactId') or payload.get('redoFromSec') is not None:
+            raise ValueError('动作包快速模式使用已采用素材，请使用标准生成配置')
+        return
     visual_id = payload.get('visualVariantId') or project.selected_visual_variant_id
     visual = next((v for v in project.visual_variants if v.id == visual_id), None)
     expected = hashlib.sha256((root/'assets/stage.png').read_bytes()).hexdigest()
@@ -62,9 +79,9 @@ def validate_fast_options(project, payload):
         raise ValueError('快速模式直接按当前配音更新口型，请使用标准生成配置')
 
 class ModeVideoProvider:
-    def __init__(self, standard, artifacts):
+    def __init__(self, standard, artifacts, motion_store=None):
         self.standard = standard
-        self.fast = MuseTalkVideoProvider(artifacts)
+        self.fast = MuseTalkVideoProvider(artifacts, motion_store)
         self.capabilities = {**standard.capabilities, 'generationModes': ['standard', 'fast']}
 
     async def render(self, req, progress=None):
@@ -72,8 +89,9 @@ class ModeVideoProvider:
         return await provider.render(req, progress)
 
 class MuseTalkVideoProvider:
-    def __init__(self, artifacts):
+    def __init__(self, artifacts, motion_store=None):
         self.artifacts = artifacts
+        self.motion_store = motion_store
 
     def asset(self, asset_id, kind):
         entry = self.artifacts.by_id(asset_id)
@@ -90,8 +108,11 @@ class MuseTalkVideoProvider:
         root = project_engine(project)
         timeline = req['projectSnapshot']['audioTimeline']
         visual_id = req.get('visualVariantId') or project.selected_visual_variant_id
-        visual = next(v for v in project.visual_variants if v.id == visual_id)
-        self.asset(visual.master_image.artifact_id, 'image')
+        visual = next((v for v in project.visual_variants if v.id == visual_id), None)
+        if project.motion_pack is None:
+            if visual is None:
+                raise RuntimeError('视觉底图缺失')
+            self.asset(visual.master_image.artifact_id, 'image')
         master = self.asset(timeline['masterAudioAssetId'], 'audio')
         revision = next(r for r in project.script_revisions if r.id == req['revisionId'])
         if timeline['revisionId'] != revision.id: raise RuntimeError('脚本与配音版本不一致')
@@ -109,6 +130,7 @@ class MuseTalkVideoProvider:
         roles = {s: bytearray(len(pcm)) for s in ('A','B')}
         speakers = {t.id: t.speaker for t in revision.turns}
         turns = []
+        sample_turns = []
         for unit in timeline['units']:
             a = max(start, timeline['unitOffsets'][unit['id']])
             b = min(end, timeline['unitOffsets'][unit['id']] + unit['sampleCount'])
@@ -116,6 +138,7 @@ class MuseTalkVideoProvider:
             speaker = speakers[unit['turnId']]
             roles[speaker][(a-start)*2:(b-start)*2] = pcm[(a-start)*2:(b-start)*2]
             turns.append({'speaker':speaker,'start':(a-start)/rate,'end':(b-start)/rate})
+            sample_turns.append({'speaker': speaker, 'startSample': a-start, 'endSample': b-start})
         for name, data in {'master':pcm, **roles}.items():
             with wave.open(str(folder/f'{name}.wav'),'wb') as audio:
                 audio.setparams((1,2,rate,0,'NONE','not compressed'))
@@ -123,10 +146,21 @@ class MuseTalkVideoProvider:
         worker_req = {'outputDir':str(folder), 'master':str(folder/'master.wav'), 'tracks':{s:str(folder/f'{s}.wav') for s in roles},
             'turns':turns, 'sampleRate':rate, 'sampleCount':end-start, 'seed':req.get('seed',42),
             'resolution':req.get('resolution','1920x1080'), 'fps':req.get('fps',25), 'fastQuality':req.get('fastQuality','original')}
-        cameras = camera_plan(req['projectSnapshot'],req.get('cameraMode', project.camera_mode))
-        worker_req['cameraPlan'] = [{**shot, 'start':shot['start']-start/rate, 'end':shot['end']-start/rate,
-            'crop':crop_region(visual.person_regions[shot['camera']]) if shot['camera'] in ('A','B') else None}
-            for shot in clipped_camera_plan(cameras,start/rate,end/rate)]
+        if project.motion_pack is not None:
+            if self.motion_store is None:
+                raise RuntimeError('动作包存储未装配')
+            from ..services.motion_render_inputs import build_motion_worker_inputs, camera_edit_plan
+            worker_req['motionAssets'] = await asyncio.to_thread(
+                build_motion_worker_inputs, self.motion_store, self.artifacts,
+                project.motion_pack.id, project.motion_pack.version, project.shot_style, sample_turns,
+                sample_rate=rate, total_samples=end-start, seed=str(req.get('seed', 42)))
+            cameras = camera_edit_plan(worker_req['motionAssets'], sample_turns, rate)
+            worker_req['cameraEditPlan'] = cameras
+        else:
+            cameras = camera_plan(req['projectSnapshot'],req.get('cameraMode', project.camera_mode))
+            worker_req['cameraPlan'] = [{**shot, 'start':shot['start']-start/rate, 'end':shot['end']-start/rate,
+                'crop':crop_region(visual.person_regions[shot['camera']]) if shot['camera'] in ('A','B') else None}
+                for shot in clipped_camera_plan(cameras,start/rate,end/rate)]
         request_file = folder/'request.json'
         request_file.write_text(json.dumps(worker_req),encoding='utf-8')
         if progress: progress('快速模式：更新双人口型')

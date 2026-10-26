@@ -121,7 +121,7 @@ export const useTestProvider = () =>
   });
 
 // ---------- 变更 ----------
-export interface CreateProjectInput { id?: string; title: string; templateId?: string; generationMode?: 'standard' | 'fast'; fastTemplateId?: string; }
+export interface CreateProjectInput { id?: string; title: string; templateId?: string; generationMode?: 'standard' | 'fast'; fastTemplateId?: string; motionPack?:{id:string;version:string};shotStyle?:'twoShot'|'overShoulder'|'mixed'; }
 
 export const useCreateProject = () => {
   const qc = useQueryClient();

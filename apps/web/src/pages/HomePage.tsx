@@ -1,3 +1,4 @@
+import { MotionPackSelector, type MotionPin, type ShotStyle } from '../components/MotionPackSelector';
 /* ============================================================================
    HF-00 · 工程首页（真实数据流）
    最近工程（POST/GET /projects）+ 节目模板 + 空态 + 新建本期模板弹层
@@ -120,6 +121,7 @@ export function HomePage() {
   const [generationMode, setGenerationMode] = useState<'fast' | 'standard'>('fast');
   const [fastTemplates,setFastTemplates] = useState<{id:string;label:string;ready:boolean;version:string}[]>([]);
   const [fastTemplateId,setFastTemplateId] = useState('');
+  const [motionPin,setMotionPin]=useState<MotionPin|null>(null),[shotStyle,setShotStyle]=useState<ShotStyle>('twoShot'),[motionReady,setMotionReady]=useState(false);
   useEffect(()=>{void getJson<typeof fastTemplates>('/diagnostics/fast-templates').then(list=>{setFastTemplates(list);setFastTemplateId(list.find(t=>t.ready)?.id??'');}).catch(()=>setFastTemplates([]));},[]);
   useEffect(() => { if (capabilities.data && !fastAvailable) setGenerationMode('standard'); }, [capabilities.data, fastAvailable]);
   const [opsTarget, setOpsTarget] = useState<Project | null>(null);
@@ -144,6 +146,7 @@ export function HomePage() {
   const [newTplAspect, setNewTplAspect] = useState<'landscape' | 'portrait'>('landscape');
 
   const handleCreate = async () => {
+    if(generationMode==='fast'&&motionPin&&!motionReady)return;
     // 失败时 Modal 内已有 createProject.isError 告警（见下方渲染），
     // 这里捕获以避免未处理 rejection（11 报告 P2-14）
     try {
@@ -153,7 +156,8 @@ export function HomePage() {
         title: tpl ? `${tpl.name} · 未命名节目` : '未命名节目',
         templateId: tpl ? tpl.id : undefined,
         generationMode,
-        fastTemplateId: generationMode==='fast' ? fastTemplateId||undefined : undefined,
+        fastTemplateId: generationMode==='fast'&&!motionPin ? fastTemplateId||undefined : undefined,
+        motionPack:generationMode==='fast'?motionPin??undefined:undefined,shotStyle:generationMode==='fast'&&motionPin?shotStyle:undefined,
       });
       setModalOpen(false);
       openProject(proj.id);
@@ -353,7 +357,7 @@ export function HomePage() {
         footer={
           <>
             <Button variant="ghost" onClick={() => setModalOpen(false)}>取消</Button>
-            <Button variant="brand" busy={createProject.isPending} onClick={handleCreate}>创建</Button>
+            <Button variant="brand" busy={createProject.isPending} disabled={generationMode==='fast'&&!!motionPin&&!motionReady} onClick={handleCreate}>创建</Button>
           </>
         }
       >
@@ -372,7 +376,8 @@ export function HomePage() {
 
         <fieldset className="hf-fieldset">
           <legend>选择起点</legend>
-          {generationMode==='fast'&&fastTemplates.length>0&&<label>演播室素材版本<select className="wu-input" value={fastTemplateId} onChange={e=>setFastTemplateId(e.target.value)}>{fastTemplates.map(t=><option key={t.id} value={t.id} disabled={!t.ready}>{t.label} · {t.version.slice(0,8)}{!t.ready?'（未就绪）':''}</option>)}</select></label>}
+          {generationMode==='fast'&&<MotionPackSelector pin={motionPin} style={shotStyle} onChange={(p,s)=>{setMotionPin(p);setShotStyle(s);setMotionReady(false);}} onReady={setMotionReady}/>}
+          {generationMode==='fast'&&!motionPin&&fastTemplates.length>0&&<label>演播室素材版本<select className="wu-input" value={fastTemplateId} onChange={e=>setFastTemplateId(e.target.value)}>{fastTemplates.map(t=><option key={t.id} value={t.id} disabled={!t.ready}>{t.label} · {t.version.slice(0,8)}{!t.ready?'（未就绪）':''}</option>)}</select></label>}
           <label className="wu-choice">
             <input type="radio" name="tpl" checked={templateId === 'blank'} onChange={() => setTemplateId('blank')} />
             <span><b>空白工程</b> <span className="wu-caption">从话题 / 文章 / 已有脚本开始</span></span>

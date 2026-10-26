@@ -96,8 +96,6 @@ def run(request):
     duration = request['sampleCount'] / request['sampleRate']
     if not 0 < duration <= 300: raise ValueError('Duration outside 0–300 seconds')
     count = math.ceil(duration * 25)
-    source = json.loads((ROOT / 'assets/manifest.json').read_text(encoding='utf-8'))
-    coords = json.loads((ROOT / 'assets/face_coordinates.json').read_text(encoding='utf-8'))
     models = ROOT / 'models'
     torch.manual_seed(request.get('seed', 42))
     torch.cuda.reset_peak_memory_stats()
@@ -108,6 +106,13 @@ def run(request):
     whisper = WhisperModel.from_pretrained(str(models / 'whisper'), local_files_only=True).half().cuda().eval()
     processor = AudioProcessor(str(models / 'whisper'))
     parser = Parser()
+    if request.get('motionAssets'):
+        from motion_worker import run_motion
+        return run_motion(request, {'torch': torch, 'cv2': cv2, 'np': np, 'ROOT': ROOT,
+            'quality': quality, 'vae': vae, 'unet': unet, 'pe': pe, 'whisper': whisper,
+            'processor': processor, 'parser': parser, 'get_image': get_image})
+    source = json.loads((ROOT / 'assets/manifest.json').read_text(encoding='utf-8'))
+    coords = json.loads((ROOT / 'assets/face_coordinates.json').read_text(encoding='utf-8'))
     stats = {}
     export_width, export_height = map(int, request.get('resolution', '1920x1080').split('x'))
     source_sizes = {}

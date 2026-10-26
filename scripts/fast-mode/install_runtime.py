@@ -8,7 +8,7 @@ def install(source, target):
     target=target.resolve()
     if not (target/'models').is_dir() or not (target/'assets').is_dir():
         raise ValueError('Target must be an existing fast-mode runtime containing models/ and assets/')
-    files={source/'worker.py':'worker.py',source/'render_geometry.py':'render_geometry.py',
+    files={source/'worker.py':'worker.py',source/'render_geometry.py':'render_geometry.py',source/'motion_worker.py':'motion_worker.py',
            source.parents[1]/'apps/server/duocast/services/fast_quality.py':'quality.py'}
     for origin,name in files.items():
         if not origin.is_file():raise ValueError(f'Missing source: {origin}')

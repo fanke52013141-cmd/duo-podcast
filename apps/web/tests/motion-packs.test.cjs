@@ -69,3 +69,21 @@ test('fixed boxes only cover selected frames and imported boxes require complete
   for(const invalid of [[null,null,null,null],[null,[true,0,5,5],[0,0,5,5],null],[null,[0,0,101,5],[0,0,5,5],null],[null,[0,0,5,5],null]])assert.throws(()=>h.validateFaceBoxes(clip,invalid));
   assert.throws(()=>h.selectedFixedBoxes(clip,[0,0,100.1,50]));
 });
+test('explicit pins remain at chosen version when head changes and sample acceptance matches version plus shot style',()=>{
+  const {helper:h}=load();
+  const head={id:'pack',version:'v1'};
+  const pin=h.explicitMotionPin(head);head.version='v2';
+  assert.equal(pin.version,'v1');
+  assert.equal(h.motionPinsMatch({motionPack:pin,shotStyle:'twoShot'},{motionPack:{id:'pack',version:'v1'},shotStyle:'twoShot'}),true);
+  assert.equal(h.motionPinsMatch({motionPack:pin},{motionPack:head}),false);
+  assert.equal(h.motionPinsMatch({motionPack:pin,shotStyle:'twoShot'},{motionPack:pin,shotStyle:'overShoulder'}),false);
+  assert.equal(h.motionPinsMatch({},{}),true);
+});
+test('pending or incomplete reverse shots prevent generation while legacy template route stays available',()=>{
+  const {helper:h}=load();
+  const pin={id:'pack',version:'v1'};
+  assert.equal(h.motionGenerationAllowed(pin,undefined),false);
+  assert.equal(h.motionGenerationAllowed(pin,false),false);
+  assert.equal(h.motionGenerationAllowed(pin,true),true);
+  assert.equal(h.motionGenerationAllowed(null,undefined),true);
+});

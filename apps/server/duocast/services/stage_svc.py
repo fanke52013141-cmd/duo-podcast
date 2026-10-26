@@ -29,7 +29,7 @@ def derive_stage_states(project: Project, jobs: list | None = None, pronunciatio
     approved = {kind for kind, a in latest.items() if a.decision == "accepted"}
     has_script = bool(project.current_draft_revision)
     has_voice = bool(getattr(project, "audio_timeline", None))
-    has_visual = bool(getattr(project, "visual_variants", None))
+    has_visual = bool(getattr(project, "visual_variants", None)) or project.motion_pack is not None
     current_hash = dependency_hash(project)
     demo_jobs = [job for job in (jobs or [])
                  if job.kind == "renders" and job.status == JobStatus.SUCCEEDED

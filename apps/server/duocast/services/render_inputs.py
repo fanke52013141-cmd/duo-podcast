@@ -11,6 +11,7 @@ def dependency_hash(project):
         "visual": data.get("visualVariants"), "bindings": data.get("voiceBindings"),
         **({"renderSpec": data["renderSpec"]} if data.get("renderSpec") else {}),
         **({"fastTemplate": data["fastTemplate"]} if data.get("fastTemplate") else {}),
+        **({"motionPack": data["motionPack"], "shotStyle": data.get("shotStyle", "twoShot")} if data.get("motionPack") else {}),
         "pronunciation": data.get("pronunciationDict"), "selectedVisual": data.get("selectedVisualVariantId"), "cameraMode": data.get("cameraMode"),
         **({"generationMode": "fast"} if data.get("generationMode") == "fast" else {}),
         **({"performanceMode": data["performanceMode"]} if data.get("performanceMode", "legacy") != "legacy" else {}),
@@ -29,6 +30,7 @@ def visual_dependency_hash(project):
         "script": revision, "visual": data.get("visualVariants"),
         "selectedVisual": data.get("selectedVisualVariantId"), "cameraMode": data.get("cameraMode"),
         **({"fastTemplate": data["fastTemplate"]} if data.get("fastTemplate") else {}),
+        **({"motionPack": data["motionPack"], "shotStyle": data.get("shotStyle", "twoShot")} if data.get("motionPack") else {}),
         **({"generationMode": "fast"} if data.get("generationMode") == "fast" else {}),
         **({"performanceMode": data["performanceMode"]} if data.get("performanceMode", "legacy") != "legacy" else {}),
         **({"shotCameraOverrides": data["shotCameraOverrides"]} if data.get("shotCameraOverrides") else {}),
@@ -139,7 +141,9 @@ def validate_render_options(project, payload, pronunciation=None, real_video=Tru
         raise HTTPException(422, "当前引擎未开放补帧或烧录字幕")
     if payload.get("resolution", "1920x1080") not in {"854x480", "1280x720", "1920x1080"} or payload.get("fps",25) not in {25,30}:
         raise HTTPException(422, "不支持的导出分辨率或帧率")
-    if real_video:
+    if real_video and project.motion_pack is not None and payload.get("aspect", project.aspect) != "landscape":
+        raise HTTPException(422, "动作包当前仅验证横屏输出")
+    if real_video and project.motion_pack is None:
         if payload.get("aspect", project.aspect) != "landscape":
             raise HTTPException(422, "当前数字人引擎仅开放横屏同框；竖屏布局尚未验证")
         variant_id = payload.get("visualVariantId") or project.selected_visual_variant_id

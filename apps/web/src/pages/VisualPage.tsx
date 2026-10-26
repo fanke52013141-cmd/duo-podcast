@@ -1,3 +1,5 @@
+import { motionPinsMatch } from '../lib/motionPacks';
+import { ProjectMotionBinding, useMotionReadiness } from '../components/MotionPackSelector';
 /* ============================================================================
    HF-04 · 阶段④ 预览画面（真实数据流，01 §6 权威）
    三分区锚点同屏：构图（同框底图 + A/B 人物区域）/ 镜头（后处理预设）/ 样片（区间 + 检查项）
@@ -65,6 +67,8 @@ export function VisualPage({ projectId }: { projectId: string }) {
   const setView = useProjectStore((s) => s.setView);
 
   const proj = project.data;
+  const pinnedReady=useMotionReadiness(proj?.motionPack,proj?.shotStyle);
+  const hasMotion=!!proj?.motionPack;
   const [checks,setChecks]=useState<string[]>([]);
   const [serverRange,setServerRange]=useState<{start:number;end:number;reason:string}|null>(null);
   useEffect(()=>{void getJson<typeof serverRange>(`/projects/${projectId}/visual/sample-plan`).then(setServerRange).catch(()=>setServerRange(null));},[proj?.audioTimeline, projectId]);
@@ -115,12 +119,13 @@ export function VisualPage({ projectId }: { projectId: string }) {
     return !!snapshot && snapshot.currentDraftRevision === proj?.currentDraftRevision
       && (snapshot.performanceMode ?? 'legacy') === (proj?.performanceMode ?? 'legacy')
       && (snapshot.generationMode ?? 'standard') === (proj?.generationMode ?? 'standard')
+      && motionPinsMatch(snapshot,proj??{})
       && JSON.stringify(snapshot.fastTemplate ?? {}) === JSON.stringify(proj?.fastTemplate ?? {})
       && JSON.stringify(snapshot.audioTimeline) === JSON.stringify(proj?.audioTimeline)
       && JSON.stringify(snapshot.scriptRevisions) === JSON.stringify(proj?.scriptRevisions)
       && JSON.stringify(snapshot.visualVariants) === JSON.stringify(proj?.visualVariants)
-      && (!j.inputSnapshot?.visualVariantId || j.inputSnapshot.visualVariantId === selected?.id)
-      && (j.inputSnapshot?.cameraMode ?? 'speaker') === (visualMode === 'overShoulder' ? 'speaker' : preset === '稳定同框' ? 'twoShot' : 'speaker');
+      && (hasMotion || !j.inputSnapshot?.visualVariantId || j.inputSnapshot.visualVariantId === selected?.id)
+      && (hasMotion || (j.inputSnapshot?.cameraMode ?? 'speaker') === (visualMode === 'overShoulder' ? 'speaker' : preset === '稳定同框' ? 'twoShot' : 'speaker'));
   });
   const sampleDone = !!currentSample;
   useEffect(()=>setChecks([]),[currentSample?.id]);
@@ -134,7 +139,7 @@ export function VisualPage({ projectId }: { projectId: string }) {
 
   const canGenerate = !!proj && !isFast && !!proj.currentDraftRevision && !generating;
   // 样片当前只承载「生成成功与否」：接受门槛 = 有主图变体 + 样片任务成功。
-  const canAccept = !!selected && sampleDone && (currentSample?.result?.simulated !== false || checks.length===4);
+  const canAccept = (hasMotion?pinnedReady.data?.ready===true:!!selected) && sampleDone && (currentSample?.result?.simulated !== false || checks.length===4);
   const cameraStatus = useMemo<Record<'A' | 'B', CameraStatus>>(() => {
     const persisted = new Set(
       variants.flatMap((variant) => variant.cameraGroups ?? [])
@@ -161,7 +166,7 @@ export function VisualPage({ projectId }: { projectId: string }) {
   const sampleFailJob = (jobs.data ?? []).find((j) => j.kind === 'sample.generate' && j.status === 'failed' && j.inputSnapshot.visualVariantId === selected?.id && JSON.stringify((j.inputSnapshot.projectSnapshot as typeof proj)?.visualVariants) === JSON.stringify(proj?.visualVariants));
   const acceptHint = canAccept
     ? '样片已生成，可接受'
-    : !selected
+    : hasMotion&&pinnedReady.data?.ready!==true ? '固定动作包未就绪，请检查各镜头素材' : !selected&&!hasMotion
       ? '需先生成主图变体（构图区）'
       : genSample.isPending || sampleJob
         ? '样片生成中…'
@@ -181,13 +186,13 @@ export function VisualPage({ projectId }: { projectId: string }) {
   };
 
   const handleGenSample = () => {
-    if (!proj || !sampleRange) return;
+    if (!proj || !sampleRange || (hasMotion&&pinnedReady.data?.ready!==true)) return;
     setError(null);
     genSample.mutate({
       projectId,
       clientToken: crypto.randomUUID(),
       revisionId: proj.currentDraftRevision,
-      visualVariantId: selected?.id,
+      visualVariantId: hasMotion?undefined:selected?.id,
       cameraMode: visualMode === 'overShoulder' ? 'speaker' : preset === '稳定同框' ? 'twoShot' : 'speaker',
       performanceMode: proj.performanceMode ?? 'legacy',
       rangeStartSec: serverRange?.start ?? sampleRange.start,
@@ -430,6 +435,8 @@ export function VisualPage({ projectId }: { projectId: string }) {
       </StageHead>
 
       <div className="hf-body" ref={bodyRef}>
+        {proj&&<ProjectMotionBinding project={proj}/>}
+        {hasMotion&&<p>工程使用固定动作包 {proj?.motionPack?.version}，无需生成旧主图变体。完成配音后直接生成下方样片。</p>}
         {proj && <RenderSettings project={proj}/>}
         {error && <Alert tone="danger" onClose={dismissError}>{error}</Alert>}
         {isFast && <Alert tone="info">快速模式使用已验证的双人演播室模板，可调整对白、配音和镜头裁切。更换人物或场景请新建原有模式节目。</Alert>}
@@ -597,7 +604,7 @@ export function VisualPage({ projectId }: { projectId: string }) {
               <Button
                 variant="brand" size="sm" icon="sparkle"
                 busy={genSample.isPending || !!sampleJob}
-                disabled={!sampleRange || genSample.isPending || !!sampleJob || (visualMode === 'overShoulder' && !otsReady)}
+                disabled={!sampleRange || genSample.isPending || !!sampleJob || (hasMotion?pinnedReady.data?.ready!==true:(visualMode === 'overShoulder' && !otsReady))}
                 title={sampleRange ? undefined : '请先确认配音并保证话轮可组成 A→B→A 区间'}
                 onClick={handleGenSample}
               >生成样片</Button>

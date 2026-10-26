@@ -64,6 +64,12 @@ async def sample(project_id: str, payload: dict, request: Request) -> dict:
     if project is None:
         raise HTTPException(404, "project not found")
     from ..services.render_spec import render_options, representative_range
+    from ..services.motion_binding import validate_project_motion_binding
+    try:
+        if project.motion_pack is not None:
+            validate_project_motion_binding(project, request.app.state.motion_pack_store)
+    except (ValueError, KeyError, OSError) as exc:
+        raise HTTPException(422, str(exc)) from exc
     payload = render_options(project, payload, request.app.state.artifacts.root)
     if "rangeStartSec" not in payload and "rangeEndSec" not in payload:
         planned = representative_range(project)

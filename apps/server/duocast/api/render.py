@@ -25,6 +25,12 @@ async def generate(project_id: str, payload: dict, request: Request) -> dict:
     project = store.load(project_id)
     if project is None:
         raise HTTPException(404, "project not found")
+    from ..services.motion_binding import validate_project_motion_binding
+    try:
+        if project.motion_pack is not None:
+            validate_project_motion_binding(project, request.app.state.motion_pack_store)
+    except (ValueError, KeyError, OSError) as exc:
+        raise HTTPException(422, str(exc)) from exc
     from ..services.render_spec import render_options
     payload = render_options(project, payload, getattr(request.app.state.artifacts, "root", store.root))
     validate_render_options(project, payload, _merged_pronunciation(request, project),

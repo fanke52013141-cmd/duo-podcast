@@ -4,7 +4,7 @@
    检查器：所选任务 / 五阶段进度 / 取消语义 / 连接与一致性 / 输入快照
    ========================================================================== */
 import { useMemo, useState } from 'react';
-import { useJobPause, useJobResume, useJobCancel, useJobAbandon, useJobs } from '../lib/api';
+import { sendJson, useJobPause, useJobResume, useJobCancel, useJobAbandon, useJobs } from '../lib/api';
 import { JOB_LABEL, type Job, type JobStatus } from '../lib/types';
 import { Alert, Badge, Button } from '../components/wu';
 import { AppShell } from '../components/AppShell';
@@ -38,7 +38,7 @@ function kindLabel(kind: string): string {
     'tts.synthesize': '整期配音', 'tts.audition': '音色试听',
     'visual.generate': '画面生成', 'sample.generate': '样片生成', renders: '视频渲染',
   };
-  return map[kind] ?? kind;
+  return kind==='motion.prepare'?'动作素材准备':map[kind] ?? kind;
 }
 
 /** 任务级操作资格（与 selected 解耦，供卡片按钮逐卡判断——11 报告 P1-2） */
@@ -189,6 +189,7 @@ export function TasksPage() {
           )}
 
           <div className="hf-task-ops">
+            {j.kind==='motion.prepare'&&j.ownerType==='motionPack'&&j.providerTaskId&&['failed','unknown'].includes(j.status)&&<Button size="sm" onClick={e=>{e.stopPropagation();void sendJson(`/motion-packs/${encodeURIComponent(j.ownerId!)}/prepare/${encodeURIComponent(j.id)}/resume`,'POST').then(()=>jobs.refetch()).catch(err=>setOpError(err.message));}}>继续查询原外部任务（不重采样）</Button>}
             {RUNNING.includes(j.status) && (
               <Button variant="secondary" size="sm" disabled={!canPauseJob(j)} onClick={(e) => { e.stopPropagation(); handlePause(j); }}>
                 {j.status === 'paused' ? '继续'

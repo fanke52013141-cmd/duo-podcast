@@ -126,6 +126,9 @@ def inspect_motion_clip(
         bodies = [_region(r) for r in (body_regions or [])]
         exclusions = [_region(r) for r in (exclusion_regions or [])]
         background = _region(background_region) if background_region is not None else None
+        report["evidence"]["annotations"] = {
+            "bodyRegions": body_regions or [], "exclusionRegions": exclusion_regions or [],
+            "backgroundRegion": background_region}
         source = Path(path).resolve()
         if source.suffix.lower() not in VIDEO_SUFFIXES or not source.is_file():
             issue("INVALID_MEDIA", "A supported, existing local video is required", True)

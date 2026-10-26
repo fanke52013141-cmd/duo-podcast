@@ -62,6 +62,8 @@ def test_rejects_real_negative_media_controls(videos, kind, code):
     assert report["status"] == "failed", report
     assert code in report["hardFailures"], report
     assert report["native"]["frames"] == 20
+    assert report["evidence"]["annotations"] == {
+        "bodyRegions": BODY, "exclusionRegions": [FACE, LED], "backgroundRegion": BACKGROUND}
     assert report["inputFileHash"] == hashlib.sha256(videos[kind].read_bytes()).hexdigest()
     assert all(0 <= issue["startFrame"] <= issue["endFrame"] <= 20 for issue in report["issues"])
 

@@ -1,3 +1,5 @@
+import { motionGenerationAllowed } from '../lib/motionPacks';
+import { ProjectMotionBinding, useMotionReadiness } from '../components/MotionPackSelector';
 /* ============================================================================
    HF-05 · 阶段⑤ 生成导出（真实数据流，01 §7 权威）
    开始前摘要（输入快照 / 复用与待生成段 / 预估 / 磁盘预算）→ 分段进度网格 → 导出区
@@ -86,6 +88,7 @@ export function RenderPage({ projectId }: { projectId: string }) {
   const simulated = useServiceStore((s) => s.capabilities?.video.mode === 'mock');
 
   const proj: Project | undefined = project.data;
+  const pinnedReady=useMotionReadiness(proj?.motionPack,proj?.shotStyle);
   const isFast = proj?.generationMode === 'fast';
   const saveSpec = (patch: NonNullable<Project['renderSpec']>) => {
     if (proj) patchProject.mutate({projectId, expectedRevision:proj.revision, patch:{renderSpec:{...proj.renderSpec,...patch}}},{onError:e=>setError(e.message)});
@@ -122,6 +125,7 @@ export function RenderPage({ projectId }: { projectId: string }) {
   );
   const rendering = !!renderJob;
   const canRender = !!proj && !!timeline && timeline.revisionId === proj.currentDraftRevision
+    && motionGenerationAllowed(proj.motionPack,pinnedReady.data?.ready)
     && timeline.sampleCount > 0 && timeline.sampleCount <= 300 * timeline.sampleRate && !rendering;
   const resolution = RESOLUTION_OPTIONS.find((r) => r.id === resolutionId)?.value ?? '854x480';
   const totalSecs = timeline ? timeline.sampleCount / (timeline.sampleRate || 48000) : 0;
@@ -137,7 +141,7 @@ export function RenderPage({ projectId }: { projectId: string }) {
       projectId,
       clientToken: crypto.randomUUID(),
       revisionId: timeline.revisionId,
-      visualVariantId: proj.selectedVisualVariantId ?? latestVariant?.id,
+      visualVariantId: proj.motionPack?undefined:proj.selectedVisualVariantId ?? latestVariant?.id,
       cameraMode: isOverShoulder ? 'speaker' : proj.cameraMode ?? 'speaker',
       resolution,
       fps,
@@ -306,6 +310,7 @@ export function RenderPage({ projectId }: { projectId: string }) {
       </StageHead>
 
       <div className="hf-body">
+        {proj&&<ProjectMotionBinding project={proj}/>}
         {proj && <ImpactPlan projectId={projectId} revision={proj.revision}/>}
         {proj && <DeliveryCheck projectId={projectId} revision={proj.revision}/>}
         {simulated && <Alert tone="warning">当前为流程演示，不生成 MP4、WAV 或 SRT；下方分段为示意，真实模型效果与规格尚未验证。</Alert>}

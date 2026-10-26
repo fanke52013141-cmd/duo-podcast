@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 from .audio import AudioTimeline, VoiceBinding
 from .base import dc_config
 from .visual import VisualVariant
+from .motion_pack import ShotStyle
 
 StageId = Literal["create", "script", "voice", "visual", "render"]
 Speaker = Literal["A", "B"]
@@ -93,6 +94,12 @@ class Approval(BaseModel):
     revoked_reason: str = ""
 
 
+class MotionPackPin(BaseModel):
+    model_config = dc_config(extra="forbid")
+    id: str = Field(min_length=1, max_length=128, pattern=r"^[A-Za-z0-9_-]+$")
+    version: str = Field(min_length=1, max_length=128, pattern=r"^[A-Za-z0-9_-]+$")
+
+
 class Project(BaseModel):
     model_config = dc_config()
     schema_version: int = 1
@@ -102,6 +109,8 @@ class Project(BaseModel):
     character_bindings: dict[str, dict] = Field(default_factory=dict)
     render_spec: dict = Field(default_factory=dict)
     fast_template: dict = Field(default_factory=dict)
+    motion_pack: MotionPackPin | None = None
+    shot_style: ShotStyle = "twoShot"
     current_draft_revision: str = ""
     selected_output_version: Optional[str] = None
     output_manifest: Optional[dict] = None
