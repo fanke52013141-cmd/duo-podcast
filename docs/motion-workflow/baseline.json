@@ -1,0 +1,24 @@
+{
+  "formatVersion": 1,
+  "baselineRevision": "105c7f64f52c8cb17faf19ef9f2113cf4319bf9d",
+  "backend": {
+    "command": ".venv/Scripts/python.exe -m pytest tests -q",
+    "workingDirectory": "apps/server",
+    "passed": 611,
+    "skipped": 7,
+    "warnings": 2,
+    "wallSecondsReportedByPytest": 31.02
+  },
+  "frontend": {
+    "workingDirectory": "apps/web",
+    "workflowTestsPassed": 11,
+    "commands": [
+      "node --test tests/workflow.test.cjs",
+      "node node_modules/typescript/bin/tsc --noEmit",
+      "node node_modules/vite/bin/vite.js build"
+    ],
+    "typecheck": "passed",
+    "build": "passed"
+  },
+  "scope": "Existing code regression baseline only. New requirements, real-model naturalness, visibility and end-to-end product behavior remain unverified."
+}
