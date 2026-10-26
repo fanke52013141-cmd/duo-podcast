@@ -11,6 +11,7 @@ import { AppShell } from '../components/AppShell';
 import { formatElapsed } from '../lib/format';
 import { useProjectStore } from '../stores';
 import { errorGuide } from '../lib/workflowTools';
+import { MotionWorkflowDiagnostics } from '../components/MotionWorkflowDiagnostics';
 
 const RUNNING: JobStatus[] = ['running', 'pause_requested', 'paused', 'recovering', 'waiting_confirmation', 'cancel_requested', 'unknown'];
 const QUEUED: JobStatus[] = ['queued'];
@@ -228,6 +229,7 @@ export function TasksPage() {
       onNavigate={setView}
       inspector={
         <aside className="hf-inspector" aria-label="检查器">
+          <MotionWorkflowDiagnostics selectedId={selectedId}/>
           <div className="hf-ins-sec">
             <h4>所选任务 <span className="wu-caption" style={{ fontWeight: 400 }}>
               {selected ? `${kindLabel(selected.kind)} ${selected.id}` : '未选'}

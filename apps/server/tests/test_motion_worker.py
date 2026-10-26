@@ -5,10 +5,12 @@ import json
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 
 import pytest
 
 MODULE = Path(__file__).parents[3] / "scripts/fast-mode/motion_worker.py"
+sys.path.insert(0, str(MODULE.parent))
 spec = importlib.util.spec_from_file_location("motion_worker_cpu_test", MODULE)
 worker = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(worker)

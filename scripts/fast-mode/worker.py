@@ -85,8 +85,29 @@ def encoder(path, width, height, crf):
         '-s', f'{width}x{height}', '-r', '25', '-i', 'pipe:0', '-an', '-c:v', 'libx264',
         '-preset', 'fast', '-crf', str(crf), '-pix_fmt', 'yuv420p', str(path)], stdin=subprocess.PIPE)
 
+def initialize_runtime():
+    """Load once for the isolated resident motion process."""
+    models = ROOT / 'models'
+    vae = VAE(str(models / 'sd-vae'), use_float16=True)
+    unet = UNet(str(models / 'musetalkV15/musetalk.json'), str(models / 'musetalkV15/unet.pth'), use_float16=True, device='cuda')
+    unet.model.eval()
+    pe = PositionalEncoding(d_model=384).half().cuda()
+    whisper = WhisperModel.from_pretrained(str(models / 'whisper'), local_files_only=True).half().cuda().eval()
+    processor = AudioProcessor(str(models / 'whisper'))
+    parser = Parser()
+    return {'torch': torch, 'cv2': cv2, 'np': np, 'ROOT': ROOT,
+            'vae': vae, 'unet': unet, 'pe': pe, 'whisper': whisper,
+            'processor': processor, 'parser': parser, 'get_image': get_image}
+
+
+def run_with_runtime(request, runtime):
+    if not request.get('motionAssets'):
+        raise ValueError('Resident runtime only accepts pinned motion requests')
+    return run(request, runtime)
+
+
 @torch.inference_mode()
-def run(request):
+def run(request, runtime=None):
     os.chdir(ROOT)
     started = time.monotonic()
     out = Path(request['outputDir'])
@@ -99,18 +120,11 @@ def run(request):
     models = ROOT / 'models'
     torch.manual_seed(request.get('seed', 42))
     torch.cuda.reset_peak_memory_stats()
-    vae = VAE(str(models / 'sd-vae'), use_float16=True)
-    unet = UNet(str(models / 'musetalkV15/musetalk.json'), str(models / 'musetalkV15/unet.pth'), use_float16=True, device='cuda')
-    unet.model.eval()
-    pe = PositionalEncoding(d_model=384).half().cuda()
-    whisper = WhisperModel.from_pretrained(str(models / 'whisper'), local_files_only=True).half().cuda().eval()
-    processor = AudioProcessor(str(models / 'whisper'))
-    parser = Parser()
+    runtime = runtime or initialize_runtime()
+    vae, unet, pe, whisper, processor, parser = (runtime[key] for key in ('vae', 'unet', 'pe', 'whisper', 'processor', 'parser'))
     if request.get('motionAssets'):
         from motion_worker import run_motion
-        return run_motion(request, {'torch': torch, 'cv2': cv2, 'np': np, 'ROOT': ROOT,
-            'quality': quality, 'vae': vae, 'unet': unet, 'pe': pe, 'whisper': whisper,
-            'processor': processor, 'parser': parser, 'get_image': get_image})
+        return run_motion(request, {**runtime, 'quality': quality})
     source = json.loads((ROOT / 'assets/manifest.json').read_text(encoding='utf-8'))
     coords = json.loads((ROOT / 'assets/face_coordinates.json').read_text(encoding='utf-8'))
     stats = {}

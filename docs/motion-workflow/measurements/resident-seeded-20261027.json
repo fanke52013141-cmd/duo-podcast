@@ -1,0 +1,587 @@
+{
+  "formatVersion": 1,
+  "scope": "raw_worker_performance_and_media_only",
+  "reportSha256": "9d27f693835fd6a6753a8d90f8fdda103b5c9a6fdc487f1deeccaca9622672fc",
+  "runtimeIdentity": "24a58aa5c61bf8da263d0dca00b00795d425c7f8d45dc01493118edcc194df72",
+  "runtimeIdentityConsistent": true,
+  "inputRequestHash": "90c86314ff3d68b2e01c4dea09ef1c2ca0bec762efaeae3a43ab422cc4ece140",
+  "coldDefinition": "Resident process and model allocation restarted before each measured run; OS file and disk feature caches retained",
+  "warmDefinition": "Same initialized resident process after one recorded unmeasured primer",
+  "summary": {
+    "cold": {
+      "count": 5,
+      "medianSeconds": 16.321490100002848,
+      "maxSeconds": 18.9888260000007
+    },
+    "warm": {
+      "count": 5,
+      "medianSeconds": 6.179939699999522,
+      "maxSeconds": 6.381698600001982
+    }
+  },
+  "allMeasuredMediaPassed": true,
+  "uniqueMeasuredOutputHashes": [
+    "1188f5fb7002fce5d7f92a789d30af871edb85e755814269b8233ce26d7d97c6"
+  ],
+  "measured": [
+    {
+      "kind": "cold",
+      "index": 0,
+      "wallSeconds": 18.9888260000007,
+      "runtime": {
+        "origin": "resident",
+        "runtimeIdentity": "24a58aa5c61bf8da263d0dca00b00795d425c7f8d45dc01493118edcc194df72",
+        "initializedThisRequest": true,
+        "initializationSeconds": 4.73399999999674,
+        "requestWallSeconds": 8.921999999998661,
+        "totalWallSeconds": 18.97536720000062,
+        "requestsCompleted": 1
+      },
+      "metrics": {
+        "wallSeconds": 8.843999999997322,
+        "durationSec": 8.0,
+        "frames": 200,
+        "motionSource": "pinned-reviewed-motion-pack",
+        "packId": "raw-worker-smoke",
+        "packVersion": "not-formal-acceptance",
+        "engine": "MuseTalk 1.5",
+        "audioFeaturePasses": 0,
+        "audioFeatureCacheHits": 2,
+        "audioFeatureCacheMisses": 0,
+        "audioFeatureCacheInvalid": 0,
+        "latentCacheHits": 1,
+        "latentCacheMisses": 3,
+        "latentCacheInvalid": 0,
+        "stageTimings": {
+          "audioFeaturesSec": 0.1559999999954016,
+          "latentPreparationSec": 2.5,
+          "cameraRenderSec": 5.51600000000326,
+          "finalComposeSec": 0.5469999999986612
+        },
+        "cameras": {
+          "dual": {
+            "nativeSize": [
+              864,
+              480
+            ],
+            "mouthFrames": {
+              "A": 63,
+              "B": 55
+            },
+            "visibleRoles": [
+              "A",
+              "B"
+            ],
+            "compositing": "explicit-disjoint-body-regions"
+          }
+        },
+        "seamsRequireVisualReview": true,
+        "peakCudaGB": 3.315234816
+      }
+    },
+    {
+      "kind": "cold",
+      "index": 1,
+      "wallSeconds": 16.6074363000007,
+      "runtime": {
+        "origin": "resident",
+        "runtimeIdentity": "24a58aa5c61bf8da263d0dca00b00795d425c7f8d45dc01493118edcc194df72",
+        "initializedThisRequest": true,
+        "initializationSeconds": 4.671999999998661,
+        "requestWallSeconds": 6.719000000004598,
+        "totalWallSeconds": 16.593948099995032,
+        "requestsCompleted": 1
+      },
+      "metrics": {
+        "wallSeconds": 6.672000000005937,
+        "durationSec": 8.0,
+        "frames": 200,
+        "motionSource": "pinned-reviewed-motion-pack",
+        "packId": "raw-worker-smoke",
+        "packVersion": "not-formal-acceptance",
+        "engine": "MuseTalk 1.5",
+        "audioFeaturePasses": 0,
+        "audioFeatureCacheHits": 2,
+        "audioFeatureCacheMisses": 0,
+        "audioFeatureCacheInvalid": 0,
+        "latentCacheHits": 4,
+        "latentCacheMisses": 0,
+        "latentCacheInvalid": 0,
+        "stageTimings": {
+          "audioFeaturesSec": 0.13999999999941792,
+          "latentPreparationSec": 0.26599999999598367,
+          "cameraRenderSec": 5.671999999998661,
+          "finalComposeSec": 0.5470000000059372
+        },
+        "cameras": {
+          "dual": {
+            "nativeSize": [
+              864,
+              480
+            ],
+            "mouthFrames": {
+              "A": 63,
+              "B": 55
+            },
+            "visibleRoles": [
+              "A",
+              "B"
+            ],
+            "compositing": "explicit-disjoint-body-regions"
+          }
+        },
+        "seamsRequireVisualReview": true,
+        "peakCudaGB": 3.315234816
+      }
+    },
+    {
+      "kind": "cold",
+      "index": 2,
+      "wallSeconds": 16.321490100002848,
+      "runtime": {
+        "origin": "resident",
+        "runtimeIdentity": "24a58aa5c61bf8da263d0dca00b00795d425c7f8d45dc01493118edcc194df72",
+        "initializedThisRequest": true,
+        "initializationSeconds": 4.5,
+        "requestWallSeconds": 6.593000000000757,
+        "totalWallSeconds": 16.308210399998643,
+        "requestsCompleted": 1
+      },
+      "metrics": {
+        "wallSeconds": 6.531999999999243,
+        "durationSec": 8.0,
+        "frames": 200,
+        "motionSource": "pinned-reviewed-motion-pack",
+        "packId": "raw-worker-smoke",
+        "packVersion": "not-formal-acceptance",
+        "engine": "MuseTalk 1.5",
+        "audioFeaturePasses": 0,
+        "audioFeatureCacheHits": 2,
+        "audioFeatureCacheMisses": 0,
+        "audioFeatureCacheInvalid": 0,
+        "latentCacheHits": 4,
+        "latentCacheMisses": 0,
+        "latentCacheInvalid": 0,
+        "stageTimings": {
+          "audioFeaturesSec": 0.125,
+          "latentPreparationSec": 0.25,
+          "cameraRenderSec": 5.578000000001339,
+          "finalComposeSec": 0.5469999999986612
+        },
+        "cameras": {
+          "dual": {
+            "nativeSize": [
+              864,
+              480
+            ],
+            "mouthFrames": {
+              "A": 63,
+              "B": 55
+            },
+            "visibleRoles": [
+              "A",
+              "B"
+            ],
+            "compositing": "explicit-disjoint-body-regions"
+          }
+        },
+        "seamsRequireVisualReview": true,
+        "peakCudaGB": 3.315234816
+      }
+    },
+    {
+      "kind": "cold",
+      "index": 3,
+      "wallSeconds": 16.070966799998132,
+      "runtime": {
+        "origin": "resident",
+        "runtimeIdentity": "24a58aa5c61bf8da263d0dca00b00795d425c7f8d45dc01493118edcc194df72",
+        "initializedThisRequest": true,
+        "initializationSeconds": 4.422000000005937,
+        "requestWallSeconds": 6.5939999999973224,
+        "totalWallSeconds": 16.05762429999595,
+        "requestsCompleted": 1
+      },
+      "metrics": {
+        "wallSeconds": 6.546999999998661,
+        "durationSec": 8.0,
+        "frames": 200,
+        "motionSource": "pinned-reviewed-motion-pack",
+        "packId": "raw-worker-smoke",
+        "packVersion": "not-formal-acceptance",
+        "engine": "MuseTalk 1.5",
+        "audioFeaturePasses": 0,
+        "audioFeatureCacheHits": 2,
+        "audioFeatureCacheMisses": 0,
+        "audioFeatureCacheInvalid": 0,
+        "latentCacheHits": 4,
+        "latentCacheMisses": 0,
+        "latentCacheInvalid": 0,
+        "stageTimings": {
+          "audioFeaturesSec": 0.125,
+          "latentPreparationSec": 0.25,
+          "cameraRenderSec": 5.5939999999973224,
+          "finalComposeSec": 0.5160000000032596
+        },
+        "cameras": {
+          "dual": {
+            "nativeSize": [
+              864,
+              480
+            ],
+            "mouthFrames": {
+              "A": 63,
+              "B": 55
+            },
+            "visibleRoles": [
+              "A",
+              "B"
+            ],
+            "compositing": "explicit-disjoint-body-regions"
+          }
+        },
+        "seamsRequireVisualReview": true,
+        "peakCudaGB": 3.315234816
+      }
+    },
+    {
+      "kind": "cold",
+      "index": 4,
+      "wallSeconds": 16.26567249999789,
+      "runtime": {
+        "origin": "resident",
+        "runtimeIdentity": "24a58aa5c61bf8da263d0dca00b00795d425c7f8d45dc01493118edcc194df72",
+        "initializedThisRequest": true,
+        "initializationSeconds": 4.48399999999674,
+        "requestWallSeconds": 6.672000000005937,
+        "totalWallSeconds": 16.251660699999775,
+        "requestsCompleted": 1
+      },
+      "metrics": {
+        "wallSeconds": 6.60899999999674,
+        "durationSec": 8.0,
+        "frames": 200,
+        "motionSource": "pinned-reviewed-motion-pack",
+        "packId": "raw-worker-smoke",
+        "packVersion": "not-formal-acceptance",
+        "engine": "MuseTalk 1.5",
+        "audioFeaturePasses": 0,
+        "audioFeatureCacheHits": 2,
+        "audioFeatureCacheMisses": 0,
+        "audioFeatureCacheInvalid": 0,
+        "latentCacheHits": 4,
+        "latentCacheMisses": 0,
+        "latentCacheInvalid": 0,
+        "stageTimings": {
+          "audioFeaturesSec": 0.14099999999598367,
+          "latentPreparationSec": 0.25,
+          "cameraRenderSec": 5.64100000000326,
+          "finalComposeSec": 0.5309999999954016
+        },
+        "cameras": {
+          "dual": {
+            "nativeSize": [
+              864,
+              480
+            ],
+            "mouthFrames": {
+              "A": 63,
+              "B": 55
+            },
+            "visibleRoles": [
+              "A",
+              "B"
+            ],
+            "compositing": "explicit-disjoint-body-regions"
+          }
+        },
+        "seamsRequireVisualReview": true,
+        "peakCudaGB": 3.315234816
+      }
+    },
+    {
+      "kind": "warm",
+      "index": 0,
+      "wallSeconds": 6.176545800000895,
+      "runtime": {
+        "origin": "resident",
+        "runtimeIdentity": "24a58aa5c61bf8da263d0dca00b00795d425c7f8d45dc01493118edcc194df72",
+        "initializedThisRequest": false,
+        "initializationSeconds": 4.5,
+        "requestWallSeconds": 6.1560000000026776,
+        "totalWallSeconds": 6.163560299995879,
+        "requestsCompleted": 2
+      },
+      "metrics": {
+        "wallSeconds": 6.10899999999674,
+        "durationSec": 8.0,
+        "frames": 200,
+        "motionSource": "pinned-reviewed-motion-pack",
+        "packId": "raw-worker-smoke",
+        "packVersion": "not-formal-acceptance",
+        "engine": "MuseTalk 1.5",
+        "audioFeaturePasses": 0,
+        "audioFeatureCacheHits": 2,
+        "audioFeatureCacheMisses": 0,
+        "audioFeatureCacheInvalid": 0,
+        "latentCacheHits": 4,
+        "latentCacheMisses": 0,
+        "latentCacheInvalid": 0,
+        "stageTimings": {
+          "audioFeaturesSec": 0.125,
+          "latentPreparationSec": 0.25,
+          "cameraRenderSec": 5.156999999999243,
+          "finalComposeSec": 0.5149999999994179
+        },
+        "cameras": {
+          "dual": {
+            "nativeSize": [
+              864,
+              480
+            ],
+            "mouthFrames": {
+              "A": 63,
+              "B": 55
+            },
+            "visibleRoles": [
+              "A",
+              "B"
+            ],
+            "compositing": "explicit-disjoint-body-regions"
+          }
+        },
+        "seamsRequireVisualReview": true,
+        "peakCudaGB": 3.315234816
+      }
+    },
+    {
+      "kind": "warm",
+      "index": 1,
+      "wallSeconds": 6.1695019000035245,
+      "runtime": {
+        "origin": "resident",
+        "runtimeIdentity": "24a58aa5c61bf8da263d0dca00b00795d425c7f8d45dc01493118edcc194df72",
+        "initializedThisRequest": false,
+        "initializationSeconds": 4.5,
+        "requestWallSeconds": 6.139999999999418,
+        "totalWallSeconds": 6.158507699998154,
+        "requestsCompleted": 3
+      },
+      "metrics": {
+        "wallSeconds": 6.0939999999973224,
+        "durationSec": 8.0,
+        "frames": 200,
+        "motionSource": "pinned-reviewed-motion-pack",
+        "packId": "raw-worker-smoke",
+        "packVersion": "not-formal-acceptance",
+        "engine": "MuseTalk 1.5",
+        "audioFeaturePasses": 0,
+        "audioFeatureCacheHits": 2,
+        "audioFeatureCacheMisses": 0,
+        "audioFeatureCacheInvalid": 0,
+        "latentCacheHits": 4,
+        "latentCacheMisses": 0,
+        "latentCacheInvalid": 0,
+        "stageTimings": {
+          "audioFeaturesSec": 0.125,
+          "latentPreparationSec": 0.25,
+          "cameraRenderSec": 5.1560000000026776,
+          "finalComposeSec": 0.5159999999959837
+        },
+        "cameras": {
+          "dual": {
+            "nativeSize": [
+              864,
+              480
+            ],
+            "mouthFrames": {
+              "A": 63,
+              "B": 55
+            },
+            "visibleRoles": [
+              "A",
+              "B"
+            ],
+            "compositing": "explicit-disjoint-body-regions"
+          }
+        },
+        "seamsRequireVisualReview": true,
+        "peakCudaGB": 3.315234816
+      }
+    },
+    {
+      "kind": "warm",
+      "index": 2,
+      "wallSeconds": 6.21750769999926,
+      "runtime": {
+        "origin": "resident",
+        "runtimeIdentity": "24a58aa5c61bf8da263d0dca00b00795d425c7f8d45dc01493118edcc194df72",
+        "initializedThisRequest": false,
+        "initializationSeconds": 4.5,
+        "requestWallSeconds": 6.187999999994645,
+        "totalWallSeconds": 6.204950399995141,
+        "requestsCompleted": 4
+      },
+      "metrics": {
+        "wallSeconds": 6.156999999999243,
+        "durationSec": 8.0,
+        "frames": 200,
+        "motionSource": "pinned-reviewed-motion-pack",
+        "packId": "raw-worker-smoke",
+        "packVersion": "not-formal-acceptance",
+        "engine": "MuseTalk 1.5",
+        "audioFeaturePasses": 0,
+        "audioFeatureCacheHits": 2,
+        "audioFeatureCacheMisses": 0,
+        "audioFeatureCacheInvalid": 0,
+        "latentCacheHits": 4,
+        "latentCacheMisses": 0,
+        "latentCacheInvalid": 0,
+        "stageTimings": {
+          "audioFeaturesSec": 0.125,
+          "latentPreparationSec": 0.25,
+          "cameraRenderSec": 5.171999999998661,
+          "finalComposeSec": 0.5469999999986612
+        },
+        "cameras": {
+          "dual": {
+            "nativeSize": [
+              864,
+              480
+            ],
+            "mouthFrames": {
+              "A": 63,
+              "B": 55
+            },
+            "visibleRoles": [
+              "A",
+              "B"
+            ],
+            "compositing": "explicit-disjoint-body-regions"
+          }
+        },
+        "seamsRequireVisualReview": true,
+        "peakCudaGB": 3.315234816
+      }
+    },
+    {
+      "kind": "warm",
+      "index": 3,
+      "wallSeconds": 6.179939699999522,
+      "runtime": {
+        "origin": "resident",
+        "runtimeIdentity": "24a58aa5c61bf8da263d0dca00b00795d425c7f8d45dc01493118edcc194df72",
+        "initializedThisRequest": false,
+        "initializationSeconds": 4.5,
+        "requestWallSeconds": 6.1560000000026776,
+        "totalWallSeconds": 6.167590599994583,
+        "requestsCompleted": 5
+      },
+      "metrics": {
+        "wallSeconds": 6.109000000004016,
+        "durationSec": 8.0,
+        "frames": 200,
+        "motionSource": "pinned-reviewed-motion-pack",
+        "packId": "raw-worker-smoke",
+        "packVersion": "not-formal-acceptance",
+        "engine": "MuseTalk 1.5",
+        "audioFeaturePasses": 0,
+        "audioFeatureCacheHits": 2,
+        "audioFeatureCacheMisses": 0,
+        "audioFeatureCacheInvalid": 0,
+        "latentCacheHits": 4,
+        "latentCacheMisses": 0,
+        "latentCacheInvalid": 0,
+        "stageTimings": {
+          "audioFeaturesSec": 0.125,
+          "latentPreparationSec": 0.25,
+          "cameraRenderSec": 5.171999999998661,
+          "finalComposeSec": 0.5149999999994179
+        },
+        "cameras": {
+          "dual": {
+            "nativeSize": [
+              864,
+              480
+            ],
+            "mouthFrames": {
+              "A": 63,
+              "B": 55
+            },
+            "visibleRoles": [
+              "A",
+              "B"
+            ],
+            "compositing": "explicit-disjoint-body-regions"
+          }
+        },
+        "seamsRequireVisualReview": true,
+        "peakCudaGB": 3.315234816
+      }
+    },
+    {
+      "kind": "warm",
+      "index": 4,
+      "wallSeconds": 6.381698600001982,
+      "runtime": {
+        "origin": "resident",
+        "runtimeIdentity": "24a58aa5c61bf8da263d0dca00b00795d425c7f8d45dc01493118edcc194df72",
+        "initializedThisRequest": false,
+        "initializationSeconds": 4.5,
+        "requestWallSeconds": 6.360000000000582,
+        "totalWallSeconds": 6.370097500002885,
+        "requestsCompleted": 6
+      },
+      "metrics": {
+        "wallSeconds": 6.296999999998661,
+        "durationSec": 8.0,
+        "frames": 200,
+        "motionSource": "pinned-reviewed-motion-pack",
+        "packId": "raw-worker-smoke",
+        "packVersion": "not-formal-acceptance",
+        "engine": "MuseTalk 1.5",
+        "audioFeaturePasses": 0,
+        "audioFeatureCacheHits": 2,
+        "audioFeatureCacheMisses": 0,
+        "audioFeatureCacheInvalid": 0,
+        "latentCacheHits": 4,
+        "latentCacheMisses": 0,
+        "latentCacheInvalid": 0,
+        "stageTimings": {
+          "audioFeaturesSec": 0.125,
+          "latentPreparationSec": 0.23400000000401633,
+          "cameraRenderSec": 5.3289999999979045,
+          "finalComposeSec": 0.5619999999980791
+        },
+        "cameras": {
+          "dual": {
+            "nativeSize": [
+              864,
+              480
+            ],
+            "mouthFrames": {
+              "A": 63,
+              "B": 55
+            },
+            "visibleRoles": [
+              "A",
+              "B"
+            ],
+            "compositing": "explicit-disjoint-body-regions"
+          }
+        },
+        "seamsRequireVisualReview": true,
+        "peakCudaGB": 3.315234816
+      }
+    }
+  ],
+  "limitations": [
+    "Not formal application/API acceptance",
+    "Not automatic visual naturalness or identity approval",
+    "Timing depends on this hardware, request and populated disk caches",
+    "Eight-second previously curated object media; no formal API or browser acceptance",
+    "Whisper audio cache and VAE latent cache may already be populated; cold means model process restart only",
+    "This benchmark predates process-tree cleanup fix in the server supervisor; numerical worker identity is recorded",
+    "File equality does not prove naturalness, facial visibility, lip sync quality or arbitrary object support"
+  ]
+}

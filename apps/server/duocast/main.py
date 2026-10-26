@@ -51,6 +51,11 @@ def _job_runner(manager: JobManager, store: ProjectStore, artifacts: ArtifactSto
     """Job 执行分派：按 kind 路由到对应 service（06 §6.1 runner 装配）。"""
 
     async def runner(job):
+        snapshot = job.input_snapshot.get('projectSnapshot', {})
+        uses_resident = job.kind in ('renders', 'sample.generate') and bool(snapshot.get('motionPack')) and snapshot.get('generationMode') == 'fast'
+        if job.queue_class == 'gpu' and not uses_resident:
+            from .services.fast_runtime import release_all
+            await release_all()
         if job.kind == "motion.prepare":
             if motion_preparation is None:
                 raise RuntimeError("动作准备服务未装配")
@@ -319,6 +324,8 @@ async def lifespan(app: FastAPI):
         yield
     finally:
         await job_manager.stop()
+        from .services.fast_runtime import release_all
+        await release_all()
         project_store.flush()
         log("shutdown", "duocast server stopping")
 
@@ -361,12 +368,14 @@ from .api import motion_media as motion_media_api
 from .api import motion_packs as motion_packs_api
 from .api import motion_preparation as motion_preparation_api
 from .api import motion_coordinates as motion_coordinates_api
+from .api import motion_diagnostics as motion_diagnostics_api
 
 app.include_router(projects_api.router)
 app.include_router(motion_media_api.router)
 app.include_router(motion_packs_api.router)
 app.include_router(motion_preparation_api.router)
 app.include_router(motion_coordinates_api.router)
+app.include_router(motion_diagnostics_api.router)
 app.include_router(providers_api.router)
 app.include_router(assets_api.router)
 app.include_router(diagnostics_api.router)

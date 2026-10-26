@@ -58,3 +58,22 @@
 - 原始GPU验证请求标记raw-worker-smoke/not-formal-acceptance，报告在.review/motion-acceptance/new-worker-*.json；不把旧整理素材或直接worker测试冒充正式API/页面完整M1验收。浏览器仍因设置禁用无法实测。
 
 尚需：正式API真实I2V到采用到样片全链路、约12秒A-B-A、30秒多类型/三机位、专家模式、分段改稿复用、常驻运行时、冷/热各5次、两分钟长片与发布回退。T01–T12完整完成仍未证明，不能合并main或宣布全目标完成。
+
+## 批次4：分层缓存、常驻运行时、诊断和回退
+
+- 音频特征磁盘缓存绑定真实PCM16、采样时钟、Whisper权重/配置、预处理源码及依赖版本；跨机位/导出复用。第一次真实GPU执行2次提取，重复执行0次提取/2次命中；阶段耗时约1.14秒降至0.14秒，不能外推为整片提速。
+- 排查实际VAE发现posterior.sample()消耗随机数，修复latent缓存未绑定seed的问题。新键绑定seed/VAE源码/权重，每源帧独立播种并恢复CPU/CUDA RNG。真实CUDA/VAE用例验证冷/暖/反序补帧/损坏恢复一致、换seed变化；相关GPU环境测试7项全部通过，没有以模拟tensor替代。
+- 常驻进程按代码/模型/环境身份隔离复用，GPU互斥，TTS/I2V/其他GPU任务前释放；旧模板保留一次性路径，DUOCAST_FAST_RESIDENT=0可显式回退。取消不重采样I2V，本地worker异常最多回退一次。
+- 真实5冷/5热基准（另有1次预热），相同8秒旧整理素材，同一运行时身份：冷中位16.321秒/最慢18.989秒，热中位6.180秒/最慢6.382秒；10份完整媒体检查通过且文件SHA256一致。冷态仅重启模型，磁盘缓存保留；不等于正式API/自然度/长片验收。脱敏摘要见measurements/resident-seeded-20261027.json。
+- 新增分段复用候选规划，按实际PCM和精确源帧；根据vendor实现绑定Whisper完整30秒编码窗口，跨边界含相邻窗口。非16k音轨保守依赖整轨重采样；候选键匹配不等于已有缓存文件，更未计为GPU分段复用已完成。
+- 诊断接口区分real/simulated/unverified，展示已有缓存/阶段耗时/来源和原生规格，未知费用/耗时为null。任务页接入诊断。
+- 运行时安装预检查/原子文件替换/校验备份/pending记录/显式回退；执行与安装共享OS锁，半更新禁止执行。在独立运行时实际演练安装→回退→重新安装，全部worker哈希恢复，抽查模型/素材/vendor哈希未变。生产模板和数据未覆盖。
+- 独立审查发现：基准需核对每轮runtimeIdentity（已补门禁）；父Python被kill后FFmpeg可能存活（已修复Windows挂起创建→JobObject→恢复线程，以及POSIX进程组清理）。实际CPU延迟writer/父EOF/取消/安全fallback联合18项测试通过；修复后的真实GPU退出路径仍待单独验证。
+
+本批最终本地全量回归873 passed / 16 skipped，60.15秒；其中包含并行开发的专家builder/API验收工具用例，不冒充真实效果。前端19项测试/类型检查/构建通过。完整计划仍未完成：分段GPU复用尚未接入，正式API/专家动作链路和30秒/2分钟验收继续开发。
+
+## 正式API真实准备验收：进行中
+
+隔离存储`.review/formal-motion-storage`、API端口8137、独立ComfyUI端口8191；已通过正式图片导入/创建动作包/prepare接口提交真实I2V。包`MP-277121ff7dad49cb`，任务`JFDCAC15D33`，外部任务`3b71f0f7-a0fc-412b-9d32-5b99f71a9476`。最新GET job及引擎queue确认running；没有重提或把等待当失败。证据账在`.review/formal-preparation-state.json`，任务未完成，尚无采用/效果结论。
+
+专家模式只读排查确认旧reference配置可能在MultiTalk long-loop下绕过动作latent，正在开发专用短窗口V2V+音频工作流；当前仅builder测试，不能算专家模式已实现或已有动作保留。

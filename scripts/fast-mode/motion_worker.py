@@ -6,10 +6,12 @@ by stacking two complete scenes. OTS keeps the original foreground untouched.
 import hashlib
 import json
 import math
+import pickle
 import re
 import subprocess
 import time
 import uuid
+from motion_audio_cache import audio_identity, model_identity, feature_key, load_features, save_features
 from collections import OrderedDict
 from pathlib import Path
 
@@ -157,6 +159,49 @@ def _valid_latent(tensor, torch):
             and tensor.dtype in (torch.float16, torch.float32) and bool(torch.isfinite(tensor).all()))
 
 
+def latent_key(video_hash, coordinates, vae_identity, seed):
+    if type(seed) is not int or not -(2**63) <= seed < 2**64:
+        raise ValueError("Latent seed must be a valid integer torch seed")
+    return hashlib.sha256(json.dumps({"video": video_hash, "coordinates": coordinates,
+        "vae": vae_identity, "seed": seed, "recipe": "native-face-lanczos256-seeded-v2"},
+        sort_keys=True, separators=(",", ":"), allow_nan=False).encode()).hexdigest()
+
+
+def latent_frame_seed(key, frame):
+    if type(frame) is not int or frame < 0:
+        raise ValueError("Invalid latent source frame")
+    return int.from_bytes(hashlib.sha256(f"{key}:{frame}".encode()).digest()[:8], "big") % (2**63)
+
+
+def encode_seeded_latent(vae, crop, torch, key, frame):
+    """Isolate posterior sampling from cache warmth, frame order and global RNG."""
+    device = torch.cuda.current_device()
+    seed = latent_frame_seed(key, frame)
+    with torch.random.fork_rng(devices=[device]):
+        torch.random.default_generator.manual_seed(seed)
+        torch.cuda.manual_seed(seed)
+        tensor = vae.get_latents_for_unet(crop).cpu()
+    if not _valid_latent(tensor, torch):
+        raise ValueError("VAE returned invalid motion latents")
+    return tensor
+
+
+def load_latents(path, key, frames, torch):
+    if not path.is_file():
+        return {}, "miss"
+    try:
+        if path.stat().st_size > frames * 8 * 32 * 32 * 4 + 1024*1024:
+            return {}, "invalid"
+        cached = torch.load(path, map_location="cpu", weights_only=True)
+        bank = cached.get("latents") if isinstance(cached, dict) and cached.get("cacheKey") == key else None
+        if (isinstance(bank, dict) and all(type(i) is int and 0 <= i < frames and _valid_latent(v, torch)
+                                          for i, v in bank.items())):
+            return bank, "hit"
+    except (OSError, ValueError, RuntimeError, EOFError, TypeError, pickle.UnpicklingError):
+        pass
+    return {}, "invalid"
+
+
 class ClipReader:
     """Small decoded-frame LRU; long clips never expand fully into RAM."""
     def __init__(self, clip, cv2, cache):
@@ -223,19 +268,38 @@ def _run(request, expanded, geometry, rt, torch, cv2):
         frame_cache = {"frames": OrderedDict(), "bytes": 0}
         for clip_id in used:
             readers[clip_id] = ClipReader(clips[clip_id], cv2, frame_cache)
-        # One authoritative audio feature sequence per role, reused for every camera.
+        feature_started = time.monotonic()
+        feature_cache = {"hit": 0, "miss": 0, "invalid": 0}
+        audio_sources = {}
+        audio_model = model_identity(root)
+        # Features depend on actual PCM/model code, never camera or export spec.
         for role in {r for roles in expanded.values() for r in roles}:
-            values, samples = rt["processor"].get_audio_feature(request["tracks"][role])
-            chunks = rt["processor"].get_whisper_chunk(values, "cuda", torch.float16, rt["whisper"], samples, fps=25)
-            if len(chunks) < count-1 or not len(chunks):
-                raise ValueError("Authoritative role audio is too short")
-            if len(chunks) < count:
-                chunks = torch.cat([chunks, chunks[-1:]])
-            features[role] = chunks[:count].cpu()
-        cache_root = root / "cache/motion_latents_v1"
+            identity = audio_identity(request['tracks'][role], request['sampleRate'], request['sampleCount'])
+            audio_sources[role] = identity
+            key = feature_key(identity, audio_model, count)
+            cache_path = root / 'cache/motion_audio_v1' / (key + '.pt')
+            chunks, status = load_features(cache_path, key, count, torch)
+            feature_cache[status] += 1
+            if chunks is None:
+                values, samples = rt["processor"].get_audio_feature(request["tracks"][role])
+                chunks = rt["processor"].get_whisper_chunk(values, "cuda", torch.float16, rt["whisper"], samples, fps=25)
+                if len(chunks) < count-1 or not len(chunks):
+                    raise ValueError("Authoritative role audio is too short")
+                if len(chunks) < count:
+                    chunks = torch.cat([chunks, chunks[-1:]])
+                chunks = chunks[:count].cpu()
+                if audio_identity(request['tracks'][role], request['sampleRate'], request['sampleCount']) != identity:
+                    raise ValueError('Role audio changed during feature extraction')
+                save_features(cache_path, key, chunks, count, torch)
+            features[role] = chunks
+        feature_seconds = time.monotonic() - feature_started
+        latent_started = time.monotonic()
+        cache_root = root / "cache/motion_latents_v2"
         cache_root.mkdir(parents=True, exist_ok=True)
         vae_identity = {"config": file_hash(root / "models/sd-vae/config.json"),
-                        "weights": file_hash(root / "models/sd-vae/diffusion_pytorch_model.bin")}
+                        "weights": file_hash(root / "models/sd-vae/diffusion_pytorch_model.bin"),
+                        "implementation": file_hash(root / "vendor/MuseTalk/musetalk/models/vae.py")}
+        latent_cache = {"hit": 0, "miss": 0, "invalid": 0}
         required = {clip_id: set() for clip_id in used}
         for roles in expanded.values():
             for sequence in roles.values():
@@ -244,28 +308,25 @@ def _run(request, expanded, geometry, rt, torch, cv2):
                         required[clip_id].add(source)
         for clip_id in used:
             clip = clips[clip_id]
-            key = hashlib.sha256(json.dumps({"video": clip["fileHash"], "coordinates": clip["coordinates"],
-                "vae": vae_identity, "recipe": "native-face-lanczos256-v1"}, sort_keys=True).encode()).hexdigest()
+            key = latent_key(clip["fileHash"], clip["coordinates"], vae_identity, request.get("seed", 42))
             path = cache_root / (key + ".pt")
-            cached = torch.load(path, map_location="cpu", weights_only=True) if path.exists() else {}
-            bank = cached.get("latents", {}) if cached.get("cacheKey") == key else {}
-            if not isinstance(bank, dict) or any(type(i) is not int or not 0 <= i < clip["frames"]
-                                                or not _valid_latent(value, torch) for i, value in bank.items()):
-                raise ValueError("Cached motion latents are invalid; remove corrupt cache before retry")
+            bank, cache_status = load_latents(path, key, clip["frames"], torch)
+            missing = required[clip_id] - set(bank)
+            latent_cache["invalid" if cache_status == "invalid" else "miss" if missing else cache_status] += 1
             changed = False
-            for index in sorted(required[clip_id] - set(bank)):
+            for index in sorted(missing):
                 frame = readers[clip_id].get(index)
                 x1, y1, x2, y2 = clip["coordinates"][index]
                 crop = cv2.resize(frame[y1:y2, x1:x2], (256, 256), interpolation=cv2.INTER_LANCZOS4)
-                bank[index] = rt["vae"].get_latents_for_unet(crop).cpu()
-                if not _valid_latent(bank[index], torch):
-                    raise ValueError("VAE returned invalid motion latents")
+                bank[index] = encode_seeded_latent(rt["vae"], crop, torch, key, index)
                 changed = True
             if changed:
                 temporary = path.with_name(key + "." + uuid.uuid4().hex + ".partial")
                 torch.save({"cacheKey": key, "latents": bank}, temporary)
                 temporary.replace(path)
             latent_banks[clip_id] = bank
+        latent_seconds = time.monotonic() - latent_started
+        camera_started = time.monotonic()
         stats, paths = {}, {}
         for camera_id, roles in expanded.items():
             width, height, _ = geometry[camera_id]["native"]
@@ -319,14 +380,27 @@ def _run(request, expanded, geometry, rt, torch, cv2):
             paths[camera_id] = target
             stats[camera_id] = {"nativeSize": [width, height], "mouthFrames": mouth_frames,
                                 "visibleRoles": sorted(roles), "compositing": "explicit-disjoint-body-regions" if len(roles) == 2 else "full-frame-original-foreground"}
+        camera_seconds = time.monotonic() - camera_started
+        compose_started = time.monotonic()
         _edit(request, paths, out, quality)
+        compose_seconds = time.monotonic() - compose_started
+        for role, identity in audio_sources.items():
+            if audio_identity(request['tracks'][role], request['sampleRate'], request['sampleCount']) != identity:
+                raise ValueError('Role audio changed during rendering')
         for clip_id in used:
             if file_hash(clips[clip_id]["path"]) != clips[clip_id]["fileHash"]:
                 raise ValueError("Motion artifact changed during rendering")
         metrics = {"wallSeconds": time.monotonic()-started, "durationSec": request["sampleCount"]/request["sampleRate"],
                    "frames": count, "motionSource": "pinned-reviewed-motion-pack", "packId": request["motionAssets"]["packId"],
                    "packVersion": request["motionAssets"]["packVersion"], "engine": "MuseTalk 1.5",
-                   "audioFeaturePasses": len(features), "cameras": stats, "seamsRequireVisualReview": True,
+                   "audioFeaturePasses": feature_cache['miss'] + feature_cache['invalid'],
+                   "audioFeatureCacheHits": feature_cache['hit'], "audioFeatureCacheMisses": feature_cache['miss'],
+                   "audioFeatureCacheInvalid": feature_cache['invalid'],
+                   "latentCacheHits": latent_cache['hit'], "latentCacheMisses": latent_cache['miss'],
+                   "latentCacheInvalid": latent_cache['invalid'],
+                   "stageTimings": {"audioFeaturesSec": feature_seconds, "latentPreparationSec": latent_seconds,
+                                    "cameraRenderSec": camera_seconds, "finalComposeSec": compose_seconds},
+                   "cameras": stats, "seamsRequireVisualReview": True,
                    "peakCudaGB": torch.cuda.max_memory_allocated()/1e9}
         (out / "metrics.json").write_text(json.dumps(metrics, indent=2), encoding="utf-8")
         print(json.dumps(metrics), flush=True)

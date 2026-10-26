@@ -18,17 +18,21 @@ def require_engine(pinned_root=None):
                 'models/musetalkV15/unet.pth', 'models/sd-vae/diffusion_pytorch_model.bin', 'models/whisper/pytorch_model.bin']
     if root is None or any(not (root / p).is_file() for p in required):
         raise ValueError('快速模式引擎未安装完整，请检查本机配置')
+    if (root / '.runtime-install-pending.json').exists():
+        raise ValueError('运行时安装尚未完成，请先回退记录的发布版本')
     return root
 
 
 def require_motion_engine():
     root = engine_root()
-    required = ['worker.py', 'motion_worker.py', 'quality.py', 'render_geometry.py',
+    required = ['worker.py', 'motion_worker.py', 'motion_audio_cache.py', 'quality.py', 'render_geometry.py',
                 'venv/Scripts/python.exe', 'assets/parsing_bisenet.pth',
                 'models/musetalkV15/unet.pth', 'models/sd-vae/diffusion_pytorch_model.bin',
                 'models/whisper/pytorch_model.bin']
     if root is None or any(not (root / name).is_file() for name in required):
         raise ValueError('动作包口型运行时尚未安装完整，请安装当前版本运行时')
+    if (root / '.runtime-install-pending.json').exists():
+        raise ValueError('运行时安装尚未完成，请先回退记录的发布版本')
     return root
 
 def template_identity(root):
@@ -92,6 +96,7 @@ class MuseTalkVideoProvider:
     def __init__(self, artifacts, motion_store=None):
         self.artifacts = artifacts
         self.motion_store = motion_store
+        self._runtimes = {}
 
     def asset(self, asset_id, kind):
         entry = self.artifacts.by_id(asset_id)
@@ -164,16 +169,18 @@ class MuseTalkVideoProvider:
         request_file = folder/'request.json'
         request_file.write_text(json.dumps(worker_req),encoding='utf-8')
         if progress: progress('快速模式：更新双人口型')
-        with (folder/'worker.log').open('wb') as log:
-            process = await asyncio.create_subprocess_exec(str(root/'venv/Scripts/python.exe'), '-B', str(root/'worker.py'), str(request_file),
-                cwd=str(root), stdout=log, stderr=log)
-            try:
-                await asyncio.wait_for(process.wait(), timeout=1800)
-            except (asyncio.TimeoutError, asyncio.CancelledError):
-                process.kill()
-                await process.wait()
-                raise
-        if process.returncode: raise RuntimeError(f'快速模式生成失败，详情见 {folder / "worker.log"}')
+        runtime_stats = None
+        if project.motion_pack is not None and os.environ.get('DUOCAST_FAST_RESIDENT', '1') == '1' and (root/'resident_worker.py').is_file():
+            from ..services.fast_runtime import FastRuntimeManager
+            if str(root) not in self._runtimes:
+                self._runtimes[str(root)] = FastRuntimeManager(root)
+            runtime = self._runtimes[str(root)]
+            runtime_stats = await runtime.render(request_file)
+        else:
+            from ..services.fast_runtime import release_all, runtime_lease
+            await release_all()
+            async with runtime_lease(root):
+                await self._one_shot(root, folder, request_file)
         final = folder/'final.mp4'
         probe = await asyncio.create_subprocess_exec('ffprobe','-v','error','-show_streams','-of','json',str(final),stdout=asyncio.subprocess.PIPE)
         info, _ = await probe.communicate()
@@ -187,4 +194,18 @@ class MuseTalkVideoProvider:
         self.artifacts.register(artifact_id,'video',str(final),req.get('dependencyHash',''),req,'musetalk-fast-v2')
         return {'artifactIds':[artifact_id], 'meta':{'path':str(final),'durationSec':duration,'resolution':worker_req['resolution'],
             'fps':worker_req['fps'],'fastQuality':worker_req['fastQuality'],'generationMode':'fast','cameraMode':req.get('cameraMode',project.camera_mode),'cameraPlan':cameras,'qualityStatus':'needs_review',
-            'generationStats':json.loads((folder/'metrics.json').read_text(encoding='utf-8'))}}
+            'generationStats':{**json.loads((folder/'metrics.json').read_text(encoding='utf-8')),
+                               **({'runtime': runtime_stats} if runtime_stats is not None else {})}}}
+
+    async def _one_shot(self, root, folder, request_file):
+        from ..services.owned_process import spawn_owned
+        with (folder/'worker.log').open('wb') as log:
+            process = await spawn_owned(str(root/'venv/Scripts/python.exe'), '-B', str(root/'worker.py'), str(request_file),
+                cwd=str(root), stdout=log, stderr=log)
+            try:
+                await asyncio.wait_for(process.wait(), timeout=1800)
+            except (asyncio.TimeoutError, asyncio.CancelledError):
+                await process.stop()
+                raise
+        if process.returncode:
+            raise RuntimeError(f'快速模式生成失败，详情见 {folder / "worker.log"}')

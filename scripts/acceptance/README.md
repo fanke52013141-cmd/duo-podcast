@@ -27,3 +27,19 @@ apps/server/.venv/Scripts/python.exe scripts/acceptance/run_motion_acceptance.py
 报告记录 Git HEAD、Python、FFmpeg/ffprobe 版本和命令。常见敏感参数及内联程序正文被隐藏并以摘要记录；不采集环境变量。命令通过不等于效果通过，性能优化必须与真实媒体和人工质量检查一起评估。
 
 本目录脚本可由后端测试直接载入，测试用 FFmpeg 生成小型临时媒体，覆盖规格错误、音频不同、无音频、截断文件和无证据不得自动完成需求。
+
+## 常驻口型运行时的真实GPU基准
+
+`run_resident_benchmark.py`实际执行给定的本机动作包worker请求，默认冷态5次、预热1次、热态5次，并对每个成片完整解码。它会调用GPU，输入请求及模型需已准备好，不下载模型或请求外部I2V。
+
+```powershell
+apps/server/.venv/Scripts/python.exe scripts/acceptance/run_resident_benchmark.py --runtime D:/DuoCastMotionAcceptance20261027 --request D:/DuoCastMotionAcceptance20261027/smoke-request.json --output .review/motion-acceptance/my-resident-benchmark.json
+```
+
+冷态指每轮关闭并重新启动模型进程，保留操作系统文件缓存和磁盘特征缓存；热态指一次预热后保持同一模型进程。报告分别记录初始化、总耗时、实际音频特征提取与缓存计数。所有轮次必须使用同一运行时身份；出现回退或媒体失败不能作为本轮基准通过。原始worker测量不能代替产品API流程、人工五官/自然度审看或长片验收。
+
+## 运行时发布和回退
+
+停止该运行时的任务后，以`install_runtime.py --runtime <目录>`安装当前worker代码。安装会保存校验过的旧文件快照，最后发布包含`releaseId`的`runtime_version.json`。使用`--runtime <目录> --rollback <releaseId>`恢复该次安装之前的全部worker文件；不会改模型、素材或旧工程的固定版本绑定。
+
+安装失败会自动恢复；硬中断留下pending记录时，新安装/执行被拒绝，需按记录的releaseId回退。已运行的worker与安装器共享执行锁，防止半更新。旧模板身份变更需要重新验证，工具不会替用户重写采用记录。新增动作包默认使用常驻进程；设置`DUOCAST_FAST_RESIDENT=0`可使用一次性worker回退，已有旧模板继续原路径。
