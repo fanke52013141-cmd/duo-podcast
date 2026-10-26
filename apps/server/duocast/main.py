@@ -39,6 +39,7 @@ from .storage.characters import CharacterStore
 from .storage.machine import CacheStore, MachineSettings
 from .storage.project_store import InvalidProjectInput, ProjectStore
 from .storage.templates import TemplateStore
+from .storage.motion_packs import MotionPackStore
 
 setup_logging()
 
@@ -286,6 +287,7 @@ async def lifespan(app: FastAPI):
     # ---- 装配 ----
     app.state.project_store = project_store
     app.state.artifacts = artifacts
+    app.state.motion_pack_store = MotionPackStore(settings.storage_root / "motion-packs", artifacts.by_id)
     app.state.machine = machine
     app.state.cache = cache
     app.state.template_store = TemplateStore(settings.storage_root / "templates")
@@ -344,8 +346,12 @@ from .api import script as script_api
 from .api import templates as templates_api
 from .api import visual as visual_api
 from .api import voice as voice_api
+from .api import motion_media as motion_media_api
+from .api import motion_packs as motion_packs_api
 
 app.include_router(projects_api.router)
+app.include_router(motion_media_api.router)
+app.include_router(motion_packs_api.router)
 app.include_router(providers_api.router)
 app.include_router(assets_api.router)
 app.include_router(diagnostics_api.router)
