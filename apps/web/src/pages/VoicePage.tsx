@@ -15,6 +15,9 @@ import { formatSamples } from '../lib/format';
 import { useError } from '../lib/useError';
 import { SPEAKERS as SPEAKER_NAMES } from '../lib/types';
 import { useProjectStore, useServiceStore } from '../stores';
+import { playAudio } from '../lib/player';
+import { AudioPlayer } from '../components/AudioPlayer';
+import { ImpactPlan } from '../components/ImpactPlan';
 
 const SPEAKERS: { id: 'A' | 'B'; name: string; role: string }[] = (['A', 'B'] as const).map((id) => ({ id, ...SPEAKER_NAMES[id] }));
 
@@ -141,8 +144,7 @@ export function VoicePage({ projectId }: { projectId: string }) {
     if (j.status === 'succeeded') {
       const aid = (j.result as { artifactIds?: string[] } | null)?.artifactIds?.[0];
       if (aid) {
-        const el = new Audio(`/api/artifacts/${aid}/file`);
-        el.play().catch(() => setError('浏览器阻止了自动播放，请稍候再点试听'));
+        void playAudio(aid);
         updateBinding(auditionJob.spk, { auditionState: 'passed' });
       } else {
         setError('试听未产出音频（模拟通道无真实产物，接入真实 TTS 后可试听）');
@@ -215,8 +217,7 @@ export function VoicePage({ projectId }: { projectId: string }) {
       setError('此音频来自模拟引擎，未生成可播放的文件。');
       return;
     }
-    new Audio(`/api/artifacts/${assetId}/file`).play()
-      .catch(() => setError('浏览器阻止了自动播放，请再试一次。'));
+    void playAudio(assetId);
   };
 
   const adoptCandidate = (unitId: string, assetId: string) => {
@@ -422,6 +423,7 @@ export function VoicePage({ projectId }: { projectId: string }) {
       </StageHead>
 
       <div className="hf-body">
+        {proj && <ImpactPlan projectId={projectId} revision={proj.revision}/>}
         {error && <Alert tone="danger" onClose={dismissError}>{error}</Alert>}
         {synthNotApplied && (
           <Alert tone="warning">
@@ -468,7 +470,7 @@ export function VoicePage({ projectId }: { projectId: string }) {
                 <div className="hf-voice" key={spk.id}>
                   <Badge tone={spk.id === 'A' ? 'info' : 'speaker-b'}>{spk.id}</Badge>
                   <div>
-                    <div className="nm">{spk.name} · {spk.role}</div>
+                    <div className="nm">{proj?.characterBindings?.[spk.id]?.name??spk.name} · {proj?.characterBindings?.[spk.id]?.role??spk.role}</div>
                     {!ttsSimulated && (
                       <select
                         className="wu-input" aria-label={`${spk.id} 音色`} style={{ marginTop: 4 }}
@@ -574,8 +576,7 @@ export function VoicePage({ projectId }: { projectId: string }) {
             {!ttsSimulated && turns.length > 0 && (
               <div className="hf-playrow">
                 {timeline?.masterAudioAssetId ? (
-                  <audio controls preload="none" style={{ width: '100%', height: 32 }}
-                         src={`/api/artifacts/${timeline.masterAudioAssetId}/file`} />
+                  <AudioPlayer assetId={timeline.masterAudioAssetId} />
                 ) : (
                   <Button variant="secondary" size="sm" icon="play" disabled title="整期合成后可在此试听母轨">连续试听</Button>
                 )}

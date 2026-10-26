@@ -7,6 +7,7 @@ import { formatSamples } from '../lib/format';
 import { STAGE_META, STAGE_ORDER, type AudioTimeline, type Project, type StageState } from '../lib/types';
 import { Badge, Icon, type Tone } from './wu';
 import { useProjectStore, useServiceStore, type View } from '../stores';
+import { pauseAudio, playAudio, usePlayer } from '../lib/player';
 
 const ENTRY_VIEWS: { id: View; label: string; icon: 'folder' | 'gear' | 'task' }[] = [
   { id: 'assets', label: '资产库', icon: 'folder' },
@@ -136,6 +137,9 @@ export function TimelineBar({
   // 演示播放（第五轮实测 A5）：真实音频接入前，播放按钮驱动播放头匀速走完时间轨，
   // 让「试听」阶段有可感知的播放反馈；真实引擎接入后此按钮可切换为播放母轨产物。
   const [demoPlaying, setDemoPlaying] = React.useState(false);
+  const player = usePlayer();
+  const realAsset = timeline?.masterAudioAssetId;
+  const realActive = !!realAsset && player.assetId === realAsset;
   const [demoSecs, setDemoSecs] = React.useState(0);
   const totalSecs = timeline && timeline.sampleRate > 0 ? timeline.sampleCount / timeline.sampleRate : 0;
   React.useEffect(() => {
@@ -153,7 +157,7 @@ export function TimelineBar({
   }, [demoPlaying, totalSecs]);
   React.useEffect(() => { setDemoPlaying(false); setDemoSecs(0); }, [timeline?.revisionId]);
   const showDemo = demoPlaying || demoSecs > 0;
-  const shownPct = showDemo && totalSecs > 0 ? (demoSecs / totalSecs) * 100 : playPct;
+  const shownPct = realActive && totalSecs > 0 ? player.current / totalSecs * 100 : showDemo && totalSecs > 0 ? (demoSecs / totalSecs) * 100 : playPct;
 
   if (!timeline) return null;
   const units = timeline.units ?? [];
@@ -183,13 +187,13 @@ export function TimelineBar({
         <button
           type="button"
           className="hf-tl-playbtn"
-          aria-label={demoPlaying ? '暂停演示播放' : '演示播放（无声音，播放头走动）'}
+          aria-label={realAsset ? realActive && player.playing ? '暂停音频' : '播放母轨' : demoPlaying ? '暂停演示播放' : '演示播放（无声音，播放头走动）'}
           title={demoPlaying ? '暂停' : '演示播放：真实音频接入前，用播放头走动预览时间轴'}
-          onClick={() => setDemoPlaying((p) => !p)}
+          onClick={() => realAsset ? realActive && player.playing ? pauseAudio() : void playAudio(realAsset, realActive ? player.current : 0) : setDemoPlaying((p) => !p)}
         >
           <Icon name={demoPlaying ? 'pause' : 'play'} size={16} />
         </button>
-        {showDemo ? fmt(demoSecs) : curSecs} / {formatSamples(total, timeline.sampleRate)}
+        {realActive ? fmt(player.current) : showDemo ? fmt(demoSecs) : curSecs} / {formatSamples(total, timeline.sampleRate)}
       </span>
       <div className="hf-tl-tracks">
         <div className="hf-tl-track">

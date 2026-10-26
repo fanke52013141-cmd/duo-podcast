@@ -66,7 +66,9 @@ class Job(BaseModel):
     error: Optional[str] = None
     retryable: bool = False
     result: Optional[dict[str, Any]] = None  # {artifactIds: [...]}
+    completed_calls: dict[str, dict[str, Any]] = Field(default_factory=dict)
     created_at: str = ""
+    started_at: Optional[str] = None
     finished_at: Optional[str] = None  # 进入 succeeded/failed/cancelled 终态时写入（ISO8601）
 
     def can_transition(self, target: JobStatus) -> bool:

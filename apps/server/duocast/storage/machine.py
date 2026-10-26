@@ -6,6 +6,8 @@
 from __future__ import annotations
 
 import json
+import os
+import tempfile
 from pathlib import Path
 
 
@@ -21,7 +23,15 @@ class MachineSettings:
         return {"providerProfiles": {}, "pronunciationDict": []}
 
     def save(self, data: dict) -> None:
-        self._file.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+        fd, name = tempfile.mkstemp(dir=self.root, prefix=".machine-", suffix=".tmp")
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as file:
+                json.dump(data, file, ensure_ascii=False, indent=2)
+                file.flush()
+                os.fsync(file.fileno())
+            os.replace(name, self._file)
+        finally:
+            Path(name).unlink(missing_ok=True)
 
     def get_global_pronunciation(self) -> list[dict]:
         """全局读音词典（01 §4.2 scope=全局）：[{term, read}]，跨工程生效。"""

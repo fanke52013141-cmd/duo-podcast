@@ -3,11 +3,29 @@
 from __future__ import annotations
 
 from copy import deepcopy
+import re
 from typing import Any
 
 from ..adapters.base import TextProvider
 from ..domain.project import ContentBrief, Project, ScriptRevision, Turn
 from ..storage.project_store import ProjectStore
+
+
+def parse_authored_script(content):
+    if not isinstance(content, str) or not content.strip() or len(content) > 80000:
+        raise ValueError("请输入 1–80000 字的 A/B 脚本")
+    turns = []
+    for number, raw in enumerate(content.splitlines(), 1):
+        if not raw.strip():
+            continue
+        match = re.match(r"^\s*([ABＡＢ])\s*[:：]\s*(\S.*)$", raw)
+        if not match:
+            raise ValueError(f"第 {number} 行格式错误：须以 A: 或 B: 开头并有台词")
+        speaker = {"Ａ": "A", "Ｂ": "B"}.get(match[1], match[1])
+        text = match[2].rstrip()
+        turns.append({"id": f"T{len(turns)+1:02d}", "speaker": speaker,
+                      "lines": [{"id": f"L{number:03d}", "displayText": text, "spokenText": text}]})
+    return {"sourceInput": {"kind": "script", "content": content}, "turns": turns, "textApiConfigRef": "script-import"}
 
 
 def _turn_from_dict(data: dict[str, Any]) -> Turn:

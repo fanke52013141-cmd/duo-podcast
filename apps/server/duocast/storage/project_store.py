@@ -167,6 +167,7 @@ class ProjectStore:
         """
         if self.load(project_id) is None:
             raise KeyError(f"project not found: {project_id}")
+        self.flush()  # Newly created/debounced projects must reach the recoverable directory first.
         src = self._path(project_id).parent
         import uuid as _uuid
         base = trash_dir if trash_dir is not None else self.trash_dir_for(project_id)

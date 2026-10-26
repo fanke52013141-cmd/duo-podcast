@@ -6,12 +6,18 @@ queueCaps 之外的人工预算门控（01 §1.6.4 UI 门控）。
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Request, HTTPException
 
 from ..core.config import settings
 from ..storage.machine import MachineSettings
 
 router = APIRouter(prefix="/api/machine", tags=["machine"])
+
+
+@router.post("/validate-config")
+async def validate_runtime(payload: dict):
+    from ..services.runtime_config import preflight_config
+    return preflight_config(payload.get("runtimeConfig"))
 
 
 def _machine(request: Request) -> MachineSettings:
@@ -41,6 +47,8 @@ async def get_machine(request: Request) -> dict:
             "cpu": settings.queue_cap_cpu,
         },
         "capabilities": request.app.state.capabilities.snapshot(),
+        "runtimeConfig": data.get("runtimeConfig", {}),
+        "activeConfig": getattr(request.app.state, "public_config", {}),
     }
 
 
@@ -48,15 +56,23 @@ async def get_machine(request: Request) -> dict:
 async def patch_machine(payload: dict, request: Request) -> dict:
     m = _machine(request)
     data = m._data()
+    if "runtimeConfig" in payload:
+        from ..services.runtime_config import validate_config
+        try:
+            data["runtimeConfig"] = validate_config(payload["runtimeConfig"])
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
     if isinstance(payload.get("providerProfiles"), dict):
         data["providerProfiles"] = _sanitize_profiles(payload["providerProfiles"])
     if isinstance(payload.get("vramAllocation"), dict):
         data["vramAllocation"] = payload["vramAllocation"]
     if isinstance(payload.get("pronunciationDict"), list):
         m.set_global_pronunciation(payload["pronunciationDict"])
-        data = m._data()
+        data["pronunciationDict"] = m.get_global_pronunciation()
     m.save(data)
     return {
+        "runtimeConfig": data.get("runtimeConfig", {}),
+        "restartRequired": "runtimeConfig" in payload,
         "providerProfiles": data.get("providerProfiles", {}),
         "vramAllocation": data.get("vramAllocation", {}),
         "pronunciationDict": data.get("pronunciationDict", []),

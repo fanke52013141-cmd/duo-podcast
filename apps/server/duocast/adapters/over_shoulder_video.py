@@ -47,13 +47,15 @@ async def smooth_continuation(provider, previous, part, folder, index, count, fp
     await provider._command("ffmpeg", "-v", "error", "-y", "-framerate", f"{fps}/{frames}",
         "-i", images / "frame_%04d.png", "-vf",
         f"minterpolate=fps={fps}:mi_mode=mci:mc_mode=aobmc:me_mode=bidir:vsbmc=1,trim=start_frame={frames}:end_frame={2 * frames},setpts=PTS-STARTPTS",
-        "-frames:v", frames, "-an", "-c:v", "libx264", "-crf", 19, "-pix_fmt", "yuv420p", bridge)
+        "-frames:v", frames, "-r", fps, "-fps_mode", "cfr", "-video_track_timescale", 90000,
+        "-an", "-c:v", "libx264", "-crf", 19, "-pix_fmt", "yuv420p", bridge)
     stream = next(s for s in json.loads(await provider._command("ffprobe", "-v", "error", "-show_streams", "-of", "json", bridge))["streams"] if s["codec_type"] == "video")
     validate_video_stream(stream, frames / fps, fps)
     smoothed = part.with_suffix(".smooth.mp4")
     await provider._command("ffmpeg", "-v", "error", "-y", "-i", bridge, "-i", part, "-filter_complex",
         f"[0:v]scale={width}:{height},setsar=1[bridge];[1:v]trim=start_frame={frames},setpts=PTS-STARTPTS[tail];[bridge][tail]concat=n=2:v=1:a=0[v]",
-        "-map", "[v]", "-frames:v", count, "-an", "-c:v", "libx264", "-preset", "fast", "-crf", 19, "-pix_fmt", "yuv420p", smoothed)
+        "-map", "[v]", "-frames:v", count, "-r", fps, "-fps_mode", "cfr", "-video_track_timescale", 90000,
+        "-an", "-c:v", "libx264", "-preset", "fast", "-crf", 19, "-pix_fmt", "yuv420p", smoothed)
     smoothed.replace(part)
     return frames
 
@@ -188,7 +190,8 @@ async def render_over_shoulder(provider, req, visual, progress):
         transform = f"fps={fps},scale={width}:{height}:force_original_aspect_ratio=increase,crop={width}:{height},setsar=1,tpad=stop_mode=clone:stop_duration=0.04"
         same_camera = bool(edits and camera_plan[-1]["cameraAssetId"] == shot["cameraAssetId"] and abs(camera_plan[-1]["end"] - left) < .001)
         await provider._command("ffmpeg", "-v", "error", "-y", "-ss", left - a, "-i", clip,
-            "-an", "-vf", transform, "-frames:v", count, "-c:v", "libx264", "-preset", "fast", "-crf", 19, "-pix_fmt", "yuv420p", part)
+            "-an", "-vf", transform, "-frames:v", count, "-r", fps, "-fps_mode", "cfr", "-video_track_timescale", 90000,
+            "-c:v", "libx264", "-preset", "fast", "-crf", 19, "-pix_fmt", "yuv420p", part)
         if same_camera:
             before = await continuity_measure(provider, edits[-1], part, fps, pair[shot["speaker"]]["subjectRegion"])
             frames = await smooth_continuation(provider, edits[-1], part, folder, n, count, fps, width, height)

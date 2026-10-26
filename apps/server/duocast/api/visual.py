@@ -19,7 +19,8 @@ router = APIRouter(prefix="/api/projects/{project_id}/visual", tags=["visual"])
 async def generate(project_id: str, payload: dict, request: Request) -> dict:
     manager: JobManager = request.app.state.job_manager
     store = request.app.state.project_store
-    if store.load(project_id) is None:
+    project = store.load(project_id)
+    if project is None:
         raise HTTPException(404, "project not found")
     client_token = payload.get("clientToken") or f"img-{uuid.uuid4().hex[:8]}"
     mode = payload.get("mode", "twoShot")
@@ -32,7 +33,8 @@ async def generate(project_id: str, payload: dict, request: Request) -> dict:
             raise HTTPException(422, "过肩机位必须指定不同的主体与前景角色（A/B）")
     snapshot = {
         "aspect": payload.get("aspect", "landscape"),
-        "prompt": payload.get("prompt", ""),
+        "prompt": payload.get("prompt", "") + "\n" + "\n".join(f"{s}: {c.get('name', '')}, {c.get('traits', '')}" for s, c in project.character_bindings.items()),
+        "characterBindings": project.character_bindings,
         "mode": mode,
         "cameraGroupId": payload.get("cameraGroupId"),
         "cameraAssetId": payload.get("cameraAssetId"),
@@ -61,6 +63,12 @@ async def sample(project_id: str, payload: dict, request: Request) -> dict:
     project = store.load(project_id)
     if project is None:
         raise HTTPException(404, "project not found")
+    from ..services.render_spec import render_options, representative_range
+    payload = render_options(project, payload, request.app.state.artifacts.root)
+    if "rangeStartSec" not in payload and "rangeEndSec" not in payload:
+        planned = representative_range(project)
+        if planned:
+            payload = {**payload, "rangeStartSec": planned["start"], "rangeEndSec": planned["end"]}
     validate_render_options(project, payload, _merged_pronunciation(request, project),
                             real_video=not request.app.state.capabilities.video.get("simulated", True))
     validate_motion_source(project, payload, request.app.state.artifacts)
@@ -79,6 +87,9 @@ async def sample(project_id: str, payload: dict, request: Request) -> dict:
         raise HTTPException(409, "配音已过期，请先采用当前脚本对应的配音")
     snapshot = {
         "revisionId": revision_id,
+        "resolution": payload.get("resolution", "854x480"),
+        "fps": payload.get("fps", 25),
+        "fastQuality": payload.get("fastQuality", "original"),
         "cacheOnly": bool(payload.get("reuseMotionArtifactId") and payload.get("redoFromSec") is None),
         "projectSnapshot": project.model_dump(mode="json", by_alias=True),
         "dependencyHash": dependency_hash(project),
@@ -102,3 +113,12 @@ async def sample(project_id: str, payload: dict, request: Request) -> dict:
         input_snapshot=snapshot,
     )
     return {"jobId": job.id, "clientToken": client_token}
+
+
+@router.get("/sample-plan")
+def sample_plan(project_id: str, request: Request):
+    from ..services.render_spec import representative_range
+    project = request.app.state.project_store.load(project_id)
+    if project is None:
+        raise HTTPException(404, "工程不存在")
+    return representative_range(project)

@@ -30,8 +30,9 @@ class ToAPIsImageProvider:
 
     def __init__(self, api_key: str, artifacts_root: Path, artifact_store,
                  size: str = "4:5", quality: str = "low", resolution: str = "1k",
-                 timeout_s: int = 600) -> None:
+                 timeout_s: int = 600, base_url: str | None = None) -> None:
         self.api_key = api_key
+        self.bases = (base_url.rstrip("/"),) if base_url else BASES
         self.artifacts_root = Path(artifacts_root)
         self.store = artifact_store
         self.size = size
@@ -64,7 +65,7 @@ class ToAPIsImageProvider:
 
     def _submit(self, opener, payload: dict) -> tuple[str, str]:
         last: Exception | None = None
-        for base in BASES:
+        for base in self.bases:
             try:
                 task = self._call(opener, base + "/v1/images/generations", payload)
                 return base, task.get("id") or task.get("data")

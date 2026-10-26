@@ -16,6 +16,7 @@ from typing import Any, Awaitable, Callable, Optional
 from ..core.eventbus import EventBus
 from ..core.logging import log
 from ..domain.job import Job, JobStatus
+from .control import JobInterrupted
 
 # 任务执行体：async (job) -> {artifactIds: [...]}；适配器回调经 bus 发事件
 JobRunner = Callable[[Job], Awaitable[dict[str, Any]]]
@@ -209,6 +210,8 @@ class JobManager:
                 current=job.status.value, target=target.value)
             return False
         job.status = target
+        if target == JobStatus.RUNNING:
+            job.started_at = datetime.now(timezone.utc).isoformat(timespec="milliseconds")
         # 终态记录完成时刻；非终态（如恢复重跑回 RUNNING）视为进行中，清空旧值。
         if target in self._TERMINAL_STATUSES:
             job.finished_at = datetime.now(timezone.utc).isoformat(timespec="milliseconds")
@@ -227,9 +230,14 @@ class JobManager:
         return True
 
     def set_stage(self, job: Job, stage: str, message: str | None = None) -> None:
+        self.checkpoint(job)
         job.stage = stage
         self._persist(job)
         self.bus.publish("job.stage", jobId=job.id, stage=stage, message=message)
+
+    def checkpoint(self, job: Job) -> None:
+        if job.id in self._discarded or job.status in (JobStatus.CANCEL_REQUESTED, JobStatus.PAUSE_REQUESTED):
+            raise JobInterrupted()
 
     def pause(self, job_id: str) -> Job:
         job = self._require(job_id)
@@ -302,6 +310,8 @@ class JobManager:
                         self.transition(job, JobStatus.PAUSED)
                     else:
                         self.transition(job, JobStatus.SUCCEEDED)
+            except JobInterrupted:
+                self.transition(job, JobStatus.PAUSED if job.status == JobStatus.PAUSE_REQUESTED else JobStatus.CANCELLED)
             except asyncio.CancelledError:
                 # 停止本地等待并不证明外部推理停止。留给恢复流程核实。
                 job.status = JobStatus.UNKNOWN

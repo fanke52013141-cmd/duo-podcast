@@ -24,6 +24,13 @@ async def generate_script(project_id: str, payload: dict, request: Request) -> d
     project = store.load(project_id)
     if project is None:
         raise HTTPException(404, "project not found")
+    source = payload.get("sourceInput", {})
+    if source.get("kind") == "script":
+        from ..services.script_svc import parse_authored_script
+        try:
+            parse_authored_script(source.get("content", ""))
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
     client_token = payload.get("clientToken") or f"gen-{uuid.uuid4().hex[:8]}"
     snapshot = {
         "sourceInput": payload.get("sourceInput", {}),

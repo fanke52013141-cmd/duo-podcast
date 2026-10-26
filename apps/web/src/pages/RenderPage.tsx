@@ -14,6 +14,8 @@ import { AppShell, FootBar, StageHead, TimelineBar } from '../components/AppShel
 import { formatTimecode } from '../lib/format';
 import { useError } from '../lib/useError';
 import { useProjectStore, useServiceStore } from '../stores';
+import { ImpactPlan } from '../components/ImpactPlan';
+import { DeliveryCheck } from '../components/DeliveryCheck';
 
 const RESOLUTION_OPTIONS = [
   { id: '480p', label: '480p', value: '854x480' },
@@ -85,10 +87,19 @@ export function RenderPage({ projectId }: { projectId: string }) {
 
   const proj: Project | undefined = project.data;
   const isFast = proj?.generationMode === 'fast';
+  const saveSpec = (patch: NonNullable<Project['renderSpec']>) => {
+    if (proj) patchProject.mutate({projectId, expectedRevision:proj.revision, patch:{renderSpec:{...proj.renderSpec,...patch}}},{onError:e=>setError(e.message)});
+  };
   const [resolutionId, setResolutionId] = useState('480p');
   const [codec, setCodec] = useState(CODECS[0]);
   const [fps, setFps] = useState(25);
-  const [fastQuality, setFastQuality] = useState<'original' | 'clear' | 'crisp'>('clear');
+  const [fastQuality, setFastQuality] = useState<'original' | 'clear' | 'crisp'>('original');
+  useEffect(()=>{
+    if (proj?.renderSpec) {
+      setResolutionId(RESOLUTION_OPTIONS.find(r=>r.value===proj.renderSpec?.resolution)?.id??'480p');
+      setFps(proj.renderSpec.fps??25);setFastQuality(proj.renderSpec.fastQuality??'original');
+    }
+  },[proj?.renderSpec]);
   const { error, setError, dismiss: dismissError } = useError();
 
   const timeline: AudioTimeline | null = proj?.audioTimeline ?? null;
@@ -130,7 +141,7 @@ export function RenderPage({ projectId }: { projectId: string }) {
       cameraMode: isOverShoulder ? 'speaker' : proj.cameraMode ?? 'speaker',
       resolution,
       fps,
-      performanceMode: 'legacy',
+      performanceMode: proj.performanceMode ?? 'legacy',
       generationProfile: 'accepted',
       fastQuality: isFast ? fastQuality : undefined,
       candidate: true,
@@ -197,20 +208,20 @@ export function RenderPage({ projectId }: { projectId: string }) {
             </div>
             <div className="hf-fld">
               <label>分辨率</label>
-              <select className="wu-input" aria-label="分辨率" value={resolutionId} onChange={(e) => setResolutionId(e.target.value)}>
+              <select className="wu-input" aria-label="分辨率" value={resolutionId} onChange={(e) => {setResolutionId(e.target.value);saveSpec({resolution:RESOLUTION_OPTIONS.find(r=>r.id===e.target.value)?.value});}}>
                 {RESOLUTION_OPTIONS.map((r) => <option key={r.id} value={r.id}>{r.label}</option>)}
               </select>
             </div>
             <div className="hf-fld">
               <label>帧率</label>
-              <select className="wu-input" aria-label="帧率" value={fps} onChange={(e) => setFps(Number(e.target.value))}>
+              <select className="wu-input" aria-label="帧率" value={fps} onChange={(e) => {setFps(Number(e.target.value));saveSpec({fps:Number(e.target.value)});}}>
                 {FPSS.map((f) => <option key={f} value={f}>{f} fps</option>)}
               </select>
             </div>
             <div className="hf-fld">
               {isFast && <div className="hf-fld">
                 <label htmlFor="fast-quality">画面清晰度</label>
-                <select id="fast-quality" className="wu-input" value={fastQuality} onChange={e => setFastQuality(e.target.value as 'original' | 'clear' | 'crisp')}>
+                <select id="fast-quality" className="wu-input" value={fastQuality} onChange={e => {setFastQuality(e.target.value as 'original' | 'clear' | 'crisp');saveSpec({fastQuality:e.target.value as 'original' | 'clear' | 'crisp'});}}>
                   <option value="original">原始 · 不增强</option>
                   <option value="clear">清晰 · 轻度锐化与低压缩（推荐）</option>
                   <option value="crisp">更清晰 · 较强锐化与低压缩</option>
@@ -287,6 +298,7 @@ export function RenderPage({ projectId }: { projectId: string }) {
           输入快照 {timeline?.revisionId ?? 'R—'} / {latestVariant?.id ?? 'V—'} / {isOverShoulder ? '过肩双机位' : segments.length ? `S${segments.length}` : 'S—'} · {outputVersion ? '已冻结' : demoRendered ? '演示完成 · 未冻结' : '未冻结'}
         </Badge>
         <span className="hf-spacer" />
+        <a className="hf-link" href={`/api/projects/${projectId}/backup`} download>备份工程</a>
         <Button
           variant="brand" icon="play" busy={rendering} disabled={!canRender}
           onClick={() => handleRender()}
@@ -294,6 +306,8 @@ export function RenderPage({ projectId }: { projectId: string }) {
       </StageHead>
 
       <div className="hf-body">
+        {proj && <ImpactPlan projectId={projectId} revision={proj.revision}/>}
+        {proj && <DeliveryCheck projectId={projectId} revision={proj.revision}/>}
         {simulated && <Alert tone="warning">当前为流程演示，不生成 MP4、WAV 或 SRT；下方分段为示意，真实模型效果与规格尚未验证。</Alert>}
         {timeline && totalSecs > 300 && <Alert tone="danger">完整音轨超过 5 分钟，请先精简内容，不会自动截断尾句。</Alert>}
         {timeline && timeline.revisionId !== proj?.currentDraftRevision && <Alert tone="warning">当前配音属于旧脚本，请先生成或采用当前版本配音。</Alert>}

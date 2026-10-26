@@ -47,7 +47,7 @@ def export_package(project_id: str, request: Request, version: str | None = None
     revision = next(r for r in p.script_revisions if r.id == t.revision_id)
     turns = {turn.id: turn for turn in revision.turns}
     import hashlib
-    key = hashlib.sha256(json.dumps({"version": manifest["version"], "video":video["fileHash"], "audio":master.get("fileHash"), "script":frozen["scriptRevisions"], "format":2},sort_keys=True,ensure_ascii=False).encode()).hexdigest()
+    key = hashlib.sha256(json.dumps({"version": manifest["version"], "video":video["fileHash"], "audio":master.get("fileHash"), "script":frozen["scriptRevisions"], "format":3},sort_keys=True,ensure_ascii=False).encode()).hexdigest()
     folder = assets.root / "export" / key
     folder.mkdir(parents=True, exist_ok=True)
     target = folder/"delivery.zip"
@@ -65,7 +65,8 @@ def export_package(project_id: str, request: Request, version: str | None = None
         offset = t.unit_offsets[unit.id]; stop = offset + unit.sample_count
         turn = turns[unit.turn_id]
         tracks[turn.speaker][offset*2:stop*2] = pcm[offset*2:stop*2]
-        text = "\n".join(line.display_text for line in turn.lines)
+        selected_lines = [line for line in turn.lines if line.id in unit.line_ids] if unit.line_ids else turn.lines
+        text = "\n".join("\n".join(line.display_text[i:i+28] for i in range(0, len(line.display_text), 28)) for line in selected_lines)
         subtitles.append(f"{index+1}\n{srt_time(offset/t.sample_rate)} --> {srt_time(stop/t.sample_rate)}\n{text}\n")
     for speaker, data in tracks.items():
         with wave.open(str(folder/f"{speaker}.wav"),"wb") as writer:

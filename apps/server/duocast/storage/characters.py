@@ -76,7 +76,7 @@ class CharacterStore:
         items = self._read()
         for i, c in enumerate(items):
             if c.get("id") == character_id:
-                allowed = {k: patch[k] for k in ("name", "role", "desc", "traits", "imagePath", "speaker")
+                allowed = {k: patch[k] for k in ("name", "role", "desc", "traits", "imagePath", "speaker", "localRefAudio")
                            if k in patch}
                 items[i] = {**c, **allowed}
                 self._write(items)

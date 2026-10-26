@@ -176,6 +176,10 @@ export interface ArtifactEntry {
 export interface PronunciationEntry { term: string; read: string; }
 
 export interface Project {
+  creationDraft?: { sourceKind?: SourceKind; content?: string; durationMode?: 'auto' | 'approx'; approxMinutes?: number; title?: string };
+  characterBindings?: Partial<Record<Speaker, Character>>;
+  renderSpec?: { resolution?: string; fps?: number; fastQuality?: 'original' | 'clear' | 'crisp' };
+  fastTemplate?: Record<string, unknown>;
   generationMode?: 'standard' | 'fast';
   schemaVersion: number;
   id: string;
@@ -250,6 +254,8 @@ export interface ServerEvent {
 
 /* ---- 机器设置（06 §7.3，与 /api/machine 契约对齐） ---- */
 export interface MachineSettings {
+  runtimeConfig?: Record<string, string | number>;
+  activeConfig?: Record<string, string | number | boolean>;
   providerProfiles: Record<string, { credentialRef?: string }>;
   vramAllocation: Record<string, number>;
   /** 全局读音词典（01 §4.2 scope=全局），跨工程生效 */

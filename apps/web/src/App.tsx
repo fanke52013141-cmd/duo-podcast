@@ -97,12 +97,19 @@ export default function App() {
 
   // SSE：job.* 事件 → 失效任务与工程查询；system.resync → 全量回读
   useEffect(() => {
+    let pending: number | null = null;
+    const refreshJobs = () => {
+      pending = null;
+      void qc.invalidateQueries({ queryKey: ['jobs'] });
+      if (currentProjectId) void qc.invalidateQueries({ queryKey: ['project', currentProjectId] });
+    };
     const handle = startSse(
       (ev) => {
         if (typeof ev.type === 'string' && ev.type.startsWith('job.')) {
           // 任务事件只触发查询失效；活动任务集合由各页从 /api/jobs 派生，避免第三份状态源。
-          qc.invalidateQueries({ queryKey: ['jobs'] });
-          if (currentProjectId) qc.invalidateQueries({ queryKey: ['project', currentProjectId] });
+          if (ev.type==='job.done'||ev.type==='job.failed'||['succeeded','cancelled','failed','paused'].includes(String(ev.status))) {
+            if(pending!==null)window.clearTimeout(pending); refreshJobs();
+          } else if(pending===null) pending=window.setTimeout(refreshJobs,750);
         }
       },
       () => {
@@ -110,7 +117,7 @@ export default function App() {
         qc.refetchQueries();
       },
     );
-    return handle.stop;
+    return () => { handle.stop(); if(pending!==null)window.clearTimeout(pending); };
   }, [qc, currentProjectId]);
 
   // 会话持久化：写回。恢复由 stores 初始化时同步完成（避免首帧先渲染首页再跳转）。
@@ -118,6 +125,7 @@ export default function App() {
     saveSession(currentProjectId, view);
   }, [currentProjectId, view]);
 
+  if (view === 'services') return <PageErrorBoundary><ServicesPage /></PageErrorBoundary>;
   if (!currentProjectId || view === 'home') {
     return <HomePage />;
   }

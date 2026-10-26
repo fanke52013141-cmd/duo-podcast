@@ -1,0 +1,13 @@
+{
+  "DUOCAST_TTS_PROVIDER": "comfyui",
+  "DUOCAST_VIDEO_PROVIDER": "comfyui",
+  "DUOCAST_TEXT_PROVIDER": "toapis",
+  "DUOCAST_IMAGE_PROVIDER": "toapis",
+  "DUOCAST_COMFYUI_URL": "http://127.0.0.1:8191",
+  "DUOCAST_VIDEO_URL": "http://127.0.0.1:8191",
+  "DUOCAST_COMFYUI_INPUT": "C:\\DuoCast\\engine\\input",
+  "DUOCAST_VIDEO_INPUT": "C:\\DuoCast\\engine\\input",
+  "DUOCAST_TTS_REF_A": "C:\\DuoCast\\references\\A.wav",
+  "DUOCAST_TTS_REF_B": "C:\\DuoCast\\references\\B.wav",
+  "DUOCAST_FAST_ENGINE": "C:\\DuoCast\\fast-runtime"
+}

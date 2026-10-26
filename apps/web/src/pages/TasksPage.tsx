@@ -10,6 +10,7 @@ import { Alert, Badge, Button } from '../components/wu';
 import { AppShell } from '../components/AppShell';
 import { formatElapsed } from '../lib/format';
 import { useProjectStore } from '../stores';
+import { errorGuide } from '../lib/workflowTools';
 
 const RUNNING: JobStatus[] = ['running', 'pause_requested', 'paused', 'recovering', 'waiting_confirmation', 'cancel_requested', 'unknown'];
 const QUEUED: JobStatus[] = ['queued'];
@@ -78,14 +79,17 @@ const IC_GLYPH = { run: '●', que: '○', ok: '✓', fail: '!', unk: '⏸' } as
 
 /** 五阶段语义进度：已完成阶段满格，当前阶段给引擎内相对进度，后续空 */
 function phaseState(j: Job, idx: number): { cls: string; pct: number } {
-  const cur = PHASES.findIndex((p) => p.key === j.stage);
+  const exact = PHASES.findIndex((p) => p.key === j.stage);
+  const cur = exact < 0 ? 1 : exact;
   if (j.status === 'succeeded') return { cls: 'done', pct: 100 };
   if (j.status === 'queued' || j.status === 'cancelled' || j.status === 'cancel_requested') return { cls: '', pct: 0 };
   if (idx < cur) return { cls: 'done', pct: 100 };
   if (idx > cur) return { cls: '', pct: 0 };
   if (j.status === 'failed') return { cls: 'bad', pct: 100 };
-  if (j.status === 'paused' || j.status === 'pause_requested') return { cls: 'slow', pct: 55 };
-  return { cls: 'run', pct: 42 };
+  const unit = /unit (\d+)\/(\d+)/.exec(j.stage);
+  const pct = unit && Number(unit[2]) > 0 ? Math.round(Number(unit[1])/Number(unit[2])*100) : 0;
+  if (j.status === 'paused' || j.status === 'pause_requested') return { cls: 'slow', pct };
+  return { cls: 'run', pct };
 }
 
 export function TasksPage() {
@@ -235,6 +239,8 @@ export function TasksPage() {
                 {selected.finishedAt && <div className="hf-fld"><label>完成</label><span>{fmtTime(selected.finishedAt)}</span></div>}
                 <div className="hf-fld"><label>状态</label><span><Badge tone={selected.status === 'succeeded' ? 'success' : selected.status === 'failed' ? 'danger' : 'info'}>{JOB_LABEL[selected.status]}</Badge></span></div>
                 <div className="hf-fld"><label>工程</label><span className="hf-mono">{selected.projectId}</span></div>
+                <p role="status">当前进度：{selected.stage}</p>
+                {selected.error && <Alert tone="danger">{selected.error}<ol>{errorGuide(selected.error,selected.kind).steps.map(step=><li key={step}>{step}</li>)}</ol><Button onClick={()=>{const target=errorGuide(selected.error!,selected.kind).target;if(target==='services'||target==='home')setView(target);else useProjectStore.getState().openProject(selected.projectId,target);}}>前往处理</Button><p><a href="/api/diagnostics/package" download>下载脱敏诊断包</a></p></Alert>}
               </div>
             ) : (
               <p className="wu-caption">暂无任务。完成任务提交后，此处显示状态机、阶段进度与冻结的输入快照。</p>
@@ -267,7 +273,7 @@ export function TasksPage() {
               </Button>
               <Button variant="ghost" size="sm" disabled={!canCancel} busy={cancel.isPending} onClick={() => handleCancel()}>取消</Button>
             </div>
-            <p className="wu-caption" style={{ marginTop: 8 }}>取消后已落盘内容保留，可续跑。</p>
+            <p className="wu-caption" style={{ marginTop: 8 }}>暂停/取消在安全边界生效。外部请求可能仍需等待结束；停止派发后续单元，已完成文件保留，取消结果不会替换当前版本。</p>
           </div>
 
           {selected?.result && (

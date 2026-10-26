@@ -6,7 +6,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import {
-  upsertDraftTurns, useBranchScript, useConfirm, useGenerateScript, useJobs, useMachine, useMergeScript,
+  nextRevisionId, upsertDraftTurns, useBranchScript, useConfirm, useGenerateScript, useJobs, useMachine, useMergeScript,
   usePatchProject, useProject, useSaveDraft, useSaveMachine, useScriptDiff, useScriptRewrite,
 } from '../lib/api';
 import { type Job, type Project, type PronunciationEntry, type ScriptRevision, type Turn } from '../lib/types';
@@ -15,6 +15,9 @@ import { AppShell, FootBar, StageHead } from '../components/AppShell';
 import { formatTimecode } from '../lib/format';
 import { useError } from '../lib/useError';
 import { useProjectStore } from '../stores';
+import { createSingleFlight, recoveryRead, recoveryWrite, recoveryRemove, registerNavigationGuard } from '../lib/navigation';
+import { replaceTurns, scriptStats, validScriptRecovery } from '../lib/workflowTools';
+import { ImpactPlan } from '../components/ImpactPlan';
 
 const INTENTS: { id: Turn['intent']; label: string }[] = [
   { id: 'explain', label: '解释' }, { id: 'probe', label: '追问' },
@@ -127,6 +130,16 @@ export function EditScriptPage({ projectId }: { projectId: string }) {
   const [selected, setSelected] = useState<string[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editText, setEditText] = useState('');
+  const editBuffer=useRef<{id:string;text:string}|null>(null);
+  editBuffer.current=editingId?{id:editingId,text:editText}:null;
+  const [findText,setFindText]=useState('');
+  const [replaceText,setReplaceText]=useState('');
+  const [speakerFilter,setSpeakerFilter]=useState('all');
+  const [replacePreview,setReplacePreview]=useState(false);
+  const [toolMessage,setToolMessage]=useState('');
+  const switchVersion=useRef(createSingleFlight());
+  const restoreOnce=useRef(createSingleFlight());
+  const [switching,setSwitching]=useState(false);
   const [candidate, setCandidate] = useState<{ turnIds: string[]; turns: Turn[]; jobId: string } | null>(null);
   const [dictOpen, setDictOpen] = useState(false);
   // F5 分支：从任一版本派生新草稿
@@ -147,6 +160,10 @@ export function EditScriptPage({ projectId }: { projectId: string }) {
   const savingRef = useRef(false);
   // 有未落盘编辑：由 applyTurns 置位，保存成功且期间无新编辑时清除。
   const dirtyRef = useRef(false);
+  const baseRef=useRef<{id:string;turns:string}|null>(null);
+  const hasPendingEditor=()=>{const buffer=editBuffer.current;const turn=turnsRef.current.find(t=>t.id===buffer?.id);return !!buffer&&!!turn&&turnText(turn)!==buffer.text;};
+  const recoveryKey = `duocast.script.${projectId}`;
+  const [recovery, setRecovery] = useState<{ revisionId: string; turns: Turn[] } | null>(() => {const saved=recoveryRead(recoveryKey);return validScriptRecovery(saved)?saved:null;});
 
   // 当前查看版本：默认当前草稿
   const revision: ScriptRevision | undefined = useMemo(() => {
@@ -158,6 +175,7 @@ export function EditScriptPage({ projectId }: { projectId: string }) {
   useEffect(() => {
     if (revision) {
       const loaded = revision.turns.map((t) => ({ ...t, lines: t.lines.map((l) => ({ ...l })) }));
+      baseRef.current={id:revision.id,turns:JSON.stringify(revision.turns)};
       turnsRef.current = loaded;
       setTurns(loaded);
       setSelected([]);
@@ -194,21 +212,25 @@ export function EditScriptPage({ projectId }: { projectId: string }) {
     const run = (): Promise<boolean> => {
       const latest = qc.getQueryData<Project>(['project', projectId]);
       if (!latest) return Promise.resolve(false);
+      const base=baseRef.current;
+      const liveBase=latest.scriptRevisions.find(r=>r.id===base?.id);
+      if(base&&JSON.stringify(liveBase?.turns)!==base.turns){setSaveState('error');setError('服务端源脚本已改变，本机稿已保留。请下载副本并重新读取工程后，通过恢复新草稿保留双方版本。');return Promise.resolve(false);}
       // 关键：快照取保存“执行时”的最新话轮，而不是调度时捕获的旧数组。
       // 串行链里排队的保存因此永远写最新内容，不会再出现旧文本覆盖新编辑。
       const snapshot = turnsRef.current;
-      const { patch, revId } = upsertDraftTurns(latest, snapshot, viewRevId ?? undefined);
+      const { patch, revId } = upsertDraftTurns(latest, snapshot, base?.id ?? viewRevId ?? undefined);
       savingRef.current = true;
       setSaveState('saving');
       return saveDraft
         .mutateAsync({ projectId, patch, expectedRevision: latest.revision })
         .then(() => {
+          baseRef.current={id:revId,turns:JSON.stringify(snapshot)};
           setSaveState('saved');
           // 保存期间无新编辑才算干净；有的话保持 dirty，等下一次保存。
-          if (turnsRef.current === snapshot) dirtyRef.current = false;
+          if (turnsRef.current === snapshot && !hasPendingEditor()) { dirtyRef.current = false; recoveryRemove(recoveryKey); }
           // 查看历史版本时编辑会派生新草稿：保存成功后再切视图，避免新版本尚未进缓存时回退旧稿。
           if (turnsRef.current === snapshot) setViewRevId(revId);
-          return true;
+          return !dirtyRef.current;
         })
         .catch((e: unknown) => {
           setSaveState('error');
@@ -231,6 +253,7 @@ export function EditScriptPage({ projectId }: { projectId: string }) {
 
   /** 保存屏障：确认 / 改写 / 重新生成前把挂起编辑落盘，并等待真实结果。 */
   const flushDraft = (): Promise<boolean> => {
+    commitEditing();
     if (saveTimer.current) {
       window.clearTimeout(saveTimer.current);
       saveTimer.current = null;
@@ -243,9 +266,24 @@ export function EditScriptPage({ projectId }: { projectId: string }) {
   const applyTurns = (updater: (prev: Turn[]) => Turn[]) => {
     const next = updater(turnsRef.current);
     turnsRef.current = next;
+    recoveryWrite(recoveryKey, { revisionId: baseRef.current?.id ?? revision?.id, turns: next });
     setTurns(next);
     scheduleSave();
   };
+  const commitEditing=()=>{
+    const buffer=editBuffer.current;if(!buffer)return;
+    editBuffer.current=null;setEditingId(null);
+    const turn=turnsRef.current.find(t=>t.id===buffer.id);
+    if(!turn||turnText(turn)===buffer.text)return;
+    const first=turn.lines[0]??{id:`L${turn.id.replace(/\D/g,'')}0`,displayText:'',spokenText:''};
+    applyTurns(previous=>previous.map(t=>t.id===buffer.id?{...t,lines:[{...first,displayText:buffer.text,spokenText:buffer.text}]}:t));
+  };
+  useEffect(() => registerNavigationGuard(flushDraft));
+  useEffect(() => {
+    const protect = (e: BeforeUnloadEvent) => { if (dirtyRef.current || savingRef.current || hasPendingEditor()) { e.preventDefault(); e.returnValue = ''; } };
+    window.addEventListener('beforeunload', protect);
+    return () => { window.removeEventListener('beforeunload', protect); if (saveTimer.current) window.clearTimeout(saveTimer.current); };
+  }, []);
 
   // ---- 话轮操作 ----
   const selectTurn = (id: string, additive: boolean) => {
@@ -358,7 +396,7 @@ export function EditScriptPage({ projectId }: { projectId: string }) {
       if (!ok) { setError('保存未完成，已取消确认：请检查上方保存状态后重试。'); return; }
       const latest = qc.getQueryData<Project>(['project', projectId]) ?? proj;
       confirm.mutate({
-        projectId, expectedRevision: latest.revision, kind: 'script', inputRevisionId: revision.id,
+        projectId, expectedRevision: latest.revision, kind: 'script', inputRevisionId: latest.currentDraftRevision,
       }, {
         onError: (e) => setError((e as Error).message),
       });
@@ -475,7 +513,7 @@ export function EditScriptPage({ projectId }: { projectId: string }) {
   /** 底部导航先过保存屏障：2s 防抖窗口内离开会让下游读到旧草稿（甚至合成旧文案）。 */
   const navigateAfterFlush = (view: 'create' | 'voice') => {
     flushDraft().then((ok) => {
-      if (ok || saveState !== 'error') setView(view);
+      if (ok) setView(view);
       // 保存失败时停留本页，错误提示已由 error Alert 承担
     });
   };
@@ -582,6 +620,19 @@ export function EditScriptPage({ projectId }: { projectId: string }) {
       }
     >
       <StageHead title="② 编辑对话">
+        {recovery && <Alert tone="warning">发现未提交的本机脚本（{recovery.revisionId}）。
+          <Button disabled={switching||saving} onClick={()=>void restoreOnce.current(async () => {
+            if(dirtyRef.current){setError('请先保存当前编辑，或下载当前副本后重新打开工程；恢复不会覆盖正在编辑的内容。');return;}
+            const latest=qc.getQueryData<Project>(['project',projectId]);
+            if(!latest?.scriptRevisions.some(r=>r.id===recovery.revisionId)){setError('恢复稿的源版本不存在，请先保留副本并检查工程版本。');return;}
+            const source=latest.scriptRevisions.find(r=>r.id===recovery.revisionId)!;
+            const revId=nextRevisionId(latest);
+            const patch={scriptRevisions:[...latest.scriptRevisions,{...source,id:revId,parentRevisionId:source.id,label:'本机恢复副本',turns:recovery.turns}],currentDraftRevision:revId};
+            try{await saveDraft.mutateAsync({projectId,patch,expectedRevision:latest.revision});setViewRevId(revId);recoveryRemove(recoveryKey);setRecovery(null);}catch(e){setError((e as Error).message);}
+          })}>恢复为新草稿（保留服务端版本）</Button>
+          <Button onClick={() => { recoveryRemove(recoveryKey); setRecovery(null); }}>放弃恢复副本</Button>
+          <Button variant="ghost" onClick={()=>{const url=URL.createObjectURL(new Blob([JSON.stringify(recovery,null,2)],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download=`${projectId}-recovery.json`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}}>下载恢复副本</Button>
+        </Alert>}
         {revision && (
           <Badge tone={scriptApproved ? 'success' : 'warning'}>
             {scriptApproved ? `脚本 ${revision.id} · 已确认` : `草稿 ${revision.id} · 未确认`}
@@ -596,7 +647,8 @@ export function EditScriptPage({ projectId }: { projectId: string }) {
             aria-label="选择版本"
             style={{ border: 'none', background: 'none' }}
             value={revision?.id ?? ''}
-            onChange={(e) => { setViewRevId(e.target.value); setCandidate(null); }}
+            disabled={switching||saving}
+            onChange={(e) => { const target=e.target.value; void switchVersion.current(async()=>{setSwitching(true);try{if(await flushDraft()){setViewRevId(target);setCandidate(null);setEditingId(null);}}finally{setSwitching(false);}}); }}
           >
             {(proj?.scriptRevisions ?? []).map((r) => (
               <option key={r.id} value={r.id}>
@@ -622,8 +674,23 @@ export function EditScriptPage({ projectId }: { projectId: string }) {
       </StageHead>
 
       <div className="hf-body">
+        {proj && <ImpactPlan projectId={projectId} revision={proj.revision}/>}
         {/* ---- 主视图：话轮列表 ---- */}
         <div className="hf-panel" style={{ flex: 1, minWidth: 0 }}>
+          <section aria-label="脚本查找替换"><div className="wu-row" style={{flexWrap:'wrap'}}>
+            <Input aria-label="查找脚本文字" placeholder="查找文字（精确匹配）" value={findText} onChange={e=>{setFindText(e.target.value);setReplacePreview(false);}}/>
+            <Input aria-label="替换为" placeholder="替换为（可为空）" value={replaceText} onChange={e=>{setReplaceText(e.target.value);setReplacePreview(false);}}/>
+            <select aria-label="按角色筛选话轮" className="wu-input" style={{width:'auto'}} value={speakerFilter} onChange={e=>{setSpeakerFilter(e.target.value);setReplacePreview(false);setSelected([]);}}><option value="all">全部角色</option><option value="A">角色 A</option><option value="B">角色 B</option></select>
+            <Button variant="secondary" disabled={!findText||!!editingId||saving} onClick={()=>setReplacePreview(true)}>预览替换</Button>
+            <Button variant="ghost" onClick={()=>{setFindText('');setSpeakerFilter('all');setReplacePreview(false);}}>清除筛选</Button>
+            <Button variant="ghost" onClick={()=>{const blob=new Blob([JSON.stringify({revisionId:revision?.id,turns:turnsRef.current},null,2)],{type:'application/json'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=`${projectId}-script-draft.json`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}}>下载当前编辑副本</Button>
+          </div><p className="wu-caption">全文 {scriptStats(turns).chars} 字 · 预计 {scriptStats(turns).minSeconds}–{scriptStats(turns).maxSeconds} 秒（按字数估算，实际以合成为准）。筛选不改变生成范围。</p>
+          {replacePreview&&<Alert tone="warning">将在{speakerFilter==='all'?'全部角色':`角色 ${speakerFilter}`}中替换 {replaceTurns(turns,findText,replaceText,speakerFilter).count} 处「{findText}」为「{replaceText}」。自定义读音保持不变，请在配音前核对。
+            <Button disabled={saving||!!editingId||!replaceTurns(turns,findText,replaceText,speakerFilter).count} onClick={()=>{const result=replaceTurns(turnsRef.current,findText,replaceText,speakerFilter);applyTurns(()=>result.turns);setToolMessage(`已替换 ${result.count} 处，等待自动保存`);setReplacePreview(false);}}>确认替换</Button><Button variant="ghost" onClick={()=>setReplacePreview(false)}>取消</Button></Alert>}
+          {toolMessage&&<p role="status">{toolMessage}</p>}
+          {(findText||speakerFilter!=='all')&&<p role="status">匹配 {turns.filter(t=>(speakerFilter==='all'||t.speaker===speakerFilter)&&(!findText||turnText(t).includes(findText))).length} / {turns.length} 条话轮；清除筛选可查看全文。</p>}
+          {saveState==='error'&&<Button onClick={async()=>{await project.refetch();await flushDraft();}}>重新读取版本并重试保存</Button>}
+          </section>
           {scriptApproved && (
             <Alert tone="info">
               已绑定脚本 {revision?.id}。编辑将创建新草稿版本，不覆盖已用版本；确认后可选自动启动配音。
@@ -685,6 +752,7 @@ export function EditScriptPage({ projectId }: { projectId: string }) {
 
             {turns.map((t, idx) => {
               const text = turnText(t);
+              if((speakerFilter!=='all'&&t.speaker!==speakerFilter)||(findText&&!text.includes(findText)))return null;
               const isSel = selected.includes(t.id);
               return (
                 <div
@@ -742,16 +810,9 @@ export function EditScriptPage({ projectId }: { projectId: string }) {
                       value={editText}
                       autoFocus
                       onClick={(e) => e.stopPropagation()}
-                      onChange={(e) => setEditText(e.target.value)}
-                      onBlur={() => {
-                        setEditingId(null);
-                        // 编辑器展示的是整条话轮的合并文本；写回时必须整组替换，
-                        // 否则 lines[1..] 会原样保留，保存后变成「新整段 + 旧第二行」重复台词（P0-2）。
-                        if (editText === text) return;
-                        const first = t.lines[0] ?? { id: `L${t.id.replace(/\D/g, '')}0`, displayText: '', spokenText: '' };
-                        updateTurn(t.id, { lines: [{ ...first, displayText: editText, spokenText: editText }] });
-                      }}
-                      onKeyDown={(e) => { if (e.key === 'Escape') { setEditingId(null); } }}
+                      onChange={(e) => {const value=e.target.value;editBuffer.current={id:t.id,text:value};setEditText(value);const first=t.lines[0]??{id:`L${t.id.replace(/\D/g,'')}0`,displayText:'',spokenText:''};recoveryWrite(recoveryKey,{revisionId:baseRef.current?.id,turns:turnsRef.current.map(turn=>turn.id===t.id?{...turn,lines:[{...first,displayText:value,spokenText:value}]}:turn)});}}
+                      onBlur={commitEditing}
+                      onKeyDown={(e) => { if (e.key === 'Escape') { editBuffer.current=null;setEditingId(null);if(dirtyRef.current)recoveryWrite(recoveryKey,{revisionId:baseRef.current?.id,turns:turnsRef.current});else recoveryRemove(recoveryKey); } }}
                     />
                   ) : (
                     <p

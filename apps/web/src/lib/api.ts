@@ -44,13 +44,13 @@ export function humanizeError(status: number, bodyText: string): string {
   return `${head}（${status}）：${detail}`;
 }
 
-async function getJson<T>(path: string): Promise<T> {
+export async function getJson<T>(path: string): Promise<T> {
   const res = await fetch(`${BASE}${path}`);
   if (!res.ok) throw new ApiError(res.status, humanizeError(res.status, await res.text()));
   return res.json() as Promise<T>;
 }
 
-async function sendJson<T>(path: string, method: 'POST' | 'PATCH' | 'DELETE', body?: unknown): Promise<T> {
+export async function sendJson<T>(path: string, method: 'POST' | 'PATCH' | 'DELETE', body?: unknown): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
     method,
     headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
@@ -107,7 +107,7 @@ export const useMachine = () =>
 export const useSaveMachine = () => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (patch: { providerProfiles?: Record<string, { credentialRef?: string }>; vramAllocation?: Record<string, number>; pronunciationDict?: PronunciationEntry[] }) =>
+    mutationFn: (patch: { runtimeConfig?: Record<string, string | number>; providerProfiles?: Record<string, { credentialRef?: string }>; vramAllocation?: Record<string, number>; pronunciationDict?: PronunciationEntry[] }) =>
       sendJson<{ providerProfiles: Record<string, { credentialRef?: string }>; vramAllocation: Record<string, number>; pronunciationDict?: PronunciationEntry[] }>('/machine', 'PATCH', patch),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['machine'] }),
   });
@@ -115,13 +115,13 @@ export const useSaveMachine = () => {
 
 export const useTestProvider = () =>
   useMutation({
-    mutationFn: (providerId: string) => sendJson<{ ok: boolean; provider: string; capabilities?: Record<string, unknown>; error?: string }>(
+    mutationFn: (providerId: string) => sendJson<{ ok: boolean; provider: string; simulated?: boolean; message?: string; checkedAt?: string; capabilities?: Record<string, unknown>; error?: string }>(
       `/providers/${providerId}/test`, 'POST', {},
     ),
   });
 
 // ---------- 变更 ----------
-export interface CreateProjectInput { id?: string; title: string; templateId?: string; generationMode?: 'standard' | 'fast'; }
+export interface CreateProjectInput { id?: string; title: string; templateId?: string; generationMode?: 'standard' | 'fast'; fastTemplateId?: string; }
 
 export const useCreateProject = () => {
   const qc = useQueryClient();
@@ -305,7 +305,7 @@ export const useSaveDraft = () => {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ projectId, patch, expectedRevision }: { projectId: string; patch: Record<string, unknown>; expectedRevision: number }) =>
-      patchProjectWithReplay(projectId, patch, expectedRevision),
+      sendJson<Project>(`/projects/${projectId}`, 'PATCH', {...patch,expectedRevision}),
     onSuccess: (proj) => qc.setQueryData(['project', proj.id], proj),
   });
 };

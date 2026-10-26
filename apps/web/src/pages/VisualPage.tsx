@@ -14,6 +14,9 @@ import { AppShell, FootBar, StageHead, TimelineBar } from '../components/AppShel
 import { formatTimecode } from '../lib/format';
 import { useError } from '../lib/useError';
 import { useProjectStore, useServiceStore } from '../stores';
+import { RenderSettings } from '../components/RenderSettings';
+import { RegionEditor } from '../components/RegionEditor';
+import { getJson } from '../lib/api';
 
 const ASPECTS: { id: 'landscape' | 'portrait'; label: string }[] = [
   { id: 'landscape', label: '横屏 16:9' },
@@ -62,6 +65,9 @@ export function VisualPage({ projectId }: { projectId: string }) {
   const setView = useProjectStore((s) => s.setView);
 
   const proj = project.data;
+  const [checks,setChecks]=useState<string[]>([]);
+  const [serverRange,setServerRange]=useState<{start:number;end:number;reason:string}|null>(null);
+  useEffect(()=>{void getJson<typeof serverRange>(`/projects/${projectId}/visual/sample-plan`).then(setServerRange).catch(()=>setServerRange(null));},[proj?.audioTimeline, projectId]);
   const isFast = proj?.generationMode === 'fast';
   useEffect(() => { if (isFast) setVisualMode('twoShot'); }, [isFast]);
   const [aspect, setAspect] = useState<'landscape' | 'portrait'>('landscape');
@@ -104,8 +110,12 @@ export function VisualPage({ projectId }: { projectId: string }) {
   );
   const currentSample = (jobs.data ?? []).find(j => {
     if (j.kind !== 'sample.generate' || j.status !== 'succeeded') return false;
+    if (realVideo && j.result?.simulated !== false) return false;
     const snapshot = j.inputSnapshot?.projectSnapshot as typeof proj;
     return !!snapshot && snapshot.currentDraftRevision === proj?.currentDraftRevision
+      && (snapshot.performanceMode ?? 'legacy') === (proj?.performanceMode ?? 'legacy')
+      && (snapshot.generationMode ?? 'standard') === (proj?.generationMode ?? 'standard')
+      && JSON.stringify(snapshot.fastTemplate ?? {}) === JSON.stringify(proj?.fastTemplate ?? {})
       && JSON.stringify(snapshot.audioTimeline) === JSON.stringify(proj?.audioTimeline)
       && JSON.stringify(snapshot.scriptRevisions) === JSON.stringify(proj?.scriptRevisions)
       && JSON.stringify(snapshot.visualVariants) === JSON.stringify(proj?.visualVariants)
@@ -113,6 +123,7 @@ export function VisualPage({ projectId }: { projectId: string }) {
       && (j.inputSnapshot?.cameraMode ?? 'speaker') === (visualMode === 'overShoulder' ? 'speaker' : preset === '稳定同框' ? 'twoShot' : 'speaker');
   });
   const sampleDone = !!currentSample;
+  useEffect(()=>setChecks([]),[currentSample?.id]);
   const sampleSimulated = (jobs.data ?? []).some(
     (j) => j.kind === 'sample.generate' && j.status === 'succeeded' && j.result?.simulated !== false,
   );
@@ -123,7 +134,7 @@ export function VisualPage({ projectId }: { projectId: string }) {
 
   const canGenerate = !!proj && !isFast && !!proj.currentDraftRevision && !generating;
   // 样片当前只承载「生成成功与否」：接受门槛 = 有主图变体 + 样片任务成功。
-  const canAccept = !!selected && sampleDone;
+  const canAccept = !!selected && sampleDone && (currentSample?.result?.simulated !== false || checks.length===4);
   const cameraStatus = useMemo<Record<'A' | 'B', CameraStatus>>(() => {
     const persisted = new Set(
       variants.flatMap((variant) => variant.cameraGroups ?? [])
@@ -179,9 +190,9 @@ export function VisualPage({ projectId }: { projectId: string }) {
       visualVariantId: selected?.id,
       cameraMode: visualMode === 'overShoulder' ? 'speaker' : preset === '稳定同框' ? 'twoShot' : 'speaker',
       performanceMode: proj.performanceMode ?? 'legacy',
-      rangeStartSec: sampleRange.start,
+      rangeStartSec: serverRange?.start ?? sampleRange.start,
       // 不能四舍五入：区间末尾常等于音轨总长，向上取整会超出服务端 end<=total+0.001 容差（实测 422）
-      rangeEndSec: sampleRange.end,
+      rangeEndSec: serverRange?.end ?? sampleRange.end,
       aspect,
     }, { onError: (e) => setError((e as Error).message) });
   };
@@ -189,7 +200,7 @@ export function VisualPage({ projectId }: { projectId: string }) {
   const handleAccept = () => {
     if (!proj) return;
     // 样片确认绑当前草稿；服务端校验绑定关系，过期确认会 422（11 报告 P1-6）
-    confirm.mutate({ projectId, expectedRevision: proj.revision, kind: 'sample', spec: { sampleJobId: currentSample?.id, sampleArtifactId: currentSample?.result?.artifactIds?.[0] }, inputRevisionId: proj.currentDraftRevision }, {
+    confirm.mutate({ projectId, expectedRevision: proj.revision, kind: 'sample', spec: { sampleJobId: currentSample?.id, sampleArtifactId: currentSample?.result?.artifactIds?.[0], checks }, inputRevisionId: proj.currentDraftRevision }, {
       onError: (e) => setError((e as Error).message),
     });
   };
@@ -318,6 +329,7 @@ export function VisualPage({ projectId }: { projectId: string }) {
 
           <div className="hf-ins-sec">
             <h4>{visualMode === 'twoShot' ? '人物区域' : '机位检查'}</h4>
+            {proj && selected?.masterImage.artifactId && visualMode==='twoShot' && <details><summary>校准人物区域</summary><RegionEditor project={proj} variant={selected}/></details>}
             {visualMode === 'twoShot' && (regions.length ? regions.map(({ key, r }) => (
               <div
                 key={key}
@@ -418,6 +430,7 @@ export function VisualPage({ projectId }: { projectId: string }) {
       </StageHead>
 
       <div className="hf-body" ref={bodyRef}>
+        {proj && <RenderSettings project={proj}/>}
         {error && <Alert tone="danger" onClose={dismissError}>{error}</Alert>}
         {isFast && <Alert tone="info">快速模式使用已验证的双人演播室模板，可调整对白、配音和镜头裁切。更换人物或场景请新建原有模式节目。</Alert>}
         {otsNotice && visualMode === 'overShoulder' && <Alert tone="info">{otsNotice}</Alert>}
@@ -489,17 +502,13 @@ export function VisualPage({ projectId }: { projectId: string }) {
                     </select>
                   </span>
                   <span className="item">场景
-                    <select className="hf-mini-select" aria-label="场景" defaultValue="录音棚 · 资产库" disabled={isFast}>
-                      <option>录音棚 · 资产库</option>
-                      <option>生成新场景</option>
-                      <option>上传</option>
-                    </select>
+                    <Button disabled={isFast} onClick={()=>masterFileRef.current?.click()}>上传双人场景底图</Button>
                   </span>
                   <span className="item">角色 A
-                    <select className="hf-mini-select" aria-label="角色 A"><option>{SPEAKERS.A.name} · 资产库</option></select>
+                    <Button disabled={isFast} onClick={()=>setView('assets')}>{proj?.characterBindings?.A?.name??SPEAKERS.A.name} · 去绑定</Button>
                   </span>
                   <span className="item">角色 B
-                    <select className="hf-mini-select" aria-label="角色 B"><option>{SPEAKERS.B.name} · 资产库</option></select>
+                    <Button disabled={isFast} onClick={()=>setView('assets')}>{proj?.characterBindings?.B?.name??SPEAKERS.B.name} · 去绑定</Button>
                   </span>
                   <span className="hf-spacer" />
                   
@@ -603,6 +612,7 @@ export function VisualPage({ projectId }: { projectId: string }) {
               </p>
             )}
             {currentSample?.result?.simulated === false && currentSample.result.artifactIds?.length ? <video key={currentSample.id} controls preload="metadata" style={{ width: '100%', maxHeight: 480 }} src={`/api/artifacts/${currentSample.result.artifactIds[0]}/file`} /> : null}
+            {currentSample?.result?.simulated===false && <div>{['口型与发言一致','人物身份稳定','倾听反应自然','切点连续'].map(item=><label key={item}><input type="checkbox" checked={checks.includes(item)} onChange={e=>setChecks(s=>e.target.checked?[...s,item]:s.filter(x=>x!==item))}/>{item}</label>)}</div>}
           </section>
         </div>
       </div>

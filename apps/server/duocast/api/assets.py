@@ -59,9 +59,74 @@ _JPEG_MAGIC = b"\xff\xd8\xff"
 
 
 def _images_root(request: Request) -> Path:
-    root = settings.storage_root / _UPLOAD_SUBDIR
+    root = request.app.state.artifacts.root.parent / _UPLOAD_SUBDIR
     root.mkdir(parents=True, exist_ok=True)
     return root
+
+
+@router.post("/projects/{project_id}/characters/{speaker}")
+async def bind_character(project_id: str, speaker: str, payload: dict, request: Request):
+    if speaker not in {"A", "B"}:
+        raise HTTPException(422, "角色位置须为 A/B")
+    store = request.app.state.project_store
+    project = store.load(project_id)
+    character = _store(request).get(payload.get("characterId"))
+    if project is None or character is None:
+        raise HTTPException(404, "工程或角色不存在")
+    if project.generation_mode == "fast":
+        raise HTTPException(422, "快速模式人物由固定模板提供，请新建原有模式节目更换角色")
+    snapshot = dict(character)
+    image_path = snapshot.get("imagePath", "")
+    if image_path.startswith("/api/assets/images/"):
+        file = _images_root(request) / Path(image_path).name
+        if file.is_file():
+            assets = request.app.state.artifacts
+            aid = "IMG-CHAR-" + uuid.uuid4().hex
+            snapshot["imageAssetId"] = assets.register(aid, "image", str(file), assets._hash_file(str(file)))["artifactId"]
+    bindings = [b.model_dump(by_alias=True) for b in project.voice_bindings if b.character_id != speaker]
+    if snapshot.get("localRefAudio"):
+        bindings.append({"id": f"VB-{speaker}", "characterId": speaker, "providerProfileId": "comfyui-indextts", "localRefAudio": snapshot["localRefAudio"]})
+    saved = store.apply(project_id, {"character_bindings": {**project.character_bindings, speaker: snapshot}, "voice_bindings": bindings}, payload.get("expectedRevision", project.revision))
+    store.flush()
+    return saved.model_dump(by_alias=True)
+
+
+@router.post("/characters/{character_id}/voice")
+async def bind_character_voice(character_id: str, payload: dict, request: Request):
+    assets = request.app.state.artifacts
+    entry = assets.by_id(payload.get("artifactId"))
+    if not entry or entry["kind"] != "audio" or entry.get("paramsSnapshot", {}).get("source") != "voiceReference":
+        raise HTTPException(422, "请选择已上传的参考音频")
+    updated = _store(request).update(character_id, {"localRefAudio": {"artifactId": entry["artifactId"], "path": entry["path"], "fileHash": entry["fileHash"]}})
+    if not updated:
+        raise HTTPException(404, "角色不存在")
+    return updated
+
+
+@router.post("/projects/{project_id}/visual/regions")
+async def update_regions(project_id: str, payload: dict, request: Request):
+    import math
+    store = request.app.state.project_store
+    project = store.load(project_id)
+    if project is None:
+        raise HTTPException(404, "工程不存在")
+    regions = payload.get("regions", {})
+    if set(regions) != {"A", "B"}:
+        raise HTTPException(422, "需要 A/B 两个人物区域")
+    for region in regions.values():
+        if not isinstance(region, dict) or set(region) != {"x", "y", "width", "height"} or any(type(n) not in (int, float) or not math.isfinite(n) for n in region.values()):
+            raise HTTPException(422, "区域坐标无效")
+        x, y, w, h = (region[k] for k in ("x", "y", "width", "height"))
+        if min(x, y) < 0 or min(w, h) <= 0 or x+w > 1.000001 or y+h > 1.000001:
+            raise HTTPException(422, "人物框必须位于画布内")
+    variants = [v.model_copy(deep=True) for v in project.visual_variants]
+    target = next((v for v in variants if v.id == payload.get("variantId")), None)
+    if target is None:
+        raise HTTPException(404, "画面版本不存在")
+    target.person_regions = regions
+    saved = store.apply(project_id, {"visual_variants": variants}, payload.get("expectedRevision", project.revision))
+    store.flush()
+    return saved.model_dump(by_alias=True)
 
 
 def save_uploaded_image(request: Request, data: bytes, filename: str) -> dict:
@@ -88,6 +153,51 @@ def _store(request: Request):
     return request.app.state.character_store
 
 
+@router.get("/scenes")
+def list_scenes(request: Request):
+    return [{"id": e["artifactId"], "name": e.get("paramsSnapshot", {}).get("name", "场景"), "fileHash": e["fileHash"]}
+            for e in request.app.state.artifacts._manifest()["artifacts"]
+            if e["kind"] == "image" and e.get("paramsSnapshot", {}).get("source") == "scene"]
+
+
+@router.post("/scenes")
+async def upload_scene(request: Request):
+    form = await request.form()
+    upload = form.get("file")
+    if upload is None or not hasattr(upload, "read"):
+        raise HTTPException(422, "请选择 PNG/JPEG 场景图片")
+    data = await upload.read(10*1024*1024+1)
+    if len(data) > 10*1024*1024:
+        raise HTTPException(422, "场景图片超过 10MB")
+    saved = save_uploaded_image(request, data, getattr(upload, "filename", ""))
+    assets = request.app.state.artifacts
+    entry = assets.register("IMG-SCENE-"+uuid.uuid4().hex, "image", saved["path"], saved["fileHash"],
+                            {"source": "scene", "name": str(form.get("name") or getattr(upload, "filename", "场景"))[:100]})
+    return {"id": entry["artifactId"], "name": entry["paramsSnapshot"]["name"]}
+
+
+@router.post("/projects/{project_id}/visual/use-scene")
+def use_scene(project_id: str, payload: dict, request: Request):
+    store = request.app.state.project_store
+    project = store.load(project_id)
+    entry = request.app.state.artifacts.by_id(payload.get("sceneId"))
+    if project is None or not entry or entry["kind"] != "image" or entry.get("paramsSnapshot", {}).get("source") != "scene":
+        raise HTTPException(404, "工程或场景不存在")
+    if payload.get("expectedRevision") != project.revision:
+        raise HTTPException(409, "工程已变化，请刷新后选择场景")
+    if project.generation_mode == "fast":
+        raise HTTPException(422, "快速模板不能更换底图")
+    assets = request.app.state.artifacts
+    if not Path(entry["path"]).is_file() or assets._hash_file(entry["path"]) != entry["fileHash"]:
+        raise HTTPException(409, "场景文件缺失或已改变，请重新上传")
+    variants = apply_visual_variant(store, project, {"aspect": project.aspect, "mode": "twoShot", "artifactId": entry["artifactId"],
+                                                   "path": entry["path"], "fileHash": entry["fileHash"], "provider": "scene-library"})
+    current = store.load(project_id)
+    store.apply(project_id, {"selected_visual_variant_id": variants[0].id}, current.revision)
+    store.flush()
+    return {"variantId": variants[0].id, "notice": "已用于本期底图，请确认画面包含正确人物并校准区域；空场景不能直接驱动人物"}
+
+
 @router.get("/characters")
 async def list_characters(request: Request) -> list[dict]:
     return _store(request).list()
@@ -109,6 +219,8 @@ async def create_character(payload: dict, request: Request) -> dict:
 
 @router.patch("/characters/{character_id}")
 async def update_character(character_id: str, payload: dict, request: Request) -> dict:
+    if set(payload) - {"name", "role", "desc", "traits", "speaker"}:
+        raise HTTPException(422, "图片和音频请使用上传接口绑定")
     updated = _store(request).update(character_id, payload)
     if updated is None:
         raise HTTPException(404, "character not found")

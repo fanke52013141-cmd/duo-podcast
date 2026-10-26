@@ -309,6 +309,27 @@ body { margin:0; background:var(--wu-semantic-canvas); color:var(--wu-semantic-t
    + 右侧 360px .hf-cap 能力状态面板（分开登记、不做合并结论）。
    此前实现把能力做成「提供方能力卡网格」，并占用了 .hf-cap 这个类名做小标签（语义冲突），现归位。 */
 .hf-s7 { display:flex; gap:14px; align-items:flex-start; }
+.duo-region-editor { position:relative; width:100%; aspect-ratio:16/9; margin:8px 0; touch-action:none; }
+.duo-region-editor > img { width:100%; height:100%; object-fit:fill; }
+.duo-region-editor button { min-width:0; min-height:0; cursor:move; }
+.hf-inspector label { overflow-wrap:anywhere; }
+.hf-inspector input[type=number] { max-width:70px; }
+button:focus-visible, a:focus-visible, summary:focus-visible { outline:2px solid var(--wu-semantic-brand); outline-offset:3px; }
+@media (max-width:1250px) {
+  .hf-s7 { flex-direction:column; }
+  .hf-formcol,.hf-s7 .hf-cap { width:100%; flex:auto; }
+  .hf-top { flex-wrap:wrap; height:auto; min-height:56px; }
+  .hf-inspector { max-width:280px; }
+  .hf-home-top { flex-wrap:wrap; }
+}
+@media (max-width:1050px) {
+  .hf-mid { display:flex; flex-wrap:wrap; }
+  .hf-rail { flex:0 0 150px; }
+  .hf-main { flex:1; min-width:0; }
+  .hf-inspector { width:100%; max-width:none; flex:1 0 100%; max-height:35vh; overflow:auto; border-top:1px solid var(--wu-semantic-border); }
+  .hf-cols { grid-template-columns:1fr; }
+  .hf-fld { grid-template-columns:70px minmax(100px,1fr); }
+}
 .hf-formcol { flex:1; min-width:0; display:flex; flex-direction:column; gap:12px; }
 .hf-block { background:var(--wu-semantic-surface); border:1px solid var(--wu-semantic-border); border-radius:var(--wu-global-radius-lg); padding:14px 16px; }
 .hf-block-t { display:flex; align-items:center; gap:8px; font-size:13.5px; font-weight:700; margin-bottom:10px; }

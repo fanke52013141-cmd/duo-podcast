@@ -6,7 +6,7 @@ $runtimeRoot = $runtimeConfig.runtimeRoot
 $serverRoot = Join-Path (Split-Path (Split-Path $PSScriptRoot -Parent) -Parent) 'apps\server'
 $pythonPath = Join-Path $runtimeRoot 'venv\Scripts\python.exe'
 $comfyRoot = Join-Path $runtimeRoot 'ComfyUI'
-foreach ($requiredPath in @($pythonPath, $comfyRoot, $runtimeConfig.modelRoot, (Join-Path $serverRoot '.venv\Scripts\python.exe'), (Join-Path $serverRoot '_run_dev_toapis.cmd'), (Join-Path $engineHome 'input\reference_A.wav'), (Join-Path $engineHome 'input\reference_B.wav'))) {
+foreach ($requiredPath in @($pythonPath, $comfyRoot, $runtimeConfig.modelRoot, (Join-Path $serverRoot '.venv\Scripts\python.exe'), (Join-Path $engineHome 'input\reference_A.wav'), (Join-Path $engineHome 'input\reference_B.wav'))) {
     if (-not (Test-Path -LiteralPath $requiredPath)) { throw "Missing runtime dependency: $requiredPath" }
 }
 Get-Command ffmpeg,ffprobe -ErrorAction Stop | Out-Null
@@ -32,6 +32,7 @@ $env:DUOCAST_VIDEO_URL = 'http://127.0.0.1:8191'
 $env:DUOCAST_VIDEO_INPUT = Join-Path $engineHome 'input'
 $env:DUOCAST_TTS_PROVIDER = 'comfyui'
 $env:DUOCAST_TEXT_PROVIDER = 'toapis'
+$env:DUOCAST_IMAGE_PROVIDER = 'toapis'
 $env:DUOCAST_TEXT_MODEL = 'deepseek-flash'
 $env:DUOCAST_COMFYUI_URL = 'http://127.0.0.1:8191'
 $env:DUOCAST_COMFYUI_INPUT = Join-Path $engineHome 'input'
@@ -41,7 +42,7 @@ $env:DUOCAST_TTS_REF_B = Join-Path $engineHome 'input\reference_B.wav'
 Remove-Item Env:PYTHONPATH -ErrorAction SilentlyContinue
 try { Invoke-RestMethod 'http://127.0.0.1:8100/api/providers/capabilities' -TimeoutSec 3 | Out-Null; $appReady = $true } catch { $appReady = $false }
 if (-not $appReady) {
-    Start-Process -FilePath 'cmd.exe' -ArgumentList @('/c','_run_dev_toapis.cmd') -WorkingDirectory $serverRoot -WindowStyle Hidden -RedirectStandardOutput (Join-Path $logRoot "$runStamp-app.stdout.log") -RedirectStandardError (Join-Path $logRoot "$runStamp-app.stderr.log") | Out-Null
+    Start-Process -FilePath (Join-Path $serverRoot '.venv\Scripts\python.exe') -ArgumentList @('-m','uvicorn','duocast.main:app','--host','127.0.0.1','--port','8100') -WorkingDirectory $serverRoot -WindowStyle Hidden -RedirectStandardOutput (Join-Path $logRoot "$runStamp-app.stdout.log") -RedirectStandardError (Join-Path $logRoot "$runStamp-app.stderr.log") | Out-Null
     for ($attempt = 0; $attempt -lt 30; $attempt++) {
         Start-Sleep -Seconds 1
         try { Invoke-RestMethod 'http://127.0.0.1:8100/api/providers/capabilities' -TimeoutSec 1 | Out-Null; $appReady = $true; break } catch { }

@@ -1,253 +1,64 @@
-/* ============================================================================
-   HF-07 · 服务设置（真实数据流，01 §1.6.4 / 09.1 / 06 §7.3）
-   左栏 .hf-formcol 四块：文本 API / 图片 API / 本地引擎 / MiniMax 语音
-   右栏 .hf-cap（360px）：能力状态分开登记，不做合并结论
-   附加：显存分配块（本机真实设置 machine.json，设计稿未含但功能必需）
-   ========================================================================== */
 import { useEffect, useState } from 'react';
-import { useCapabilities, useMachine, useSaveMachine, useTestProvider } from '../lib/api';
-import { PROVIDER_META } from '../lib/types';
-import { Badge, Button, Choice, Input, type Tone } from '../components/wu';
+import { useMachine, useSaveMachine, useTestProvider } from '../lib/api';
+import { Alert, Badge, Button, Field, Input } from '../components/wu';
 import { AppShell } from '../components/AppShell';
 import { useProjectStore } from '../stores';
+import { sendJson } from '../lib/api';
 
-const VRAM_ITEMS: { id: 'textApi' | 'imageApi' | 'tts' | 'video'; label: string }[] = [
-  { id: 'textApi', label: '文本 API' },
-  { id: 'imageApi', label: '图片 API' },
-  { id: 'tts', label: '本地 TTS' },
-  { id: 'video', label: '视频渲染' },
-];
+const CHANNELS = [{key:'text', label:'文本', real:'toapis'}, {key:'image', label:'图片', real:'toapis'}, {key:'tts', label:'语音', real:'comfyui'}, {key:'video', label:'视频', real:'comfyui'}];
+const DEFAULTS: Record<string, string | number> = {text_provider:'mock',image_provider:'mock',tts_provider:'mock',video_provider:'mock',text_model:'deepseek-flash',text_base_url:'https://toapis.com',image_base_url:'https://toapis.com',comfyui_url:'http://127.0.0.1:8188',video_url:'http://127.0.0.1:8191',credential_env:'DUOCAST_TOAPIS_KEY',budget_yuan:2};
 
 export function ServicesPage() {
   const machine = useMachine();
-  const caps = useCapabilities();
-  const saveMachine = useSaveMachine();
+  const save = useSaveMachine();
   const test = useTestProvider();
-  const setView = useProjectStore((s) => s.setView);
-
-  const [vram, setVram] = useState<Record<string, number>>({ textApi: 4, imageApi: 4, tts: 2, video: 8 });
-  const [dirty, setDirty] = useState(false);
-  const [budgetOn, setBudgetOn] = useState(true);
-  const [budget, setBudget] = useState('2.00');
-  const [testResult, setTestResult] = useState<Record<string, 'ok' | 'fail' | null>>({});
-
-  useEffect(() => {
-    const a = machine.data?.vramAllocation;
-    if (a && Object.keys(a).length) {
-      setVram({ textApi: a.textApi ?? 4, imageApi: a.imageApi ?? 4, tts: a.tts ?? 2, video: a.video ?? 8 });
-    }
-  }, [machine.data?.vramAllocation]);
-
-  const capsData = caps.data ?? machine.data?.capabilities ?? null;
-  const queueCaps = machine.data?.queueCaps ?? { gpu: 1, api: 16, cpu: 4 };
-  const totalVram = Object.values(vram).reduce((n, v) => n + (Number(v) || 0), 0);
-  // 后端 machine.json 只持久化分配合计，不提供实测占用与物理上限。
-  // 不再冒充真实读数：仅显示人工分配预算；mock 模式单独标注。
-  const anyMock = capsData
-    ? Object.values(capsData).some((p) => p?.mode === 'mock')
-    : false;
-
-  const handleVram = (id: string, v: number) => {
-    if (!Number.isFinite(v)) return;
-    setVram((s) => ({ ...s, [id]: Math.max(0, Math.min(24, v)) }));
-    setDirty(true);
-  };
-
-  const handleSave = () => {
-    saveMachine.mutate({ vramAllocation: vram }, { onSuccess: () => setDirty(false) });
-  };
-
-  const handleTest = (id: string) => {
-    setTestResult((s) => ({ ...s, [id]: null }));
-    test.mutate(id, {
-      onSuccess: (r) => setTestResult((s) => ({ ...s, [id]: r.ok ? 'ok' : 'fail' })),
-      onError: () => setTestResult((s) => ({ ...s, [id]: 'fail' })),
-    });
-  };
-
-  const testNote = (id: string) => {
-    const r = testResult[id];
-    if (r === 'ok') return <span style={{ color: 'var(--wu-semantic-success)', fontSize: 12 }}>连通正常</span>;
-    if (r === 'fail') return <span style={{ color: 'var(--wu-semantic-danger)', fontSize: 12 }}>连接失败</span>;
-    return null;
-  };
-
-  const capOf = (id: 'textApi' | 'imageApi' | 'tts' | 'video') => capsData?.[id];
-  const feature = (id: 'imageApi' | 'tts' | 'video', key: string) => {
-    const c = capOf(id)?.capabilities as Record<string, unknown> | undefined;
-    return c?.[key] === true;
-  };
-
-  const capRows: { nm: string; ok: boolean; badge: string; tone: Tone; note?: string }[] = [
-    { nm: '文本连通性', ok: !!capOf('textApi')?.ready, badge: capOf('textApi')?.ready ? '已连接' : '未连接', tone: capOf('textApi')?.ready ? 'success' : 'warning' },
-    { nm: '图片 · 文生图', ok: feature('imageApi', 'textToImage'), badge: feature('imageApi', 'textToImage') ? '已连接' : '不支持', tone: feature('imageApi', 'textToImage') ? 'success' : 'warning' },
-    { nm: '图片 · 单图编辑', ok: feature('imageApi', 'singleImageEdit'), badge: feature('imageApi', 'singleImageEdit') ? '已连接' : '不支持', tone: feature('imageApi', 'singleImageEdit') ? 'success' : 'warning' },
-    { nm: '图片 · 多参考图编辑', ok: feature('imageApi', 'multiRefEdit'), badge: feature('imageApi', 'multiRefEdit') ? '已连接' : '不支持', tone: feature('imageApi', 'multiRefEdit') ? 'success' : 'warning', note: '同框图走上传替代' },
-    { nm: '本地 TTS', ok: !!capOf('tts')?.ready, badge: capOf('tts')?.ready ? '就绪' : '不可用', tone: capOf('tts')?.ready ? 'success' : 'danger' },
-    { nm: '本地口型', ok: !!capOf('video')?.ready, badge: capOf('video')?.ready ? '就绪' : '不可用', tone: capOf('video')?.ready ? 'success' : 'danger' },
-    // 后端不提供有效绑定计数，不冒充「2 个绑定有效」；只登记能力开关本身。
-    { nm: 'MiniMax 音色可用', ok: feature('tts', 'voiceCloning'), badge: feature('tts', 'voiceCloning') ? 'voice_id 绑定能力开放' : '未配置', tone: feature('tts', 'voiceCloning') ? 'success' : 'warning' },
-  ];
-
-  return (
-    <AppShell
-      project={null}
-      onNavigate={setView}
-      /* 独立全屏入口：设计稿 HF-07 无 Inspector、无 FootBar（全宽表单） */
-      footer={null}
-    >
-      <div className="hf-h">
-        <h2>服务设置</h2>
-        <span className="wu-caption">仅四块 · 凭据存机器级设置 · 工程只引用配置 ID</span>
-        <span className="hf-spacer" />
-        <Badge tone="info">队列上限 GPU {queueCaps.gpu} / API {queueCaps.api} / CPU {queueCaps.cpu}</Badge>
-      </div>
-
-      <div className="hf-body2">
-        {!capsData && <p className="wu-caption">加载能力快照中…</p>}
-        <div className="hf-s7">
-          <div className="hf-formcol">
-            {/* 文本 API（01 §9.1） */}
-            <section className="hf-block">
-              <div className="hf-block-t">文本 API <span className="wu-caption">对话生成 · 改写 · 语义建议</span></div>
-              <div className="hf-fld">
-                <label>地址</label>
-                <input className="wu-input" defaultValue="https://api.example.com/v1" aria-label="文本 API 地址" readOnly />
-                <span className="wu-caption">Base URL</span>
-              </div>
-              <div className="hf-fld">
-                <label>模型</label>
-                <select className="wu-input" aria-label="文本模型" defaultValue="gpt-4o-mini">
-                  <option>gpt-4o-mini</option>
-                  <option>qwen2.5-72b</option>
-                </select>
-                <span />
-              </div>
-              <div className="hf-fld">
-                <label>凭据</label>
-                <select className="wu-input" aria-label="文本凭据引用" defaultValue="key_text_01">
-                  <option value="key_text_01">机器级密钥库 · key_text_01</option>
-                  <option value="env">使用系统环境变量</option>
-                </select>
-                <Button variant="secondary" size="sm" busy={test.isPending && testResult.textApi === null} onClick={() => handleTest('textApi')}>测试连接</Button>
-              </div>
-              <div className="hf-fld" style={{ alignItems: 'center' }}>
-                <label>API 预算</label>
-                <div style={{ display: 'flex', gap: 14, alignItems: 'center', flexWrap: 'wrap' }}>
-                  <Choice type="checkbox" checked={budgetOn} onChange={setBudgetOn} label="每期上限" />
-                  <input
-                    className="wu-input" style={{ width: 110 }} aria-label="每期上限金额"
-                    value={budget} onChange={(e) => setBudget(e.target.value)} disabled={!budgetOn}
-                  />
-                  <span className="wu-caption">元 · 超出提示不硬拦（用量统计待真实提供方接入后生效，当前仅本地记录）</span>
-                </div>
-                <span>{testNote('textApi')}</span>
-              </div>
-            </section>
-
-            {/* 图片 API（01 §9.1） */}
-            <section className="hf-block">
-              <div className="hf-block-t">图片 API <span className="wu-caption">同框底图 · 角色形象 · 场景</span></div>
-              <div className="hf-fld">
-                <label>地址</label>
-                <input className="wu-input" defaultValue="https://image.example.com/v1" aria-label="图片 API 地址" readOnly />
-                <span className="wu-caption">Base URL</span>
-              </div>
-              <div className="hf-fld">
-                <label>模型</label>
-                <select className="wu-input" aria-label="图片模型" defaultValue="flux-pro">
-                  <option>flux-pro</option>
-                </select>
-                <span />
-              </div>
-              <div className="hf-fld">
-                <label>凭据</label>
-                <select className="wu-input" aria-label="图片凭据引用" defaultValue="key_img_01">
-                  <option value="key_img_01">机器级密钥库 · key_img_01</option>
-                </select>
-                <Button variant="secondary" size="sm" busy={test.isPending && testResult.imageApi === null} onClick={() => handleTest('imageApi')}>测试连接</Button>
-              </div>
-              <p className="wu-caption" style={{ lineHeight: 1.7 }}>连接成功不代表具备人物一致性或多参考图能力。</p>
-            </section>
-
-            {/* 本地引擎（01 §9.1） */}
-            <section className="hf-block">
-              <div className="hf-block-t">本地引擎 <span className="wu-caption">本地 TTS · 本地口型 · 渲染</span></div>
-              <div className="hf-fld">
-                <label>状态</label>
-                <span style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                  <Badge tone={capOf('tts')?.ready ? 'success' : 'danger'}>本地 TTS {capOf('tts')?.ready ? '就绪' : '不可用'}</Badge>
-                  <Badge tone={capOf('video')?.ready ? 'success' : 'danger'}>本地口型 {capOf('video')?.ready ? '就绪' : '不可用'}</Badge>
-                </span>
-                <span />
-              </div>
-              <div className="hf-fld">
-                <label>显存</label>
-                <span>
-                  {anyMock
-                    ? <Badge tone="warning">演示模式 · 不占用真实显存</Badge>
-                    : <span className="wu-caption">实际占用待本地引擎接入后测定</span>}
-                </span>
-                <Button variant="ghost" size="sm" busy={test.isPending && testResult.tts === null} onClick={() => handleTest('tts')}>自检</Button>
-              </div>
-              <p className="wu-caption" style={{ lineHeight: 1.7 }}>
-                分配合计 {totalVram} GB（人工预算）。{testNote('tts')}
-              </p>
-            </section>
-
-            {/* MiniMax 语音（01 §9.1） */}
-            <section className="hf-block">
-              <div className="hf-block-t">MiniMax 语音 <span className="wu-caption">云 TTS · voice_id 绑定</span></div>
-              <div className="hf-fld">
-                <label>状态</label>
-                <span>
-                  <Badge tone={feature('tts', 'voiceCloning') ? 'success' : 'warning'}>
-                    {feature('tts', 'voiceCloning') ? '绑定能力开放' : '未配置'}
-                  </Badge>
-                </span>
-                <Button variant="secondary" size="sm" disabled title="接入密钥库后可管理">管理绑定</Button>
-              </div>
-              
-            </section>
-
-            {/* 显存分配（本机真实设置） */}
-            <section className="hf-block">
-              <div className="hf-block-t">显存分配 <span className="wu-caption">{PROVIDER_META.textApi.label} / 图片 / TTS / 渲染的预算门控（GB）</span></div>
-              {VRAM_ITEMS.map((it) => (
-                <div className="hf-vram-row" key={it.id}>
-                  <label htmlFor={`vram-${it.id}`}>{it.label}</label>
-                  <Input
-                    id={`vram-${it.id}`} type="number" min={0} max={24}
-                    aria-label={`${it.label} VRAM`} value={vram[it.id]}
-                    onChange={(e) => handleVram(it.id, Number(e.target.value))}
-                  />
-                  <span className="wu-caption">GB</span>
-                </div>
-              ))}
-              <div className="wu-row" style={{ gap: 8, marginTop: 6, alignItems: 'center' }}>
-                <Button variant="brand" size="sm" icon="save" busy={saveMachine.isPending} disabled={!dirty} onClick={handleSave}>
-                  {dirty ? '保存分配' : '已保存'}
-                </Button>
-                <span className="wu-caption">保存到本机 machine.json，不落密钥明文</span>
-              </div>
-            </section>
-          </div>
-
-          {/* 能力状态面板（01 §9.1：分开登记） */}
-          <aside className="hf-cap">
-            <div className="hf-cap-t">能力状态 <span className="wu-caption">分开登记，不做合并结论</span></div>
-            {capRows.map((r) => (
-              <div className="hf-cap-row" key={r.nm}>
-                <span className={`hf-dot ${r.ok ? 'ok' : 'no'}`} />
-                <span className="nm">{r.nm}</span>
-                <span className="hf-spacer" />
-                <Badge tone={r.tone}>{r.badge}{r.note ? `（${r.note}）` : ''}</Badge>
-              </div>
-            ))}
-
-          </aside>
+  const setView = useProjectStore(s=>s.setView);
+  const [config,setConfig] = useState(DEFAULTS);
+  const [results,setResults] = useState<Record<string,string>>({});
+  const [message,setMessage] = useState('');
+  const [validating,setValidating] = useState(false);
+  const [validation,setValidation] = useState<{valid:boolean;errors:string[];warnings:string[]}|null>(null);
+  const [diagnostics,setDiagnostics] = useState<Record<string,unknown>|null>(null);
+  useEffect(()=>{
+    if(machine.data) setConfig({...DEFAULTS,...Object.fromEntries(Object.entries(machine.data.activeConfig ?? {}).filter(([,v])=>typeof v!=='boolean')) as Record<string,string|number>,...machine.data.runtimeConfig});
+  },[machine.data]);
+  const change=(key:string,value:string|number)=>{setValidation(null);setConfig(s=>({...s,[key]:value}));};
+  const validate=async()=>{setValidating(true);try{const result=await sendJson<{valid:boolean;errors:string[];warnings:string[]}>('/machine/validate-config','POST',{runtimeConfig:config});setValidation(result);return result.valid;}catch(e){setMessage((e as Error).message);return false;}finally{setValidating(false);}};
+  return <AppShell project={null} onNavigate={setView} footer={null}>
+    <div className="hf-h"><h2>环境检查与服务设置</h2><Button variant="secondary" onClick={()=>setView('home')}>返回工程列表</Button></div>
+    <div className="hf-body2">
+      <Alert tone="info">配置保存后重启服务生效；检测使用当前已生效配置，不产生付费内容。已有脚本可直接导入，无需文本 API。</Alert>
+      {message && <Alert tone={save.isError?'danger':'info'}>{message}</Alert>}
+      {machine.error && <Alert tone="danger">{machine.error.message}</Alert>}
+      <div className="hf-s7">
+        <div className="hf-formcol">
+          {CHANNELS.map(c=><section className="hf-block" key={c.key}>
+            <h3>{c.label}服务</h3>
+            <Field label="提供方"><select className="wu-input" aria-label={c.label+'提供方'} value={config[c.key+'_provider']} onChange={e=>change(c.key+'_provider',e.target.value)}><option value="mock">演示 · 不产真实媒体</option><option value={c.real}>{c.real} · 真实服务</option></select></Field>
+            {(c.key==='text'||c.key==='image') && <Field label="服务根地址"><Input aria-label={c.label+'服务根地址'} value={config[c.key+'_base_url']} onChange={e=>change(c.key+'_base_url',e.target.value)}/></Field>}
+            {c.key==='text' && <Field label="模型"><Input aria-label="文本模型" value={config.text_model} onChange={e=>change('text_model',e.target.value)}/></Field>}
+            {c.key==='image' && <p className="wu-caption">图片适配器使用 gpt-image-2-vip 文生图；人物参考编辑尚未开放，可上传已审看的双人底图。</p>}
+            {(c.key==='tts'||c.key==='video') && <Field label="引擎地址"><Input aria-label={c.label+'引擎地址'} value={config[c.key==='tts'?'comfyui_url':'video_url']} onChange={e=>change(c.key==='tts'?'comfyui_url':'video_url',e.target.value)}/></Field>}
+            <Badge tone="muted">{machine.data?.capabilities[c.key==='text'?'textApi':c.key==='image'?'imageApi':c.key as 'tts'|'video']?.mode==='mock'?'演示可运行':'已装配 · 待检测及样片验证'}</Badge>
+            <Button variant="secondary" busy={test.isPending} onClick={()=>test.mutate(c.key,{onSuccess:r=>setResults(s=>({...s,[c.key]:(r.simulated?'演示自检：':'')+(r.message??r.error??'检测完成')+(r.checkedAt?' · '+new Date(r.checkedAt).toLocaleTimeString(): '')})),onError:e=>setResults(s=>({...s,[c.key]:e.message}))})}>检测当前配置</Button>
+            {results[c.key] && <p role="status">{results[c.key]}</p>}
+          </section>)}
+          <section className="hf-block"><h3>凭据与预算</h3>
+            <Field label="凭据环境变量名称"><Input aria-label="凭据环境变量名称" value={config.credential_env} onChange={e=>change('credential_env',e.target.value)}/></Field>
+            <p className="wu-caption">仅保存变量名称，密钥在系统环境中配置；当前进程{machine.data?.activeConfig?.credentialPresent?'已读取凭据':'未读取凭据'}。备份不包含密钥。</p>
+            <Field label="每期预算提醒（元）"><Input type="number" min="0" aria-label="每期预算提醒" value={config.budget_yuan} onChange={e=>change('budget_yuan',Number(e.target.value))}/></Field>
+            <p className="wu-caption">预算会持久化。实际费用尚未统计，当前不提供硬额度保证。</p>
+            {validation&&<Alert tone={validation.valid?'info':'danger'}>{validation.valid?'本机配置格式校验通过；未测试网络或推理。':'配置尚不能使用：'}<ul>{[...validation.errors,...validation.warnings].map(t=><li key={t}>{t}</li>)}</ul></Alert>}
+            <Button variant="secondary" busy={validating} disabled={save.isPending} onClick={()=>void validate()}>保存前校验</Button>
+            <Button busy={save.isPending||validating} onClick={async()=>{if(await validate())save.mutate({runtimeConfig:config},{onSuccess:()=>setMessage('配置已保存。请重启服务后检测新配置；当前任务继续使用冻结输入。'),onError:e=>setMessage(e.message)});}}>保存配置（重启生效）</Button>
+          </section>
         </div>
+        <aside className="hf-cap"><h3>本机诊断</h3><Button onClick={async()=>{try{const r=await fetch('/api/diagnostics');if(!r.ok)throw new Error('诊断失败');setDiagnostics(await r.json());}catch(e){setMessage((e as Error).message);}}}>检查运行环境</Button>
+          <p><a className="hf-link" href="/api/diagnostics/package" download>下载脱敏诊断包</a></p><p className="wu-caption">仅含环境能力和错误分类，不含路径、工程正文、服务地址、密钥及原始日志。</p>
+          <p className="wu-caption">检测 Python、FFmpeg、参考音频、快速引擎文件和磁盘。真实模型质量需实际样片验收。</p>
+          {diagnostics && <pre style={{whiteSpace:'pre-wrap',overflowWrap:'anywhere'}}>{JSON.stringify(diagnostics,null,2)}</pre>}
+        </aside>
       </div>
-    </AppShell>
-  );
+    </div>
+  </AppShell>;
 }

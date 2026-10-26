@@ -350,8 +350,8 @@ def test_symlink_id_maps_to_422_in_api(client, store, tmp_path):
 def test_default_number_uses_largest_numeric_id_not_count(client, store, initial, expected):
     for project_id in initial:
         assert client.post("/api/projects", json={"id": project_id, "title": "保留"}).status_code == 200
-    # 防抖尚未落盘，编号也必须包含内存中的工程。
-    assert list(store.root.iterdir()) == []
+    # Creation now guarantees durability before returning 200; numbering must still use max ID.
+    assert all((store.root / project_id / "project.json").is_file() for project_id in initial)
     response = client.post("/api/projects", json={"title": "新工程"})
     assert response.status_code == 200, response.text
     assert response.json()["id"] == expected

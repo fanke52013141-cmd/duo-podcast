@@ -22,7 +22,7 @@ router = APIRouter(prefix="/api/projects", tags=["projects"])
 
 # 客户端可修改的字段（11 报告 P2-5：拒绝注入 revision/id/audioTimeline 等内部字段）
 ALLOWED_PATCH_FIELDS = {"title", "aspect", "scriptRevisions", "currentDraftRevision",
-                        "approvals", "voiceBindings", "pronunciationDict", "selectedVisualVariantId", "cameraMode", "performanceMode", "shotCameraOverrides"}
+                        "approvals", "voiceBindings", "pronunciationDict", "selectedVisualVariantId", "cameraMode", "performanceMode", "shotCameraOverrides", "creationDraft", "characterBindings", "renderSpec"}
 # 三个默认确认点必须绑定当前草稿（11 报告 P1-6；stage_svc 的推导口径与此一致）
 CONFIRM_KINDS = {"script", "voice", "sample"}
 # 工程 id 白名单：字母/数字/下划线/连字符/空格/中文，不含路径分隔符与点号（P1-4 路径穿越）
@@ -33,9 +33,19 @@ def _init_store(request: Request) -> ProjectStore:
     return request.app.state.project_store
 
 
+def _live_video(request: Request) -> bool:
+    registry = getattr(request.app.state, "capabilities", None)
+    return registry is not None and not registry.video.get("simulated", True)
+
+
 def _inject_states(request: Request, proj: Project) -> dict:
     jobs = request.app.state.job_manager.list(proj.id) if proj.id else []
     states = derive_stage_states(proj, jobs, _merged_pronunciation(request, proj))
+    if _live_video(request):
+        approvals = [a for a in proj.approvals if a.kind == "sample" and not a.revoked_at]
+        if approvals and approvals[-1].spec.get("simulated"):
+            from ..domain.project import StageState
+            states["visual"] = StageState.PENDING_CONFIRM
     data = proj.model_dump(mode="json", by_alias=True)
     data["stageProgress"] = {k: v.value for k, v in states.items()}
     return data
@@ -58,8 +68,10 @@ async def create_project(request: Request, payload: dict) -> dict:
     fast_visual = None
     if generation_mode == "fast":
         from ..adapters.musetalk_video import template_variant
+        from ..services.fast_catalog import selected_root
         try:
-            fast_visual = template_variant(request.app.state.artifacts)
+            fast_root = selected_root(payload.get("fastTemplateId"))
+            fast_visual = template_variant(request.app.state.artifacts, fast_root)
         except ValueError as exc:
             raise HTTPException(422, str(exc)) from exc
     template_id = payload.get("templateId")
@@ -69,6 +81,8 @@ async def create_project(request: Request, payload: dict) -> dict:
             raise HTTPException(422, f"模板不存在: {template_id}")
         if generation_mode == "fast" and (tpl.get("config") or {}).get("aspect", "landscape") != "landscape":
             raise HTTPException(422, "快速模式暂只支持横屏双人演播室模板")
+        if _live_video(request) and (tpl.get("config") or {}).get("aspect", "landscape") != "landscape":
+            raise HTTPException(422, "当前真实引擎仅支持横屏，请选择横屏模板")
     # ID 白名单（P1-4 路径穿越）：显式 ID 先过正则，非法直接 422。
     project_id = payload.get("id")
     if project_id is not None:
@@ -115,8 +129,11 @@ async def create_project(request: Request, payload: dict) -> dict:
         if patch:
             proj = store.apply(proj.id, patch, expected_revision=proj.revision)
     if fast_visual:
+        from ..adapters.musetalk_video import template_identity, require_engine
         proj = store.apply(proj.id, {"generation_mode": "fast", "visual_variants": [fast_visual],
+            "fast_template": template_identity(require_engine(fast_root)),
             "selected_visual_variant_id": fast_visual["id"], "aspect": "landscape", "camera_mode": "twoShot"}, expected_revision=proj.revision)
+    store.flush()
     return _inject_states(request, proj)
 
 
@@ -182,6 +199,14 @@ async def patch_project(project_id: str, payload: dict, request: Request) -> dic
     unknown = set(patch) - ALLOWED_PATCH_FIELDS
     if unknown:
         raise HTTPException(422, f"字段不允许修改: {sorted(unknown)}")
+    if "renderSpec" in patch:
+        spec = patch["renderSpec"]
+        if not isinstance(spec, dict) or set(spec)-{"resolution", "fps", "fastQuality"}:
+            raise HTTPException(422, "生成规格字段无效")
+        if spec.get("resolution", "854x480") not in {"854x480", "1280x720", "1920x1080"} or type(spec.get("fps", 25)) is not int or spec.get("fps", 25) not in {25, 30} or spec.get("fastQuality", "original") not in {"original", "clear", "crisp"}:
+            raise HTTPException(422, "生成规格不支持")
+    if patch.get("aspect") == "portrait" and _live_video(request):
+        raise HTTPException(422, "当前真实引擎仅支持横屏，请保留横屏画幅")
     if "approvals" in patch and isinstance(patch["approvals"], list):
         _validate_confirm_bindings(store, project_id, patch["approvals"])
     saved_project = store.load(project_id)
@@ -204,6 +229,10 @@ async def patch_project(project_id: str, payload: dict, request: Request) -> dic
             # 真实样片仍必须携带与任务产物一致的 sampleArtifactId（第五轮实测 A1：
             # 演示模式下前端传空 artifactId，"None not in []" 恒真导致接受永远 409）。
             demo_sample = bool(result.get("simulated")) and not result.get("artifactIds")
+            if demo_sample and _live_video(request):
+                raise HTTPException(422, "真实模式不能采用演示样片，请生成并检查真实样片")
+            if not demo_sample and not {"口型与发言一致", "人物身份稳定", "倾听反应自然", "切点连续"}.issubset(set(spec.get("checks", []))):
+                raise HTTPException(422, "请完成真实样片的口型、身份、倾听和切点人工检查")
             artifact_ok = demo_sample or spec.get("sampleArtifactId") in result.get("artifactIds", [])
             if (job is None or job.project_id != project_id or job.status.value != "succeeded"
                     or not artifact_ok
@@ -215,6 +244,8 @@ async def patch_project(project_id: str, payload: dict, request: Request) -> dic
                 )
             # 样片确认只绑定「画面依赖」：之后调间隔/换配音不应让已接受的样片作废（F4）。
             spec["dependencyHash"] = visual_dependency_hash(current)
+            spec["simulated"] = demo_sample
+            spec["renderSpec"] = {k: job.input_snapshot.get(k) for k in ("resolution", "fps", "fastQuality", "performanceMode")}
             validate_render_options(current, {}, _merged_pronunciation(request, current), real_video=False)
     try:
         updated = store.apply(project_id, patch, expected_revision=expected)
@@ -226,4 +257,5 @@ async def patch_project(project_id: str, payload: dict, request: Request) -> dic
         raise HTTPException(422, detail=exc.errors(
             include_url=False, include_context=False, include_input=False,
         )) from exc
+    store.flush()
     return _inject_states(request, updated)

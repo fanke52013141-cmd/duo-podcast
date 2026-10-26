@@ -98,6 +98,10 @@ class Project(BaseModel):
     schema_version: int = 1
     id: str
     title: str = "未命名节目"
+    creation_draft: dict = Field(default_factory=dict)
+    character_bindings: dict[str, dict] = Field(default_factory=dict)
+    render_spec: dict = Field(default_factory=dict)
+    fast_template: dict = Field(default_factory=dict)
     current_draft_revision: str = ""
     selected_output_version: Optional[str] = None
     output_manifest: Optional[dict] = None

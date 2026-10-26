@@ -10,16 +10,17 @@ from .mock import MockTextProvider
 class ToAPIsTextProvider:
     name = "toapis-text"
 
-    def __init__(self, api_key: str, model: str = "deepseek-flash"):
+    def __init__(self, api_key: str, model: str = "deepseek-flash", base_url: str | None = None):
         self.api_key = api_key
         self.model = model
+        self.bases = (base_url.rstrip("/"),) if base_url else ("https://toapis.com", "https://toapis.cn")
         self.capabilities = {"simulated": False, "streaming": False, "maxContextChars": 80000,
                              "structuredOutput": True, "paid": True, "model": model}
 
     async def _chat(self, system, user):
         response = None
         async with httpx.AsyncClient(timeout=120, trust_env=False) as client:
-            for base in ("https://toapis.com", "https://toapis.cn"):
+            for base in self.bases:
                 try:
                     response = await client.post(base + "/v1/chat/completions",
                         headers={"Authorization": "Bearer " + self.api_key}, json={"model": self.model,

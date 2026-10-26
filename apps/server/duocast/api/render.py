@@ -25,6 +25,8 @@ async def generate(project_id: str, payload: dict, request: Request) -> dict:
     project = store.load(project_id)
     if project is None:
         raise HTTPException(404, "project not found")
+    from ..services.render_spec import render_options
+    payload = render_options(project, payload, getattr(request.app.state.artifacts, "root", store.root))
     validate_render_options(project, payload, _merged_pronunciation(request, project),
                             real_video=not request.app.state.capabilities.video.get("simulated", True))
     validate_motion_source(project, payload, request.app.state.artifacts)

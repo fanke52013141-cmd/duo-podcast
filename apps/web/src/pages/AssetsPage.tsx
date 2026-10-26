@@ -6,6 +6,8 @@
    检查器：所选资产 / 语音绑定 / 产物登记。
    ========================================================================== */
 import { useMemo, useRef, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { getJson, sendJson } from '../lib/api';
 import {
   useArtifacts, useCharacters, useCreateCharacter, useUploadCharacterImage,
 } from '../lib/api';
@@ -21,11 +23,6 @@ const KIND_META: Record<ArtifactEntry['kind'], { label: string; icon: IconName; 
   subtitle: { label: '字幕', icon: 'edit', tone: 'muted' },
   mixed: { label: '合成', icon: 'sparkle', tone: 'success' },
 };
-
-const SCENES = [
-  { key: 'studio', name: '录音棚', desc: '16:9 · 主用场景', label: '录音棚', tone: 'studio', fs: 15 },
-  { key: 'cafe', name: '咖啡馆', desc: '16:9 · 备用场景', label: '咖啡馆', tone: 'cafe', fs: 15 },
-];
 
 type Selection = { kind: 'character'; id: string } | { kind: 'scene'; key: string } | { kind: 'artifact'; id: string } | null;
 
@@ -44,6 +41,14 @@ function CharacterThumb({ c, big }: { c: Character; big?: boolean }) {
 }
 
 export function AssetsPage({ project }: { project: Project | null }) {
+  const qc = useQueryClient();
+  const scenes = useQuery({queryKey:['scenes'], queryFn:()=>getJson<{id:string;name:string}[]>('/scenes')});
+  const sceneFile = useRef<HTMLInputElement>(null);
+  const bind = async (characterId: string, speaker: 'A'|'B') => {
+    if (!project) return;
+    try { await sendJson(`/projects/${project.id}/characters/${speaker}`, 'POST', {characterId,expectedRevision:project.revision}); await qc.invalidateQueries({queryKey:['project',project.id]}); }
+    catch(e) { setNewError((e as Error).message); }
+  };
   const artifacts = useArtifacts();
   const charactersQ = useCharacters();
   const createCharacter = useCreateCharacter();
@@ -127,7 +132,12 @@ export function AssetsPage({ project }: { project: Project | null }) {
                   onChange={(e) => { handlePickImage(selectedCharacter.id, e.target.files?.[0]); e.target.value = ''; }}
                   />
                 </div>
-                {newError && <p className="wu-caption" style={{ color: 'var(--wu-semantic-danger)' }}>{newError}</p>}
+                {project && <div className="wu-row">{(['A','B'] as const).map(s=><Button key={s} disabled={project.generationMode==='fast'} onClick={()=>void bind(selectedCharacter.id,s)}>用于本期 {s}{project.characterBindings?.[s]?.id===selectedCharacter.id?'（已绑定）':''}</Button>)}</div>}
+                <label>参考音频（上传后再次绑定本期以采用新声音）<input type="file" accept="audio/*" onChange={async e=>{
+                  const file=e.target.files?.[0]; if(!file)return;
+                  try { const form=new FormData();form.append('file',file); const response=await fetch('/api/uploads/audio',{method:'POST',body:form});const result=await response.json();if(!response.ok)throw new Error(result.detail??'上传失败');await sendJson(`/characters/${selectedCharacter.id}/voice`,'POST',{artifactId:result.artifactId});await qc.invalidateQueries({queryKey:['characters']});setNewError('参考音频已保存；点击用于本期以更新本期声音。'); }catch(error){setNewError((error as Error).message);}
+                }}/></label>
+                {newError && <p role="status" className="wu-caption">{newError}</p>}
               </>
             ) : selectedArtifact ? (
               <>
@@ -241,18 +251,19 @@ export function AssetsPage({ project }: { project: Project | null }) {
 
         <div className="hf-sec-t" style={{ marginTop: 22 }}>场景 / 同框底图 / 上传素材 <span className="wu-caption">可上传或经图片 API 生成</span></div>
         <div className="hf-grid">
-          {SCENES.map((s) => (
+          {(scenes.data??[]).map((s) => (
             <div
-            key={s.key}
-            className={`hf-asset ${sel?.kind === 'scene' && sel.key === s.key ? 'selected' : ''}`}
+            key={s.id}
+            className={`hf-asset ${sel?.kind === 'scene' && sel.key === s.id ? 'selected' : ''}`}
             role="button" tabIndex={0}
-            aria-pressed={sel?.kind === 'scene' && sel.key === s.key}
-            onClick={() => setSel({ kind: 'scene', key: s.key })}
-            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSel({ kind: 'scene', key: s.key }); } }}
+            aria-pressed={sel?.kind === 'scene' && sel.key === s.id}
+            onClick={() => setSel({ kind: 'scene', key: s.id })}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSel({ kind: 'scene', key: s.id }); } }}
             >
-              <div className="hf-thumb" data-tone={s.tone} style={{ fontSize: s.fs }}>{s.label}</div>
+              <img className="hf-thumb" alt={s.name} src={`/api/artifacts/${s.id}/file`}/>
               <div className="name">{s.name}</div>
-              <div className="desc">{s.desc}</div>
+              <div className="desc">全局场景素材 · 上传双人底图可直接使用</div>
+              {project&&<Button disabled={project.generationMode==='fast'} onClick={async e=>{e.stopPropagation();try{const result=await sendJson<{notice:string}>(`/projects/${project.id}/visual/use-scene`,'POST',{sceneId:s.id,expectedRevision:project.revision});setNewError(result.notice);await qc.invalidateQueries({queryKey:['project',project.id]});}catch(error){setNewError((error as Error).message);}}}>用于本期底图</Button>}
             </div>
           ))}
           <div className="hf-asset" role="button" tabIndex={0} onClick={() => latestVariant && setSel({ kind: 'artifact', id: latestVariant.masterImage.artifactId })}>
@@ -262,12 +273,14 @@ export function AssetsPage({ project }: { project: Project | null }) {
               ? `${latestVariant.aspect === 'portrait' ? '9:16' : '16:9'} · ${latestVariant.imageApiConfigRef ?? '图片 API'}`
               : '在阶段④「生成同框底图」后在此登记'}</div>
           </div>
-          <button type="button" className="hf-plus" disabled title="接入素材导入后可上传">
+          <input ref={sceneFile} type="file" aria-label="上传场景素材" accept="image/png,image/jpeg" hidden onChange={async e=>{const file=e.target.files?.[0];e.target.value='';if(!file)return;try{const form=new FormData();form.append('file',file);const response=await fetch('/api/scenes',{method:'POST',body:form});const result=await response.json();if(!response.ok)throw new Error(result.detail??'上传失败');await qc.invalidateQueries({queryKey:['scenes']});setNewError('场景已保存，含人物的双人底图可直接用于本期。');}catch(error){setNewError((error as Error).message);}}}/>
+          <button type="button" className="hf-plus" onClick={()=>sceneFile.current?.click()}>
             <Icon name="upload" size={20} />
-            <span>导入素材</span>
+            <span>上传场景 / 双人底图</span>
           </button>
         </div>
 
+        {newError && <p role="status">{newError}</p>}
         {list.length === 0 && (
           <div className="hf-sec-t" style={{ marginTop: 22 }}>产物登记 <span className="wu-caption">完成阶段任务后自动登记</span></div>
         )}

@@ -9,6 +9,8 @@ def dependency_hash(project):
     revision = next((r for r in data["scriptRevisions"] if r["id"] == data["currentDraftRevision"]), None)
     return hashlib.sha256(json.dumps({"script": revision, "audio": data.get("audioTimeline"),
         "visual": data.get("visualVariants"), "bindings": data.get("voiceBindings"),
+        **({"renderSpec": data["renderSpec"]} if data.get("renderSpec") else {}),
+        **({"fastTemplate": data["fastTemplate"]} if data.get("fastTemplate") else {}),
         "pronunciation": data.get("pronunciationDict"), "selectedVisual": data.get("selectedVisualVariantId"), "cameraMode": data.get("cameraMode"),
         **({"generationMode": "fast"} if data.get("generationMode") == "fast" else {}),
         **({"performanceMode": data["performanceMode"]} if data.get("performanceMode", "legacy") != "legacy" else {}),
@@ -26,6 +28,7 @@ def visual_dependency_hash(project):
     return hashlib.sha256(json.dumps({
         "script": revision, "visual": data.get("visualVariants"),
         "selectedVisual": data.get("selectedVisualVariantId"), "cameraMode": data.get("cameraMode"),
+        **({"fastTemplate": data["fastTemplate"]} if data.get("fastTemplate") else {}),
         **({"generationMode": "fast"} if data.get("generationMode") == "fast" else {}),
         **({"performanceMode": data["performanceMode"]} if data.get("performanceMode", "legacy") != "legacy" else {}),
         **({"shotCameraOverrides": data["shotCameraOverrides"]} if data.get("shotCameraOverrides") else {}),

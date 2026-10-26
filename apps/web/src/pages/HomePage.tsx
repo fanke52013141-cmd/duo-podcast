@@ -12,7 +12,11 @@
      .wu-caption  → 「最后编辑 MM-DD」
      .wu-btn      → 默认(primary) sm 实心「继续制作」，撑满卡片宽度
    ========================================================================== */
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import { MaintenancePanel } from '../components/MaintenancePanel';
+import { filterProjects } from '../lib/workflowTools';
+import { getJson } from '../lib/api';
 import {
   useCapabilities, useCreateProject, useCreateTemplate, useDeleteProject, useJobs, usePatchProject, useProjects, useTemplates,
 } from '../lib/api';
@@ -86,11 +90,19 @@ function ProjectCard({ p, jobs, onOps }: { p: Project; jobs: Job[] | undefined; 
 
       {/* 直达工程当前阶段（阶段由服务端 stageProgress 推导），而不是每次都落回阶段① */}
       <Button size="sm" onClick={() => openProject(p.id, currentStageOf(p).id)}>继续制作</Button>
+      <a className="hf-link" href={`/api/projects/${p.id}/backup`} download>备份工程（含必要媒体）</a>
     </Card>
   );
 }
 
 export function HomePage() {
+  const importFile = useRef<HTMLInputElement>(null);
+  const [importMessage,setImportMessage] = useState('');
+  const importing=useRef(false);
+  const [importBusy,setImportBusy]=useState(false);
+  const [importResult,setImportResult]=useState<{projectId:string;missing:string[];summary:{sourceProjectId:string;mediaCount:number;mediaBytes:number;scriptVersions:number;recheck:string[];external:string[]}}|null>(null);
+  const qc = useQueryClient();
+  const setView = useProjectStore(s => s.setView);
   const { data: projects = [], isLoading } = useProjects();
   const { data: jobs } = useJobs();
   const createProject = useCreateProject();
@@ -106,25 +118,20 @@ export function HomePage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [templateId, setTemplateId] = useState<string>('blank');
   const [generationMode, setGenerationMode] = useState<'fast' | 'standard'>('fast');
+  const [fastTemplates,setFastTemplates] = useState<{id:string;label:string;ready:boolean;version:string}[]>([]);
+  const [fastTemplateId,setFastTemplateId] = useState('');
+  useEffect(()=>{void getJson<typeof fastTemplates>('/diagnostics/fast-templates').then(list=>{setFastTemplates(list);setFastTemplateId(list.find(t=>t.ready)?.id??'');}).catch(()=>setFastTemplates([]));},[]);
   useEffect(() => { if (capabilities.data && !fastAvailable) setGenerationMode('standard'); }, [capabilities.data, fastAvailable]);
   const [opsTarget, setOpsTarget] = useState<Project | null>(null);
   const [renameTo, setRenameTo] = useState('');
   // 工程管理（第五轮实测 A8）：搜索 + 阶段筛选 + 软删除
   const [searchText, setSearchText] = useState('');
   const [stageFilter, setStageFilter] = useState('all');
+  const [sortOrder,setSortOrder]=useState('recent');
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const filteredProjects = useMemo(() => projects
-    // 「最近工程」必须按最后编辑排序；之前直接用接口顺序（按 ID 升序），
-    // 新建的工程反而不在第一屏。
-    .slice()
-    .sort((a, b) => (b.updatedAt ?? '').localeCompare(a.updatedAt ?? ''))
-    .filter((p) => {
-      const q = searchText.trim().toLowerCase();
-      if (q && !`${p.id} ${p.title}`.toLowerCase().includes(q)) return false;
-      if (stageFilter !== 'all' && currentStageOf(p).id !== stageFilter) return false;
-      return true;
-    }), [projects, searchText, stageFilter]);
+  const filteredProjects = useMemo(() => filterProjects(projects,searchText,stageFilter,sortOrder,p=>currentStageOf(p).id),[projects,searchText,stageFilter,sortOrder]);
+
   // 保存为模板：从既有工程提取配置（画幅 + A/B 声线引用）
   const [saveTplOpen, setSaveTplOpen] = useState(false);
   const [saveTplProjectId, setSaveTplProjectId] = useState<string>('');
@@ -146,6 +153,7 @@ export function HomePage() {
         title: tpl ? `${tpl.name} · 未命名节目` : '未命名节目',
         templateId: tpl ? tpl.id : undefined,
         generationMode,
+        fastTemplateId: generationMode==='fast' ? fastTemplateId||undefined : undefined,
       });
       setModalOpen(false);
       openProject(proj.id);
@@ -208,9 +216,10 @@ export function HomePage() {
       <header className="hf-home-top">
         <span className="hf-brand"><span className="hf-mark"><i /><i /></span>双声播客工坊</span>
         <span className="hf-spacer" />
+        <Button variant="secondary" icon="gear" onClick={() => setView('services')}>环境检查与服务设置</Button>
         <Button
-          variant="secondary" icon="upload"
-          onClick={() => alert('导入工程：暂未开放（设计稿为调起系统文件管理器选择导出的工程 zip）')}
+          variant="secondary" icon="upload" disabled={importBusy}
+          onClick={() => importFile.current?.click()}
         >
           导入工程
         </Button>
@@ -218,6 +227,17 @@ export function HomePage() {
       </header>
 
       <main className="hf-home-main">
+        <input ref={importFile} aria-label="选择工程备份" type="file" accept=".zip" hidden onChange={async e=>{
+          const file=e.target.files?.[0];e.target.value='';if(!file||importing.current)return;
+          importing.current=true;setImportBusy(true);setImportResult(null);
+          try {setImportMessage('正在校验并另存工程…');const form=new FormData();form.append('file',file);const response=await fetch('/api/projects/import-backup',{method:'POST',body:form});const result=await response.json();if(!response.ok)throw new Error(result.detail??'导入失败');setImportResult(result);setImportMessage(`${result.projectId}：${result.notice}`);await qc.invalidateQueries({queryKey:['projects']});}catch(error){setImportMessage(`导入未完成：${(error as Error).message}。请确认选择的是工程备份 ZIP；损坏媒体需从原机器重新备份。`);}finally{importing.current=false;setImportBusy(false);}
+        }}/>
+        {importMessage&&<p role="status">{importMessage}</p>}
+        {importResult&&<section aria-label="工程导入结果" className="wu-card"><h3>工程已另存：{importResult.projectId}</h3><p>原工程 {importResult.summary.sourceProjectId} 保持完整；导入 {importResult.summary.scriptVersions} 个脚本版本、{importResult.summary.mediaCount} 个媒体文件（{(importResult.summary.mediaBytes/1024**2).toFixed(1)} MB）。</p>
+          <p>需重新确认：{importResult.summary.recheck.join('、')}。需在本机配置：{importResult.summary.external.join('、')}。</p>
+          <p>缺失媒体 {importResult.missing.length} 项</p>{importResult.missing.length>0&&<ul>{importResult.missing.map((id,i)=><li key={i}>{id}</li>)}</ul>}
+          <Button onClick={()=>openProject(importResult.projectId)}>检查导入工程</Button></section>}
+        <MaintenancePanel/>
         {isLoading ? (
           <Empty title="读取工程中…" />
         ) : projects.length === 0 ? (
@@ -261,9 +281,11 @@ export function HomePage() {
                   <option value="visual">④ 预览画面</option>
                   <option value="render">⑤ 生成导出</option>
                 </select>
+                <select className="wu-input" style={{width:'auto'}} aria-label="工程排序" value={sortOrder} onChange={e=>setSortOrder(e.target.value)}><option value="recent">最近编辑优先</option><option value="oldest">最早编辑优先</option><option value="title">名称排序</option><option value="id">工程 ID 排序</option></select>
+                <Button variant="ghost" size="sm" onClick={()=>{setSearchText('');setStageFilter('all');setSortOrder('recent');}}>重置筛选</Button>
                 <Button
                   variant="secondary" size="sm" icon="folder"
-                  onClick={() => alert('打开工程目录：暂未开放（设计稿为调起系统资源管理器定位工程目录）')}
+                  disabled title="浏览器无法直接打开资源管理器；可下载工程备份或手动打开本机存储目录"
                 >
                   打开工程目录
                 </Button>
@@ -349,6 +371,7 @@ export function HomePage() {
 
         <fieldset className="hf-fieldset">
           <legend>选择起点</legend>
+          {generationMode==='fast'&&fastTemplates.length>0&&<label>演播室素材版本<select className="wu-input" value={fastTemplateId} onChange={e=>setFastTemplateId(e.target.value)}>{fastTemplates.map(t=><option key={t.id} value={t.id} disabled={!t.ready}>{t.label} · {t.version.slice(0,8)}{!t.ready?'（未就绪）':''}</option>)}</select></label>}
           <label className="wu-choice">
             <input type="radio" name="tpl" checked={templateId === 'blank'} onChange={() => setTemplateId('blank')} />
             <span><b>空白工程</b> <span className="wu-caption">从话题 / 文章 / 已有脚本开始</span></span>

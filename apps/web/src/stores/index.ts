@@ -4,6 +4,7 @@
    serviceStore：能力快照（UI 门控，01 §1.6.4）
    ========================================================================== */
 import { create } from 'zustand';
+import { navigate } from '../lib/navigation';
 import type { Capabilities, StageId } from '../lib/types';
 
 export type View = 'home' | StageId | 'assets' | 'services' | 'tasks';
@@ -47,9 +48,9 @@ const restoredSession = loadSession();
 export const useProjectStore = create<ProjectState>((set) => ({
   currentProjectId: restoredSession?.currentProjectId ?? null,
   view: restoredSession?.view ?? 'home',
-  openProject: (id, view) => set({ currentProjectId: id, view: view ?? 'create' }),
-  setView: (view) => set({ view }),
-  leaveProject: () => set({ currentProjectId: null, view: 'home' }),
+  openProject: (id, view) => { void navigate(() => set({ currentProjectId: id, view: view ?? 'create' })); },
+  setView: (view) => { void navigate(() => set({ view })); },
+  leaveProject: () => { void navigate(() => set({ currentProjectId: null, view: 'home' })); },
 }));
 
 interface ServiceState {

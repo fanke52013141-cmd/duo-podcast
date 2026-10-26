@@ -2,7 +2,10 @@
    HF-01 · 阶段① 创建本期（真实数据流）
    左 内容输入 55% / 右 内容要求 45%；无 Inspector / 无 TimelineBar（01 §3）
    ========================================================================== */
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import { createSingleFlight, recoveryRead, recoveryWrite, recoveryRemove, registerNavigationGuard } from '../lib/navigation';
+import type { Project } from '../lib/types';
 import {
   useCapabilities, useGenerateScript, useJobs, useJobCancel, usePatchProject, useProject,
 } from '../lib/api';
@@ -32,6 +35,7 @@ export function CreateEpisodePage({ projectId }: { projectId: string }) {
   const caps = useCapabilities();
   const patchProject = usePatchProject();
   const generateScript = useGenerateScript();
+  const generateOnce=useRef(createSingleFlight());
   const cancelJob = useJobCancel();
   const setView = useProjectStore((s) => s.setView);
 
@@ -44,12 +48,73 @@ export function CreateEpisodePage({ projectId }: { projectId: string }) {
   const { error, setError, dismiss: dismissError } = useError();
 
   const proj = project.data;
+  const qc = useQueryClient();
+  const initialized = useRef(false);
+  const draftKey = `duocast.creation.${projectId}`;
+  const dirty = useRef(false);
+  const saveChain = useRef(Promise.resolve(true));
+  const [saveLabel, setSaveLabel] = useState('读取草稿…');
+  const [recoverable, setRecoverable] = useState<Project['creationDraft'] | null>(null);
+  const draft = { sourceKind, content, durationMode, approxMinutes, title };
+  const draftRef = useRef(draft);
+  draftRef.current = draft;
+  const applyDraft = (d: NonNullable<Project['creationDraft']>) => {
+    setContent(d.content ?? ''); setSourceKind(d.sourceKind ?? 'article');
+    setDurationMode(d.durationMode ?? 'auto'); setApproxMinutes(d.approxMinutes ?? 3);
+    setTitle(d.title ?? proj?.title ?? '');
+  };
+  useEffect(() => {
+    if (!proj || initialized.current) return;
+    initialized.current = true;
+    const saved = proj.creationDraft ?? {};
+    applyDraft({ ...saved, title: proj.title });
+    const candidate = recoveryRead<NonNullable<Project['creationDraft']>>(draftKey);
+    const local = candidate && typeof candidate==='object' && typeof candidate.content==='string' ? candidate : null;
+    if (local && JSON.stringify(local) !== JSON.stringify({ ...saved, title: proj.title })) setRecoverable(local);
+    setSaveLabel('已保存');
+  }, [proj]);
+  const saveDraft = () => {
+    if (!dirty.current) return saveChain.current;
+    saveChain.current = saveChain.current.then(async () => {
+      const snapshot = draftRef.current;
+      const latest = qc.getQueryData<Project>(['project', projectId]);
+      if (!latest) return false;
+      try {
+        setSaveLabel('保存中…');
+        await patchProject.mutateAsync({ projectId, expectedRevision: latest.revision,
+          patch: { creationDraft: snapshot, title: snapshot.title.trim() || latest.title } });
+        if (JSON.stringify(draftRef.current) === JSON.stringify(snapshot)) {
+          dirty.current = false; recoveryRemove(draftKey);
+        }
+        setSaveLabel(dirty.current ? '仍有新编辑待保存' : '已保存'); return !dirty.current;
+      } catch (e) { setSaveLabel('仅本机可恢复 · 服务端保存失败'); setError((e as Error).message); return false; }
+    });
+    return saveChain.current;
+  };
+  const lastDraft = useRef('');
+  useEffect(() => {
+    if (!initialized.current || !proj || recoverable) return;
+    const serialized = JSON.stringify(draft);
+    if (!lastDraft.current) { lastDraft.current = serialized; return; }
+    if (serialized !== lastDraft.current) {
+      lastDraft.current = serialized; dirty.current = true;
+      recoveryWrite(draftKey, draft); setSaveLabel('本机草稿已保留');
+    }
+    const timer = window.setTimeout(() => { if (dirty.current) void saveDraft(); }, 800);
+    return () => window.clearTimeout(timer);
+  }, [content, title, sourceKind, durationMode, approxMinutes, proj?.id]);
+  useEffect(() => registerNavigationGuard(saveDraft));
+  useEffect(() => {
+    const protect = (e: BeforeUnloadEvent) => { if (dirty.current) { e.preventDefault(); e.returnValue = ''; } };
+    window.addEventListener('beforeunload', protect);
+    return () => window.removeEventListener('beforeunload', protect);
+  }, []);
   useEffect(() => {
     if (proj) setAspect(proj.aspect);
   }, [proj?.aspect]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const textReady = caps.data?.textApi.ready ?? false;
-  const canGenerate = content.trim().length > 0 && textReady && !generateScript.isPending;
+  const canGenerate = !recoverable && content.trim().length > 0 && (sourceKind === 'script' || textReady) && !generateScript.isPending;
 
   // 当前工程的脚本生成任务（幂等 clientToken 定位）
   const genJob = useMemo(() => {
@@ -64,9 +129,10 @@ export function CreateEpisodePage({ projectId }: { projectId: string }) {
   const genDone = !!genJob && genJob.status === 'succeeded' && hasScript;
   const genFailed = !!genJob && genJob.status === 'failed' && !hasScript;
 
-  const handleGenerate = async () => {
+  const handleGenerate = () => generateOnce.current(async () => {
     setError(null);
     try {
+      if (!await saveDraft()) return;
       await generateScript.mutateAsync({
         projectId,
         clientToken: crypto.randomUUID(),
@@ -80,9 +146,10 @@ export function CreateEpisodePage({ projectId }: { projectId: string }) {
     } catch (e) {
       setError((e as Error).message);
     }
-  };
+  });
 
   const handleAspect = (v: 'landscape' | 'portrait') => {
+    if(recoverable)return;
     setAspect(v);
     if (proj && v !== proj.aspect) {
       patchProject.mutate({ projectId, patch: { aspect: v }, expectedRevision: proj.revision });
@@ -106,6 +173,7 @@ export function CreateEpisodePage({ projectId }: { projectId: string }) {
       footer={null}
     >
       <StageHead title="创建本期">
+        <span role="status" className="wu-caption">{saveLabel}</span>
         {proj && <Badge>{proj.generationMode === 'fast' ? '快速模式 · 双人演播室' : '原有模式'}</Badge>}
         {stageState && stageState !== 'ready' && <Badge tone={STAGE_META[stageState].tone}>{STAGE_META[stageState].label}</Badge>}
         {/* 版本号（revision）是内部概念，第五轮实测 B3：不再在页头展示。 */}
@@ -113,13 +181,17 @@ export function CreateEpisodePage({ projectId }: { projectId: string }) {
       </StageHead>
 
       <div className="hf-cols">
+        {recoverable && <Alert tone="warning">发现本机恢复草稿。
+          <Button onClick={() => { applyDraft(recoverable); setRecoverable(null); }}>恢复本机草稿</Button>
+          <Button onClick={() => { recoveryWrite(draftKey, draft); setRecoverable(null); }}>使用服务端版本</Button>
+        </Alert>}
         {/* ---- 左：内容输入（55%） ---- */}
         <section className="wu-card hf-panel in">
           <h3 className="hf-panel-t">内容输入</h3>
           <Tabs
             items={SOURCE_TABS.map((t) => ({ id: t.id, label: t.label }))}
             active={sourceKind}
-            onSelect={(id) => setSourceKind(id as SourceKind)}
+            onSelect={(id) => {if(!recoverable)setSourceKind(id as SourceKind);}}
             idPrefix="src"
           />
           <div style={{ marginTop: 14, display: 'grid', gap: 10 }}>
@@ -129,7 +201,7 @@ export function CreateEpisodePage({ projectId }: { projectId: string }) {
                 rows={12}
                 placeholder={SOURCE_HINTS[sourceKind]}
                 value={content}
-                disabled={generating}
+                disabled={generating||!!recoverable}
                 onChange={(e) => setContent(e.target.value)}
               />
             </Field>
@@ -193,7 +265,7 @@ export function CreateEpisodePage({ projectId }: { projectId: string }) {
                 )}
                 {error && <Alert tone="danger" onClose={dismissError}>生成失败：{error}</Alert>}
                 <Button variant="brand" icon="sparkle" disabled={!canGenerate} onClick={handleGenerate}>
-                  生成对话
+                  {sourceKind === 'script' ? '解析并导入' : '生成对话'}
                 </Button>
               </>
             )}
@@ -208,6 +280,7 @@ export function CreateEpisodePage({ projectId }: { projectId: string }) {
           <Field label="节目名">
             <Input
               placeholder="未命名节目"
+              disabled={!!recoverable}
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               onBlur={handleRename}
@@ -219,15 +292,15 @@ export function CreateEpisodePage({ projectId }: { projectId: string }) {
             <div className="wu-stack" style={{ gap: 8 }}>
               <Choice
                 checked={durationMode === 'auto'}
-                onChange={() => setDurationMode('auto')}
+                onChange={() => {if(!recoverable)setDurationMode('auto');}}
                 label={<span>根据内容，最多 5 分钟</span>}
               />
               <div className="wu-row" style={{ gap: 8 }}>
-                <Choice checked={durationMode === 'approx'} onChange={() => setDurationMode('approx')} label="大约" />
+                <Choice checked={durationMode === 'approx'} onChange={() => {if(!recoverable)setDurationMode('approx');}} label="大约" />
                 <SegControl
                   options={[1, 2, 3, 4].map((n) => ({ value: String(n), label: String(n) }))}
                   value={String(approxMinutes)}
-                  onChange={(v) => setApproxMinutes(Number(v))}
+                  onChange={(v) => {if(!recoverable)setApproxMinutes(Number(v));}}
                 />
                 <span className="wu-caption">分钟</span>
               </div>
@@ -237,7 +310,8 @@ export function CreateEpisodePage({ projectId }: { projectId: string }) {
           <Field label="比例">
             <div className="wu-row">
               <Choice checked={aspect === 'landscape'} onChange={() => handleAspect('landscape')} label="横屏 16:9" />
-              {proj?.generationMode !== 'fast' && <Choice checked={aspect === 'portrait'} onChange={() => handleAspect('portrait')} label="竖屏" />}
+              {proj?.generationMode !== 'fast' && caps.data?.video.mode === 'mock' && <Choice checked={aspect === 'portrait'} onChange={() => handleAspect('portrait')} label="竖屏（仅演示）" />}
+              {caps.data?.video.mode === 'live' && <span className="wu-caption">当前真实引擎仅支持横屏</span>}
             </div>
           </Field>
           {aspect === 'portrait' && (

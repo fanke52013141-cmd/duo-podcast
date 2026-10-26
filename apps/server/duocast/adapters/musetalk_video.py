@@ -11,8 +11,8 @@ def engine_root():
     value = os.environ.get('DUOCAST_FAST_ENGINE')
     return Path(value).resolve() if value else None
 
-def require_engine():
-    root = engine_root()
+def require_engine(pinned_root=None):
+    root = Path(pinned_root).resolve() if pinned_root else engine_root()
     required = ['worker.py', 'quality.py', 'render_geometry.py', 'assets/manifest.json', 'venv/Scripts/python.exe', 'assets/stage.png', 'assets/parsing_bisenet.pth',
                 'assets/template_A.mp4', 'assets/template_B.mp4', 'assets/face_coordinates.json',
                 'models/musetalkV15/unet.pth', 'models/sd-vae/diffusion_pytorch_model.bin', 'models/whisper/pytorch_model.bin']
@@ -20,8 +20,28 @@ def require_engine():
         raise ValueError('快速模式引擎未安装完整，请检查本机配置')
     return root
 
-def template_variant(artifacts):
-    root = require_engine()
+def template_identity(root):
+    files = ['worker.py', 'quality.py', 'render_geometry.py', 'assets/stage.png', 'assets/manifest.json',
+             'assets/template_A.mp4', 'assets/template_B.mp4', 'assets/face_coordinates.json']
+    hashes = {}
+    for name in files:
+        digest = hashlib.sha256()
+        with (root/name).open('rb') as source:
+            for chunk in iter(lambda: source.read(1024*1024), b''):
+                digest.update(chunk)
+        hashes[name] = digest.hexdigest()
+    version = hashlib.sha256(json.dumps(hashes, sort_keys=True).encode()).hexdigest()
+    return {'id': 'studio-' + version[:12], 'version': version, 'runtimeRoot': str(root), 'fileHashes': hashes}
+
+def project_engine(project):
+    pinned = project.fast_template
+    root = require_engine(pinned.get('runtimeRoot'))
+    if pinned and template_identity(root)['version'] != pinned.get('version'):
+        raise ValueError('本期模板或 worker 已改变；请恢复原版本运行目录后重试，不能静默更换人物')
+    return root
+
+def template_variant(artifacts, runtime_root=None):
+    root = require_engine(runtime_root)
     path = root / 'assets/stage.png'
     digest = artifacts._hash_file(str(path))
     asset_id = 'IMG-FAST-' + digest[:20]
@@ -32,7 +52,7 @@ def template_variant(artifacts):
 
 def validate_fast_options(project, payload):
     if project.generation_mode != 'fast': return
-    root = require_engine()
+    root = project_engine(project)
     visual_id = payload.get('visualVariantId') or project.selected_visual_variant_id
     visual = next((v for v in project.visual_variants if v.id == visual_id), None)
     expected = hashlib.sha256((root/'assets/stage.png').read_bytes()).hexdigest()
@@ -67,7 +87,7 @@ class MuseTalkVideoProvider:
         from ..services.video_plans import camera_plan, clipped_camera_plan, crop_region
         project = Project.model_validate(req['projectSnapshot'])
         validate_fast_options(project, req)
-        root = require_engine()
+        root = project_engine(project)
         timeline = req['projectSnapshot']['audioTimeline']
         visual_id = req.get('visualVariantId') or project.selected_visual_variant_id
         visual = next(v for v in project.visual_variants if v.id == visual_id)

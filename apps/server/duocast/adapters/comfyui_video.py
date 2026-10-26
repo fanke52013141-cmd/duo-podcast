@@ -328,7 +328,7 @@ class ComfyUIVideoProvider:
             "colorspace="+probe.get("color_space", "unknown")]) + "[v]"
         await self._command("ffmpeg", "-v", "error", "-y", "-ss", 0.32, "-i", reference["path"],
             "-i", original, "-filter_complex", filters, "-map", "[v]", "-t", end-start,
-            "-frames:v", max(1, round((end-start)*25)),
+            "-frames:v", max(1, round((end-start)*25)), "-r", 25, "-fps_mode", "cfr", "-video_track_timescale", 90000,
             "-an", "-c:v", "libx264", "-crf", 19, "-pix_fmt", "yuv420p", *colors, clip.with_suffix(".partial.mp4"))
         clip.with_suffix(".partial.mp4").replace(clip)
 
