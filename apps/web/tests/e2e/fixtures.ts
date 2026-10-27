@@ -20,4 +20,3 @@ export const test=base.extend<{pageErrors:void}>({pageErrors:[async({page,baseUR
   await use();expect(errors).toEqual([]);
 },{auto:true}]});
 export {expect};
-
