@@ -13,6 +13,12 @@
     "output": {"structuralMotionScore": 2.7090112640801003, "backgroundResidualScore": 1.2632575757575757, "structuralThreshold": 3.789772727272727, "status": "needs_review"},
     "annotations": {"bodyRegions": [{"x": 0.02, "y": 0.02, "width": 0.42, "height": 0.88}], "exclusionRegions": [{"x": 0.26, "y": 0.1, "width": 0.18, "height": 0.4}], "backgroundRegion": {"x": 0.45, "y": 0.03, "width": 0.12, "height": 0.8}}
   },
-  "observation": "Engine completed a two-second core with context padding; source and output both retain weak separable structural-motion evidence. This metric does not establish whether the source action is retained, nor does a contact sheet establish identity stability, complete facial visibility or lip sync. No human adoption is inferred.",
+  "supplementaryTracking": {
+    "method": "KLT feature tracks, fixed face/LED exclusions, independent background, 10 fps at 854x480",
+    "sourceMedianFeatureRangePx": {"lampArm": 3.4533, "signalHousing": 5.0028, "background": 0.2064},
+    "outputMedianFeatureRangePx": {"lampArm": 2.7003, "signalHousing": 6.5449, "background": 1.3707},
+    "limitations": "Separate tracks were estimated independently and may include drift, generated texture, occlusion or lighting. Displacement magnitude is not a matched trajectory or a motion-retention score."
+  },
+  "observation": "Engine completed a two-second core with context padding. Face/LED-excluded tracking found motion in both object regions, alongside greater background movement in the output. These measurements do not establish whether the source action was retained, nor does a contact sheet establish identity stability, complete facial visibility or lip sync. No human adoption is inferred.",
   "fullProductAcceptancePassed": false
 }
