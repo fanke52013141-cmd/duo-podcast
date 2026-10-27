@@ -102,4 +102,6 @@
 
 已保存独立ExpertMotionVideoProvider：服务端job/snapshot归属校验、真实PCM切片、CPU源素材准备、每段提交intent和外部ID持久化、已知任务续查/未知提交拒绝重采样、实际decode/coretrim与统一母轨拼接。首次推理要求服务端配置engine fingerprint；构建图不代表引擎支持或动作保留。CPU准备执行持有runtime安装租约，防止运行中替换helper。
 
+已开始真实短窗口原始workflow实验：请求`e3933039-0707-44f2-81fe-bb9158dae909`，引擎节点校验无错误，GET queue确认运行中；素材准备41个model帧、7个owned输入文件，使用已有整理素材，明确不是新采用动作包/正式项目API验收。提交intent及promptId在`.review/expert-short-submission.json`，workflow在`D:/DuoCastMotionAcceptance20261027/expert-experimental-smoke/workflow.json`；后续只查原ID，不因等待重采样。模型兼容、输出与结构动作保持仍未证明。
+
 11项provider/CPU准备测试通过、1项实际runtime用例在server环境跳过；HTTP模拟仅证明协议，真实FFmpeg仅证明媒体时钟/拼接。它没有接入ModeVideoProvider/main路由，项目API继续拒绝standard绑定动作包，因此当前不宣称用户已可使用专家动作包。后续仍需真实模型节点兼容/动作保留验证、公开恢复入口与UI、12秒/30秒/2分钟验收。保存实验代码用于避免丢失，不代表功能完成。
