@@ -104,4 +104,8 @@
 
 已开始真实短窗口原始workflow实验：请求`e3933039-0707-44f2-81fe-bb9158dae909`，引擎节点校验无错误，GET queue确认运行中；素材准备41个model帧、7个owned输入文件，使用已有整理素材，明确不是新采用动作包/正式项目API验收。提交intent及promptId在`.review/expert-short-submission.json`，workflow在`D:/DuoCastMotionAcceptance20261027/expert-experimental-smoke/workflow.json`；后续只查原ID，不因等待重采样。模型兼容、输出与结构动作保持仍未证明。
 
+该短窗口原任务现已成功，输出864x480/25fps/41帧完整解码通过。输入参考本身结构分0.278低于0.5阈值；输出结构分3.020但背景分1.557、阈值4.670，均属needs_review，联系表可见灯光变化。只能证明这台引擎接受图并产生媒体，不能证明参考动作保留、口型或五官自然。脱敏记录见`measurements/expert-short-20261027.json`。已提交强动作段对照`fa1b5140-a4bd-4674-9fbc-b1911de67ee6`；提交intent与ID保存在当前独立检出`.review/expert-evidence/second/submission.json`，后续只查询原任务，不重采样。
+
+在中文Windows工作目录运行专家素材准备发现OpenCV `imwrite`无法写入路径；改用`imencode`后由Python的Unicode文件API写入。独立检出中实际OpenCV准备成功，专项测试通过；效果验收仍未完成。
+
 11项provider/CPU准备测试通过、1项实际runtime用例在server环境跳过；HTTP模拟仅证明协议，真实FFmpeg仅证明媒体时钟/拼接。它没有接入ModeVideoProvider/main路由，项目API继续拒绝standard绑定动作包，因此当前不宣称用户已可使用专家动作包。后续仍需真实模型节点兼容/动作保留验证、公开恢复入口与UI、12秒/30秒/2分钟验收。保存实验代码用于避免丢失，不代表功能完成。

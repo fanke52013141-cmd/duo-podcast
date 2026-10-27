@@ -8,6 +8,14 @@ import sys
 from motion_worker import ClipReader, compose_frame, file_hash, validate_request
 
 
+def write_png(path, image, cv2):
+    """Use Python's Unicode-aware filesystem API on Windows."""
+    ok, encoded = cv2.imencode('.png', image)
+    if not ok:
+        raise RuntimeError('Cannot encode expert reference image')
+    Path(path).write_bytes(bytes(encoded))
+
+
 def _write_audio(source, target, rate, total_samples, piece):
     import wave
     with wave.open(str(source), 'rb') as audio:
@@ -77,8 +85,7 @@ def prepare(request, request_hash):
                 mask = np.zeros((height, width, 3), dtype=np.uint8)
                 x1, y1, x2, y2 = segment['geometry']['bodyBoxes'][role]
                 mask[y1:y2, x1:x2] = 255
-                if not cv2.imwrite(str(folder / names['roleMasks'][role]), mask):
-                    raise RuntimeError('Cannot write confirmed expert subject mask')
+                write_png(folder / names['roleMasks'][role], mask, cv2)
             target = folder / names['referenceVideo']
             partial = target.with_suffix('.partial.mp4')
             process = subprocess.Popen(['ffmpeg', '-v', 'error', '-y', '-f', 'rawvideo', '-pix_fmt', 'bgr24',
@@ -101,8 +108,8 @@ def prepare(request, request_hash):
                             raise ValueError('Expert reference frame changed from adopted plan')
                         frames[role] = readers[source['clipId']].get(source['sourceFrame'])
                     frame = compose_frame(frames, geometry[camera]['bodyBoxes']) if len(roles) == 2 else frames[roles[0]]
-                    if index == 0 and not cv2.imwrite(str(folder / names['anchorImage']), frame):
-                        raise RuntimeError('Cannot write owned expert anchor')
+                    if index == 0:
+                        write_png(folder / names['anchorImage'], frame, cv2)
                     process.stdin.write(frame.tobytes())
             finally:
                 process.stdin.close()

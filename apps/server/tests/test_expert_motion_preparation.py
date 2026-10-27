@@ -12,6 +12,26 @@ from duocast.services.expert_motion import build_expert_motion_plan
 from test_expert_motion import assets_and_edits
 
 
+def test_png_write_uses_unicode_aware_filesystem(tmp_path):
+    """Python writes the encoded buffer instead of passing a Windows path to cv2.imwrite."""
+    import importlib.util
+    import sys
+    from types import SimpleNamespace
+
+    scripts = Path(__file__).resolve().parents[3] / 'scripts/fast-mode'
+    sys.path.insert(0, str(scripts))
+    spec = importlib.util.spec_from_file_location('expert_unicode_png', scripts/'prepare_expert_motion.py')
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    path = tmp_path/'中文目录'/'参考图.png'
+    path.parent.mkdir()
+    fake_cv2 = SimpleNamespace(imencode=lambda extension, image: (True, bytearray(b'encoded png')))
+    module.write_png(path, object(), fake_cv2)
+    assert path.read_bytes() == b'encoded png'
+    with pytest.raises(RuntimeError, match='encode'):
+        module.write_png(path, object(), SimpleNamespace(imencode=lambda *args: (False, None)))
+
+
 def test_real_cpu_reference_composition_source_frames_audio_and_subject_masks(tmp_path):
     root = os.environ.get('DUOCAST_FAST_ENGINE')
     if not root:

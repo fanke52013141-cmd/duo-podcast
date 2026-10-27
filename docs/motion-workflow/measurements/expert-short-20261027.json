@@ -1,0 +1,27 @@
+{
+  "scope": "experimental_direct_workflow_only",
+  "promptId": "e3933039-0707-44f2-81fe-bb9158dae909",
+  "engineStatus": "success",
+  "inputMotionPackAdopted": false,
+  "modelFrames": 41,
+  "coreFrames": 25,
+  "output": {
+    "sha256": "8f44a2c25258ac2545a3a8ab953b1d6056ea81fd4c3b4880fc2076c0d18f39ac",
+    "width": 864,
+    "height": 480,
+    "fps": 25,
+    "frames": 41,
+    "durationSec": 1.64,
+    "fullDecodePassed": true
+  },
+  "inputReferenceSha256": "db13211a1e790b8e5cc0f94042c1a01094ef0944f98fd0bd351819dfc40607d4",
+  "comparison": {
+    "method": "sampled_gray_difference_background_translation_v1",
+    "units": "mean_absolute_gray_level_0_255",
+    "source": {"structuralMotionScore": 0.27784730913642053, "backgroundResidualScore": 0.13068181818181818, "structuralThreshold": 0.5, "status": "needs_review"},
+    "output": {"structuralMotionScore": 3.0200250312891113, "backgroundResidualScore": 1.5568181818181819, "structuralThreshold": 4.670454545454546, "status": "needs_review"},
+    "annotations": {"bodyRegions": [{"x": 0.02, "y": 0.02, "width": 0.42, "height": 0.88}], "exclusionRegions": [{"x": 0.26, "y": 0.1, "width": 0.18, "height": 0.4}], "backgroundRegion": {"x": 0.45, "y": 0.03, "width": 0.12, "height": 0.8}}
+  },
+  "observation": "The sampler accepted the connected reference-latent and audio workflow and produced a decodable clip. The selected source itself had weak structure-motion evidence; the output also has weak separable evidence and background variation. Contact sheet shows traffic-light changes. Motion retention, lip sync, facial visibility and naturalness are not proven.",
+  "fullProductAcceptancePassed": false
+}
