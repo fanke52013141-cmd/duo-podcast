@@ -33,7 +33,7 @@ def backup(project_id: str, request: Request):
     if project is None:
         raise HTTPException(404, "工程不存在")
     store.flush()
-    return FileResponse(make_backup(project, request.app.state.artifacts), media_type="application/zip", filename=f"{project_id}-工程备份.zip")
+    return FileResponse(make_backup(project, request.app.state.artifacts, getattr(request.app.state,'motion_pack_store',None)), media_type="application/zip", filename=f"{project_id}-工程备份.zip")
 
 
 @router.post("/projects/import-backup")
@@ -51,7 +51,7 @@ async def restore_package(request: Request):
                 raise HTTPException(422, "备份超过 2GB，请使用本机目录备份方式")
             source.write(chunk)
         source.seek(0)
-        return import_backup(source, request.app.state.project_store, request.app.state.artifacts)
+        return import_backup(source, request.app.state.project_store, request.app.state.artifacts, getattr(request.app.state,'motion_pack_store',None))
 
 
 @router.get("/maintenance")

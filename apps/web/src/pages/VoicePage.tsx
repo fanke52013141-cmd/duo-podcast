@@ -573,7 +573,7 @@ export function VoicePage({ projectId }: { projectId: string }) {
             )}
 
             {/* 整期母轨 / 分轨试听只在真实引擎产出音频后出现；模拟通道不放只会失败的按钮 */}
-            {!ttsSimulated && turns.length > 0 && (
+            {(!ttsSimulated || timeline?.masterAudioAssetId) && turns.length > 0 && (
               <div className="hf-playrow">
                 {timeline?.masterAudioAssetId ? (
                   <AudioPlayer assetId={timeline.masterAudioAssetId} />

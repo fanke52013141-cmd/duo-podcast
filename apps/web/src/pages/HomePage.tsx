@@ -101,7 +101,7 @@ export function HomePage() {
   const [importMessage,setImportMessage] = useState('');
   const importing=useRef(false);
   const [importBusy,setImportBusy]=useState(false);
-  const [importResult,setImportResult]=useState<{projectId:string;missing:string[];summary:{sourceProjectId:string;mediaCount:number;mediaBytes:number;scriptVersions:number;recheck:string[];external:string[]}}|null>(null);
+  const [importResult,setImportResult]=useState<{projectId:string;missing:string[];summary:{sourceProjectId:string;mediaCount:number;mediaBytes:number;scriptVersions:number;recheck:string[];external:string[];motionPack?:{imported:boolean;id:string|null;requiresReview:boolean}}}|null>(null);
   const qc = useQueryClient();
   const setView = useProjectStore(s => s.setView);
   const { data: projects = [], isLoading } = useProjects();
@@ -240,6 +240,7 @@ export function HomePage() {
         {importMessage&&<p role="status">{importMessage}</p>}
         {importResult&&<section aria-label="工程导入结果" className="wu-card"><h3>工程已另存：{importResult.projectId}</h3><p>原工程 {importResult.summary.sourceProjectId} 保持完整；导入 {importResult.summary.scriptVersions} 个脚本版本、{importResult.summary.mediaCount} 个媒体文件（{(importResult.summary.mediaBytes/1024**2).toFixed(1)} MB）。</p>
           <p>需重新确认：{importResult.summary.recheck.join('、')}。需在本机配置：{importResult.summary.external.join('、')}。</p>
+          {importResult.summary.motionPack?.requiresReview&&<p role="status">{importResult.summary.motionPack.imported?`动作包已另存为 ${importResult.summary.motionPack.id}；自动检查与人工采用记录已重置，请在动作库重新检查和审看。`:'此备份未包含固定动作包快照，请补齐原动作包或重新选择可用动作包；不能据此直接生成。'}</p>}
           <p>缺失媒体 {importResult.missing.length} 项</p>{importResult.missing.length>0&&<ul>{importResult.missing.map((id,i)=><li key={i}>{id}</li>)}</ul>}
           <Button onClick={()=>openProject(importResult.projectId)}>检查导入工程</Button></section>}
         <MaintenancePanel/>

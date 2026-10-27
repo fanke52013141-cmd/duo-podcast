@@ -4,7 +4,7 @@
    检查器：所选任务 / 五阶段进度 / 取消语义 / 连接与一致性 / 输入快照
    ========================================================================== */
 import { useMemo, useState } from 'react';
-import { sendJson, useJobPause, useJobResume, useJobCancel, useJobAbandon, useJobs } from '../lib/api';
+import { useJobPause, useJobResume, useJobCancel, useJobAbandon, useJobs } from '../lib/api';
 import { JOB_LABEL, type Job, type JobStatus } from '../lib/types';
 import { Alert, Badge, Button } from '../components/wu';
 import { AppShell } from '../components/AppShell';
@@ -12,6 +12,7 @@ import { formatElapsed } from '../lib/format';
 import { useProjectStore } from '../stores';
 import { errorGuide } from '../lib/workflowTools';
 import { MotionWorkflowDiagnostics } from '../components/MotionWorkflowDiagnostics';
+import { ExternalTaskRecovery } from '../components/ExternalTaskRecovery';
 
 const RUNNING: JobStatus[] = ['running', 'pause_requested', 'paused', 'recovering', 'waiting_confirmation', 'cancel_requested', 'unknown'];
 const QUEUED: JobStatus[] = ['queued'];
@@ -190,7 +191,7 @@ export function TasksPage() {
           )}
 
           <div className="hf-task-ops">
-            {j.kind==='motion.prepare'&&j.ownerType==='motionPack'&&j.providerTaskId&&['failed','unknown'].includes(j.status)&&<Button size="sm" onClick={e=>{e.stopPropagation();void sendJson(`/motion-packs/${encodeURIComponent(j.ownerId!)}/prepare/${encodeURIComponent(j.id)}/resume`,'POST').then(()=>jobs.refetch()).catch(err=>setOpError(err.message));}}>继续查询原外部任务（不重采样）</Button>}
+            {(j.kind==='motion.prepare'||j.providerTaskId&&['failed','unknown','recovering'].includes(j.status))&&<ExternalTaskRecovery key={j.id} job={j} onRefresh={()=>void jobs.refetch()}/>}
             {RUNNING.includes(j.status) && (
               <Button variant="secondary" size="sm" disabled={!canPauseJob(j)} onClick={(e) => { e.stopPropagation(); handlePause(j); }}>
                 {j.status === 'paused' ? '继续'

@@ -1,5 +1,6 @@
-param([ValidateSet('mock','configured')][string]$Mode='configured', [string]$ConfigPath='')
+param([ValidateSet('mock','configured')][string]$Mode='configured', [string]$ConfigPath='', [ValidateRange(1,65535)][int]$Port=0, [string]$StorageRoot='', [switch]$CheckOnly)
 $ErrorActionPreference='Stop'
+$env:PYTHONUTF8='1'
 $repoRoot = Split-Path $PSScriptRoot -Parent
 $serverRoot = Join-Path $repoRoot 'apps\server'
 $pythonPath = Join-Path $serverRoot '.venv\Scripts\python.exe'
@@ -11,8 +12,19 @@ if ($ConfigPath) {
         [Environment]::SetEnvironmentVariable($property.Name, [string]$property.Value, 'Process')
     }
 }
+if ($Port) { $env:DUOCAST_PORT=[string]$Port }
+if ($StorageRoot) { $env:DUOCAST_STORAGE=[System.IO.Path]::GetFullPath($StorageRoot) }
 if ($Mode -eq 'mock') { $env:DUOCAST_DEMO_ONLY='1' } else { Remove-Item Env:DUOCAST_DEMO_ONLY -ErrorAction SilentlyContinue }
 $env:NO_PROXY='127.0.0.1,localhost,::1'
-Push-Location $serverRoot
 $appPort = if ($env:DUOCAST_PORT) { [int]$env:DUOCAST_PORT } else { 8100 }
-try { & $pythonPath -m uvicorn duocast.main:app --host 127.0.0.1 --port $appPort } finally { Pop-Location }
+if ($Mode -eq 'mock' -or $CheckOnly) {
+    & $pythonPath (Join-Path $PSScriptRoot 'check_cpu_environment.py') --port $appPort
+    if ($LASTEXITCODE -ne 0) { throw 'Environment check failed; see missing dependencies or port permissions above.' }
+    if ($CheckOnly) { return }
+}
+Write-Host "DuoCast mode=$Mode URL=http://127.0.0.1:$appPort (Ctrl+C to stop)"
+Push-Location $serverRoot
+try {
+    & $pythonPath -m uvicorn duocast.main:app --host 127.0.0.1 --port $appPort
+    if ($LASTEXITCODE -ne 0) { throw "Server exited with code $LASTEXITCODE" }
+} finally { Pop-Location }

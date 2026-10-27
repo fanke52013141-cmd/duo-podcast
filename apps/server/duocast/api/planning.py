@@ -7,6 +7,34 @@ from ..services.voice_svc import build_units, _effective_bindings, effective_pro
 router = APIRouter(prefix="/api/projects/{project_id}/plan", tags=["planning"])
 
 
+@router.get('/motion')
+def motion_plan(project_id: str, request: Request):
+    from ..domain.project import Project
+    from ..services.motion_impact import motion_impact
+    project = request.app.state.project_store.load(project_id)
+    if project is None:
+        raise HTTPException(404, '工程不存在')
+    previous = None
+    baseline_job_id = None
+    previous_seed = 1
+    for job in request.app.state.job_manager.list(project_id=project_id):
+        if job.kind == 'renders' and job.status.value == 'succeeded' and not (job.result or {}).get('simulated'):
+            snapshot = job.input_snapshot.get('projectSnapshot')
+            if isinstance(snapshot, dict):
+                try:
+                    previous = Project.model_validate(snapshot)
+                    baseline_job_id = job.id
+                    previous_seed = job.input_snapshot.get('seed', 1)
+                    break
+                except ValueError:
+                    continue
+    dictionary = effective_pronunciation(project, request.app.state.machine.get_global_pronunciation())
+    result = motion_impact(project, request.app.state.artifacts, request.app.state.motion_pack_store, previous,
+                          previous_seed=previous_seed, pronunciation=dictionary)
+    result['baselineJobId'] = baseline_job_id
+    return result
+
+
 @router.get("/delivery")
 def delivery(project_id: str, request: Request):
     from ..services.delivery_check import delivery_check

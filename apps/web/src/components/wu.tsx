@@ -3,6 +3,7 @@
    所有组件输出类名即基线 CSS，不引入第二套样式；图标为基线 24 viewBox / 1.75 stroke。
    ========================================================================== */
 import React, { useId } from 'react';
+import { tabDestination } from '../lib/keyboard';
 
 /* ---------------- Icon（基线图标集子集，按需扩充） ---------------- */
 export type IconName =
@@ -211,6 +212,10 @@ export function Tabs({ items, active, onSelect, idPrefix = 'tab' }: { items: Tab
               tabIndex={active === it.id ? 0 : -1}
               disabled={it.disabled}
               onClick={() => onSelect(it.id)}
+              onKeyDown={e=>{
+                const target=tabDestination(items.filter(item=>!item.disabled).map(item=>item.id),it.id,e.key);
+                if(target){e.preventDefault();onSelect(target);document.getElementById(`${idPrefix}-${uid}-tab-${target}`)?.focus();}
+              }}
             >
               {it.label}
             </button>

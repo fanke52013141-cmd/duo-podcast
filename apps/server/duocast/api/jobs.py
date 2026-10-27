@@ -12,6 +12,15 @@ from ..storage.project_store import InvalidProjectInput
 router = APIRouter(prefix="/api/jobs", tags=["jobs"])
 
 
+@router.get('/{job_id}/external-status')
+async def external_status(job_id: str, request: Request):
+    from ..services.external_status import inspect_external
+    job = _manager(request).get(job_id)
+    if job is None:
+        raise HTTPException(404, '任务不存在')
+    return await inspect_external(job, request.app.state.runtime_settings.video_url)
+
+
 def _manager(request: Request) -> JobManager:
     return request.app.state.job_manager
 

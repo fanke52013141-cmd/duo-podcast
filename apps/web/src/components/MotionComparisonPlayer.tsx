@@ -14,6 +14,11 @@ export function MotionComparisonPlayer({clip, video, boxes, currentFrame, setCur
   const [offset,setOffset] = useState('0');
   const [ready,setReady] = useState(false);
   const [message,setMessage] = useState('');
+  const jumpFrame = (frame:number) => {
+    const target=Math.max(0,Math.min(clip.frameCount-1,frame));
+    if(video.current){video.current.pause();video.current.currentTime=target/clip.fps;}
+    setCurrentFrame(target); controller.current?.sync(true);
+  };
   useEffect(()=>{
     setOffset('0'); setReady(false); setMessage('');
     if (!source || !video.current || !original.current) return;
@@ -44,10 +49,16 @@ export function MotionComparisonPlayer({clip, video, boxes, currentFrame, setCur
           onRateChange={()=>controller.current?.sync(true)}
           onSeeking={()=>controller.current?.sync(true)}
           onSeeked={e=>{setCurrentFrame(Math.min(clip.frameCount-1,Math.round(e.currentTarget.currentTime*clip.fps)));controller.current?.sync(true);}}
-          onTimeUpdate={e=>{setCurrentFrame(Math.min(clip.frameCount-1,Math.floor(e.currentTarget.currentTime*clip.fps)));controller.current?.sync();}}
+          onTimeUpdate={e=>{setCurrentFrame(Math.min(clip.frameCount-1,Math.floor(e.currentTarget.currentTime*clip.fps+1e-6)));controller.current?.sync();}}
           onEnded={()=>controller.current?.pause()}/>
         {boxes[currentFrame]&&<svg aria-label={`第${currentFrame}帧人脸框预览`} viewBox={`0 0 ${clip.nativeWidth} ${clip.nativeHeight}`} preserveAspectRatio="xMidYMid meet"><rect x={boxes[currentFrame]![0]} y={boxes[currentFrame]![1]} width={boxes[currentFrame]![2]-boxes[currentFrame]![0]} height={boxes[currentFrame]![3]-boxes[currentFrame]![1]} fill="none" stroke="#f5c450" strokeWidth={Math.max(1,clip.nativeWidth/400)}/></svg>}
       </div></div>
+    </div>
+    <div className="wu-row" aria-label="逐帧审看控制">
+      <button type="button" disabled={currentFrame<=0} onClick={()=>jumpFrame(currentFrame-1)}>上一帧</button>
+      <label>当前帧<input aria-label="审看帧位置" type="range" min="0" max={clip.frameCount-1} step="1" value={currentFrame} onChange={e=>jumpFrame(Number(e.target.value))}/></label>
+      <button type="button" disabled={currentFrame>=clip.frameCount-1} onClick={()=>jumpFrame(currentFrame+1)}>下一帧</button>
+      <span>第 {currentFrame+1} / {clip.frameCount} 帧 · {(currentFrame/clip.fps).toFixed(3)} 秒</span>
     </div>
     <p>对比只辅助人工观察；同步播放不代表五官、身份或动作质量已通过。</p>
   </section>;

@@ -174,6 +174,15 @@ export function EditScriptPage({ projectId }: { projectId: string }) {
   // 版本切换 → 载入话轮
   useEffect(() => {
     if (revision) {
+      if (baseRef.current && (dirtyRef.current || savingRef.current || hasPendingEditor())) {
+        if (revision.id !== baseRef.current.id) {
+          setViewRevId(baseRef.current.id);
+          setError('服务端当前版本已切换，本机编辑已保留。请先保存或下载副本，再切换版本。');
+        }
+        // A save can create a new draft while the user keeps typing. Its
+        // response contains the older snapshot, not those later local edits.
+        return;
+      }
       const loaded = revision.turns.map((t) => ({ ...t, lines: t.lines.map((l) => ({ ...l })) }));
       baseRef.current={id:revision.id,turns:JSON.stringify(revision.turns)};
       turnsRef.current = loaded;
@@ -264,6 +273,7 @@ export function EditScriptPage({ projectId }: { projectId: string }) {
 
   /** 一律基于 turnsRef.current（最新状态）计算下一状态；同一批次内连续操作不再互相覆盖。 */
   const applyTurns = (updater: (prev: Turn[]) => Turn[]) => {
+    setReplacePreview(false);
     const next = updater(turnsRef.current);
     turnsRef.current = next;
     recoveryWrite(recoveryKey, { revisionId: baseRef.current?.id ?? revision?.id, turns: next });
@@ -622,7 +632,7 @@ export function EditScriptPage({ projectId }: { projectId: string }) {
       <StageHead title="② 编辑对话">
         {recovery && <Alert tone="warning">发现未提交的本机脚本（{recovery.revisionId}）。
           <Button disabled={switching||saving} onClick={()=>void restoreOnce.current(async () => {
-            if(dirtyRef.current){setError('请先保存当前编辑，或下载当前副本后重新打开工程；恢复不会覆盖正在编辑的内容。');return;}
+            if(dirtyRef.current||savingRef.current||hasPendingEditor()){setError('请先保存当前编辑，或下载当前副本后重新打开工程；恢复不会覆盖正在编辑的内容。');return;}
             const latest=qc.getQueryData<Project>(['project',projectId]);
             if(!latest?.scriptRevisions.some(r=>r.id===recovery.revisionId)){setError('恢复稿的源版本不存在，请先保留副本并检查工程版本。');return;}
             const source=latest.scriptRevisions.find(r=>r.id===recovery.revisionId)!;
@@ -683,7 +693,7 @@ export function EditScriptPage({ projectId }: { projectId: string }) {
             <select aria-label="按角色筛选话轮" className="wu-input" style={{width:'auto'}} value={speakerFilter} onChange={e=>{setSpeakerFilter(e.target.value);setReplacePreview(false);setSelected([]);}}><option value="all">全部角色</option><option value="A">角色 A</option><option value="B">角色 B</option></select>
             <Button variant="secondary" disabled={!findText||!!editingId||saving} onClick={()=>setReplacePreview(true)}>预览替换</Button>
             <Button variant="ghost" onClick={()=>{setFindText('');setSpeakerFilter('all');setReplacePreview(false);}}>清除筛选</Button>
-            <Button variant="ghost" onClick={()=>{const blob=new Blob([JSON.stringify({revisionId:revision?.id,turns:turnsRef.current},null,2)],{type:'application/json'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=`${projectId}-script-draft.json`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}}>下载当前编辑副本</Button>
+            <Button variant="ghost" onClick={()=>{commitEditing();const blob=new Blob([JSON.stringify({revisionId:baseRef.current?.id??revision?.id,turns:turnsRef.current},null,2)],{type:'application/json'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=`${projectId}-script-draft.json`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}}>下载当前编辑副本</Button>
           </div><p className="wu-caption">全文 {scriptStats(turns).chars} 字 · 预计 {scriptStats(turns).minSeconds}–{scriptStats(turns).maxSeconds} 秒（按字数估算，实际以合成为准）。筛选不改变生成范围。</p>
           {replacePreview&&<Alert tone="warning">将在{speakerFilter==='all'?'全部角色':`角色 ${speakerFilter}`}中替换 {replaceTurns(turns,findText,replaceText,speakerFilter).count} 处「{findText}」为「{replaceText}」。自定义读音保持不变，请在配音前核对。
             <Button disabled={saving||!!editingId||!replaceTurns(turns,findText,replaceText,speakerFilter).count} onClick={()=>{const result=replaceTurns(turnsRef.current,findText,replaceText,speakerFilter);applyTurns(()=>result.turns);setToolMessage(`已替换 ${result.count} 处，等待自动保存`);setReplacePreview(false);}}>确认替换</Button><Button variant="ghost" onClick={()=>setReplacePreview(false)}>取消</Button></Alert>}

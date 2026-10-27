@@ -37,13 +37,34 @@ def referenced_entries(project, artifacts):
     return list(included.values())
 
 
-def make_backup(project, artifacts):
+def declared_asset_ids(value):
+    """Only schema reference fields; prose and arbitrary metadata are not IDs."""
+    scalar = {'artifactId', 'masterAudioAssetId', 'adoptedAudioAssetId', 'imageAssetId', 'videoAssetId'}
+    plural = {'artifactIds', 'candidateAudioAssetIds'}
+    if isinstance(value, dict):
+        for key, item in value.items():
+            if key in scalar and isinstance(item, str) and item:
+                yield item
+            elif key in plural and isinstance(item, list):
+                yield from (id for id in item if isinstance(id, str) and id)
+            yield from declared_asset_ids(item)
+    elif isinstance(value, list):
+        for item in value:
+            yield from declared_asset_ids(item)
+
+
+def make_backup(project, artifacts, motion_store=None):
     data = project.model_dump(mode="json", by_alias=True)
-    entries = referenced_entries(data, artifacts)
+    pack_snapshot = None
+    if project.motion_pack and motion_store:
+        pack = motion_store.load_version(project.motion_pack.id, project.motion_pack.version)
+        if pack:
+            pack_snapshot = pack.model_dump(mode='json', by_alias=True)
+    entries = referenced_entries({'project':data,'motionPackSnapshot':pack_snapshot}, artifacts)
     root = artifacts.root / "backups"
     root.mkdir(exist_ok=True)
     target = root / (uuid.uuid4().hex + ".zip")
-    missing = []
+    missing = sorted(set(declared_asset_ids({'project':data,'pack':pack_snapshot})) - {e['artifactId'] for e in entries})
     with zipfile.ZipFile(target, "w", compression=zipfile.ZIP_STORED) as archive:
         saved = []
         for entry in entries:
@@ -56,11 +77,12 @@ def make_backup(project, artifacts):
             archive.write(file, item["member"])
             saved.append(item)
         archive.writestr("duocast-backup.json", json.dumps({"format": 1, "project": data, "artifacts": saved, "missing": missing,
+            "motionPackSnapshot": pack_snapshot,
             "externalDependencies": {"fastTemplate": project.fast_template, "notice": "不包含密钥、模型和外置引擎；缺失媒体需重新生成"}}, ensure_ascii=False))
     return target
 
 
-def import_backup(source, store, artifacts):
+def import_backup(source, store, artifacts, motion_store=None):
     # Validate every member, metadata and hash before creating a project.
     try:
         with zipfile.ZipFile(source) as archive:
@@ -79,10 +101,29 @@ def import_backup(source, store, artifacts):
             if not isinstance(meta, dict) or meta.get("format") != 1 or not isinstance(meta.get("artifacts"), list):
                 raise ValueError("不支持的备份版本")
             validated_project = Project.model_validate(meta["project"])
+            pack_snapshot = meta.get('motionPackSnapshot')
+            pack_draft = None
+            if pack_snapshot is not None:
+                from ..domain.motion_pack import MotionPack, MotionPackDraft
+                pack = MotionPack.model_validate(pack_snapshot)
+                pin = validated_project.motion_pack
+                if not pin or (pin.id, pin.version) != (pack.id, pack.version):
+                    raise ValueError('动作包快照与工程固定版本不一致')
+                pack_draft = pack.model_dump(mode='json',by_alias=True,include=set(MotionPackDraft.model_fields))
+                if motion_store is None:
+                    raise ValueError('当前服务不支持动作包迁移')
             if validated_project.schema_version != 1:
                 raise ValueError("不支持的工程结构版本，请使用对应版本软件迁移")
             validated = []
+            asset_ids, asset_paths = set(), {}
             for entry in meta["artifacts"]:
+                if (not isinstance(entry.get('artifactId'), str) or not entry['artifactId']
+                        or not isinstance(entry.get('path'), str) or not entry['path']
+                        or entry['artifactId'] in asset_ids):
+                    raise ValueError('备份媒体标识或路径缺失、重复')
+                if entry['path'] in asset_paths and asset_paths[entry['path']] != entry.get('fileHash'):
+                    raise ValueError('同一媒体路径包含不同内容')
+                asset_ids.add(entry['artifactId']); asset_paths[entry['path']] = entry.get('fileHash')
                 member = entry["member"]
                 if member not in names or not member.startswith("media/") or ".." in member or "\\" in member:
                     raise ValueError("备份媒体路径无效")
@@ -115,6 +156,9 @@ def import_backup(source, store, artifacts):
             return [rewrite(v) for v in value]
         if isinstance(value, dict):
             out = {k: rewrite(v) for k, v in value.items()}
+            for key in ('candidateSampleCounts', 'candidate_sample_counts'):
+                if isinstance(value.get(key), dict):
+                    out[key] = {id_map.get(id, id): count for id, count in value[key].items()}
             if out.get("id") == old_id and "scriptRevisions" in out:
                 out["id"] = project_id
             if out.get("projectId") == old_id:
@@ -132,6 +176,10 @@ def import_backup(source, store, artifacts):
                 shutil.copyfileobj(origin, target, length=1024*1024)
             artifacts.register(id_map[entry["artifactId"]], entry["kind"], str(file), entry.get("dependencyHash", ""), rewrite(entry.get("paramsSnapshot", {})), entry.get("workflowVersion"))
     data = rewrite(meta["project"])
+    imported_pack = None
+    if pack_draft is not None:
+        imported_pack = motion_store.create(rewrite(pack_draft))
+        data['motionPack'] = {'id':imported_pack.id,'version':imported_pack.version}
     data["id"] = project_id
     # Runtime-bound confirmations need a fresh check after relocation; media stays available.
     for approval in data.get("approvals", []):
@@ -147,5 +195,8 @@ def import_backup(source, store, artifacts):
                         "mediaBytes": sum(Path(path).stat().st_size for path in path_map.values()),
                         "scriptVersions": len(saved.script_revisions),
                         "recheck": ["声音与参考音频", "样片与生成规格"],
+                        "motionPack": {'imported':imported_pack is not None,
+                                       'id':imported_pack.id if imported_pack else None,
+                                       'requiresReview':validated_project.motion_pack is not None},
                         "external": ["服务凭据", "模型与引擎", "外置动作模板"]},
             "notice": "已另存工程；模型/模板不包含在备份中，迁移后须重新检查。"}
