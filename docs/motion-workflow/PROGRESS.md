@@ -97,3 +97,9 @@
 - 专家短窗口规划、V2V工作流、CPU素材准备及可恢复provider已在本地实现，仍未接项目路由；11项provider/CPU契约通过、1项实际runtime准备在server环境跳过。真实模型是否接受新分支、是否保留结构动作与身份仍待验证，不开放按钮冒充完成。
 
 后续继续专家真实短窗口推理与正式项目样片全链路，以及分段GPU复用、30秒/2分钟与浏览器验收。完整目标保持进行中。
+
+## 专家provider实验实现（未开放、未完成真实验收）
+
+已保存独立ExpertMotionVideoProvider：服务端job/snapshot归属校验、真实PCM切片、CPU源素材准备、每段提交intent和外部ID持久化、已知任务续查/未知提交拒绝重采样、实际decode/coretrim与统一母轨拼接。首次推理要求服务端配置engine fingerprint；构建图不代表引擎支持或动作保留。CPU准备执行持有runtime安装租约，防止运行中替换helper。
+
+11项provider/CPU准备测试通过、1项实际runtime用例在server环境跳过；HTTP模拟仅证明协议，真实FFmpeg仅证明媒体时钟/拼接。它没有接入ModeVideoProvider/main路由，项目API继续拒绝standard绑定动作包，因此当前不宣称用户已可使用专家动作包。后续仍需真实模型节点兼容/动作保留验证、公开恢复入口与UI、12秒/30秒/2分钟验收。保存实验代码用于避免丢失，不代表功能完成。
