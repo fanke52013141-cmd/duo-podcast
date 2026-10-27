@@ -1,0 +1,18 @@
+{
+  "scope": "experimental_direct_workflow_only",
+  "promptId": "fa1b5140-a4bd-4674-9fbc-b1911de67ee6",
+  "engineStatus": "success",
+  "inputMotionPackAdopted": false,
+  "modelFrames": 69,
+  "coreFrames": 50,
+  "output": {"sha256": "96424c6345cd3baa1d96097ff10bae324ce7debb1614c9bd39e177dda5bcf729", "width": 864, "height": 480, "fps": 25, "frames": 69, "durationSec": 2.76, "fullDecodePassed": true},
+  "comparison": {
+    "method": "sampled_gray_difference_background_translation_v1",
+    "units": "mean_absolute_gray_level_0_255",
+    "source": {"structuralMotionScore": 1.4862327909887358, "backgroundResidualScore": 0.625, "structuralThreshold": 1.875, "status": "needs_review"},
+    "output": {"structuralMotionScore": 2.7090112640801003, "backgroundResidualScore": 1.2632575757575757, "structuralThreshold": 3.789772727272727, "status": "needs_review"},
+    "annotations": {"bodyRegions": [{"x": 0.02, "y": 0.02, "width": 0.42, "height": 0.88}], "exclusionRegions": [{"x": 0.26, "y": 0.1, "width": 0.18, "height": 0.4}], "backgroundRegion": {"x": 0.45, "y": 0.03, "width": 0.12, "height": 0.8}}
+  },
+  "observation": "Engine completed a two-second core with context padding; source and output both retain weak separable structural-motion evidence. This metric does not establish whether the source action is retained, nor does a contact sheet establish identity stability, complete facial visibility or lip sync. No human adoption is inferred.",
+  "fullProductAcceptancePassed": false
+}
