@@ -60,6 +60,23 @@ def request_file(root, name, **extra):
     return path
 
 
+def test_queued_runtime_identity_change_rejects_before_process_or_fallback(runtime):
+    async def scenario():
+        manager = FastRuntimeManager(runtime, python=sys.executable, startup_timeout=5)
+        identity = runtime_identity(runtime)
+        path = request_file(runtime, 'frozen-runtime', expectedRuntimeIdentity=identity)
+        (runtime / 'models/model.bin').write_bytes(b'changed model')
+        try:
+            with pytest.raises(ValueError, match='Frozen motion runtime changed'):
+                await manager.render(path)
+            assert manager.process is None
+            assert not (runtime / 'initializations.txt').exists()
+            assert not (runtime / 'fallbacks.txt').exists()
+        finally:
+            await manager.close()
+    asyncio.run(scenario())
+
+
 def test_two_requests_share_one_real_subprocess_initialization(runtime):
     async def scenario():
         manager = FastRuntimeManager(runtime, python=sys.executable, startup_timeout=5)

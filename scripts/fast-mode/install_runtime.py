@@ -15,7 +15,8 @@ import tempfile
 import uuid
 import warnings
 
-FILES = ("worker.py", "render_geometry.py", "motion_worker.py", "motion_audio_cache.py", "resident_worker.py", "quality.py")
+LEGACY_FILES = ("worker.py", "render_geometry.py", "motion_worker.py", "motion_audio_cache.py", "resident_worker.py", "quality.py")
+FILES = (*LEGACY_FILES, "prepare_expert_motion.py")
 MANIFEST = "runtime_version.json"
 BACKUPS = ".runtime-releases"
 PENDING = ".runtime-install-pending.json"
@@ -111,8 +112,9 @@ def _backup(target, release_id):
         raise ValueError("Invalid backup ID; use the exact releaseId, never a path")
     folder = _safe(target / BACKUPS / release_id)
     metadata = _read_json(folder / "snapshot.json")
-    if (not isinstance(metadata, dict) or metadata.get("schemaVersion") != 1 or metadata.get("releaseId") != release_id
-            or metadata.get("runtime") != str(target) or set(metadata.get("files", {})) != {*FILES, MANIFEST}):
+    registries = {1: {*LEGACY_FILES, MANIFEST}, 2: {*FILES, MANIFEST}}
+    if (not isinstance(metadata, dict) or metadata.get("schemaVersion") not in registries or metadata.get("releaseId") != release_id
+            or metadata.get("runtime") != str(target) or set(metadata.get("files", {})) != registries[metadata["schemaVersion"]]):
         raise ValueError("Backup identity or file manifest differs")
     # Validate every backup before touching any runtime file.
     for name, record in metadata["files"].items():
@@ -167,7 +169,7 @@ def install(source, target):
             records[name] = {"existed": original is not None, "sha256": _hash(original) if original is not None else None, "mode": mode}
             if original is not None:
                 _atomic_bytes(folder / name, original, mode)
-        metadata = {"schemaVersion": 1, "runtime": str(target), "releaseId": release_id, "files": records,
+        metadata = {"schemaVersion": 2, "runtime": str(target), "releaseId": release_id, "files": records,
                     "installedHashes": {name: _hash(content) for name, content in data.items()}}
         _json_write(folder / "snapshot.json", metadata)
         _backup(target, release_id)

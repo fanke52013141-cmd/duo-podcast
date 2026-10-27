@@ -76,6 +76,29 @@ def test_full_install_manifest_backup_and_rollback_restore_every_hash(deployment
         assert (target / name / "do-not-touch.bin").read_bytes() == b"private data"
 
 
+def test_new_helper_release_can_rollback_then_restore_a_legacy_snapshot(deployment, monkeypatch):
+    source, target = deployment
+    original = original_state(target)
+    with monkeypatch.context() as patch:
+        patch.setattr(installer, 'FILES', installer.LEGACY_FILES)
+        with pytest.warns(RuntimeWarning):
+            installer.install(source, target)
+    legacy_id = json.loads((target / installer.MANIFEST).read_text())['releaseId']
+    snapshot_path = target / installer.BACKUPS / legacy_id / 'snapshot.json'
+    snapshot = json.loads(snapshot_path.read_text())
+    snapshot['schemaVersion'] = 1
+    snapshot_path.write_text(json.dumps(snapshot))
+    before_new = original_state(target)
+    installer.install(source, target)
+    current_id = json.loads((target / installer.MANIFEST).read_text())['releaseId']
+    assert (target / 'prepare_expert_motion.py').is_file()
+    installer.rollback(target, current_id)
+    assert original_state(target) == before_new
+    assert not (target / 'prepare_expert_motion.py').exists()
+    installer.rollback(target, legacy_id)
+    assert original_state(target) == original
+
+
 def test_all_sources_are_preflighted_before_first_target_change(deployment):
     source, target = deployment
     before = original_state(target)

@@ -1,0 +1,22 @@
+{
+  "scope": "formal_API_I2V_candidate_rejected_after_visual_inspection",
+  "jobId": "JE5BBCDB264",
+  "providerTaskId": "62469aa7-5562-47ee-9354-bb3ffdc3a9bf",
+  "artifactId": "VID-MOTION-JE5BBCDB264",
+  "fileHash": "09169cb6b812d61d17041e81fd2061bbd444207c22977c6b8af54bea32c89904",
+  "native": {
+    "width": 864,
+    "height": 480,
+    "fps": 25.0,
+    "frames": 109,
+    "durationSec": 4.36
+  },
+  "mediaPassed": true,
+  "adopted": false,
+  "structuralMotionObserved": true,
+  "fullFeatureVisibilityVerified": false,
+  "rejectionReason": "Contact sheet shows lamp shade pitches down and completely hides its face during the middle of the clip; full-clip adoption is not acceptable.",
+  "reviewMethod": "Contact sheet at 2 fps; no assertion of exact failure interval or complete frame-by-frame audit",
+  "sourcePromptKey": "formal-lamp-stronger-1028",
+  "automaticAdoption": false
+}

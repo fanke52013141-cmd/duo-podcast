@@ -3,6 +3,7 @@ import asyncio
 import hashlib
 import json
 import os
+import re
 import uuid
 import wave
 from pathlib import Path
@@ -23,8 +24,8 @@ def require_engine(pinned_root=None):
     return root
 
 
-def require_motion_engine():
-    root = engine_root()
+def require_motion_engine(pinned_root=None):
+    root = Path(pinned_root).resolve() if pinned_root else engine_root()
     required = ['worker.py', 'motion_worker.py', 'motion_audio_cache.py', 'quality.py', 'render_geometry.py',
                 'venv/Scripts/python.exe', 'assets/parsing_bisenet.pth',
                 'models/musetalkV15/unet.pth', 'models/sd-vae/diffusion_pytorch_model.bin',
@@ -67,9 +68,9 @@ def template_variant(artifacts, runtime_root=None):
     return {'id': 'FAST-STUDIO-V1', 'masterImage': {'artifactId': asset_id, 'path': str(path), 'fileHash': digest},
             'aspect': 'landscape', 'mode': 'twoShot'}
 
-def validate_fast_options(project, payload):
+def validate_fast_options(project, payload, pinned_root=None):
     if project.generation_mode != 'fast': return
-    root = project_engine(project)
+    root = require_motion_engine(pinned_root) if project.motion_pack is not None else project_engine(project)
     if project.motion_pack is not None:
         if payload.get('generationProfile', 'accepted') != 'accepted' or payload.get('reuseMotionArtifactId') or payload.get('redoFromSec') is not None:
             raise ValueError('动作包快速模式使用已采用素材，请使用标准生成配置')
@@ -109,8 +110,17 @@ class MuseTalkVideoProvider:
         from ..domain.project import Project
         from ..services.video_plans import camera_plan, clipped_camera_plan, crop_region
         project = Project.model_validate(req['projectSnapshot'])
-        validate_fast_options(project, req)
-        root = project_engine(project)
+        frozen = req.get('fastRuntime')
+        if project.motion_pack is not None:
+            if (not isinstance(frozen, dict) or set(frozen) != {'root', 'identity', 'protocol'}
+                    or frozen.get('protocol') != 'motion-runtime-v1' or not isinstance(frozen.get('root'), str)
+                    or not Path(frozen['root']).is_absolute() or not isinstance(frozen.get('identity'), str)
+                    or not re.fullmatch('[a-f0-9]{64}', frozen['identity'])):
+                raise ValueError('本任务没有有效的固定运行时身份，请重新提交样片或生成任务')
+            root = require_motion_engine(frozen['root'])
+        else:
+            root = project_engine(project)
+        validate_fast_options(project, req, pinned_root=str(root))
         timeline = req['projectSnapshot']['audioTimeline']
         visual_id = req.get('visualVariantId') or project.selected_visual_variant_id
         visual = next((v for v in project.visual_variants if v.id == visual_id), None)
@@ -151,6 +161,8 @@ class MuseTalkVideoProvider:
         worker_req = {'outputDir':str(folder), 'master':str(folder/'master.wav'), 'tracks':{s:str(folder/f'{s}.wav') for s in roles},
             'turns':turns, 'sampleRate':rate, 'sampleCount':end-start, 'seed':req.get('seed',42),
             'resolution':req.get('resolution','1920x1080'), 'fps':req.get('fps',25), 'fastQuality':req.get('fastQuality','original')}
+        if frozen is not None and project.motion_pack is not None:
+            worker_req['expectedRuntimeIdentity'] = frozen['identity']
         if project.motion_pack is not None:
             if self.motion_store is None:
                 raise RuntimeError('动作包存储未装配')
@@ -180,6 +192,12 @@ class MuseTalkVideoProvider:
             from ..services.fast_runtime import release_all, runtime_lease
             await release_all()
             async with runtime_lease(root):
+                if project.motion_pack is not None:
+                    from ..services.fast_runtime import runtime_identity
+                    if await asyncio.to_thread(runtime_identity, root) != frozen['identity']:
+                        raise ValueError('任务排队后运行时已改变，请恢复原版本或重新提交')
+                else:
+                    project_engine(project)
                 await self._one_shot(root, folder, request_file)
         final = folder/'final.mp4'
         probe = await asyncio.create_subprocess_exec('ffprobe','-v','error','-show_streams','-of','json',str(final),stdout=asyncio.subprocess.PIPE)

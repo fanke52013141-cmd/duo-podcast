@@ -210,6 +210,8 @@ class FastRuntimeManager:
         started = time.monotonic()
         async with GPU_LOCK, runtime_lease(self.root):
             identity = await asyncio.to_thread(runtime_identity, self.root)
+            if request.get('expectedRuntimeIdentity') is not None and request['expectedRuntimeIdentity'] != identity:
+                raise ValueError('Frozen motion runtime changed while the task was queued')
             try:
                 initialized = await self._ensure(identity, output)
                 request_id = uuid.uuid4().hex

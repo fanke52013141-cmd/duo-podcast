@@ -42,6 +42,12 @@ async def generate(project_id: str, payload: dict, request: Request) -> dict:
         "foregroundSpeaker": foreground,
         "projectId": project_id,
     }
+    if project.motion_pack is not None and project.generation_mode == 'fast':
+        from ..services.motion_runtime_identity import freeze_motion_runtime
+        try:
+            snapshot['fastRuntime'] = await freeze_motion_runtime()
+        except (ValueError, OSError) as exc:
+            raise HTTPException(422, str(exc)) from exc
     job = manager.submit(
         kind="visual.generate",
         project_id=project_id,
