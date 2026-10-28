@@ -1,0 +1,15 @@
+{
+  "completed": true,
+  "pipelineWallSeconds": 2754.0048693999997,
+  "withinOneHour": true,
+  "preparationSeconds": 47.37873890000628,
+  "engineExecutionSumSeconds": 2464.902,
+  "engineRunWallSeconds": 2601.184135200019,
+  "outputHash": "6b0fc91cc945bf4d47dbed09eaf0b537fe49265a4ac6d89422324c303ee5cc7d",
+  "masterHash": "536677da5df85057668b715ecebbe89fb33b2501e6921c63fe10a9bc0d34c142",
+  "runId": "long120-roi-cold-v2",
+  "modelWindows": 47,
+  "allUncachedSampling": true,
+  "sameOutputAsFirstCold": true,
+  "scope": "second full cold-model trial; not warm-model test"
+}

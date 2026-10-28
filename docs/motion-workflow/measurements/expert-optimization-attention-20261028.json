@@ -1,0 +1,276 @@
+{
+  "scope": "single complete 10.8025417s expert SDPA versus isolated SageAttention 2.1.1 A/B",
+  "runs": {
+    "a5-sdpa-full": {
+      "completed": true,
+      "variant": "async",
+      "code": {
+        "apps/server/duocast/services/owned_process.py": "921ed50c72da5e5d027f43f8c82b4755dff7ef3d0af5dc86fdf98f1e09fa3e43",
+        "scripts/acceptance/benchmark_expert.py": "cf8dbfbcc512985aaf8c36311f300c229f26099a3013a1d22a6603f410339903",
+        "scripts/digital-human/attention_addon.py": "abe92cdb4f265ce9f7f101da3957d7808f5288dd409dac046d1ee9bcfef3fe29",
+        "scripts/digital-human/benchmark_probe.py": "0b7660e98fc9402627d15bf9df7206eb4655dde38ae574b0b110d84d634f3bab",
+        "scripts/digital-human/start_guarded.py": "61cf93e93cef00be8b8a5506a4de7183aeb62a8dfa6110acd75e641e90f748e4"
+      },
+      "startupSeconds": 10.155330799985677,
+      "totalWallSeconds": 590.0252569000004,
+      "engineExecutionSumSeconds": 567.377,
+      "attentionPackageTreeHash": "c6d80d31a47985466b39cfdc9d1b817ffa1bf1c2a4363181e632379f693bdc55",
+      "engineStoppedOnExit": true,
+      "segments": [
+        {
+          "index": 0,
+          "promptId": "80f467ab-1159-4e92-a4bc-342b9c471743",
+          "engineSeconds": 128.508,
+          "successfulSageCalls": 0,
+          "outputSha256": "b0a310b3769cd29987db6353d721695f7ad6f29ea31fafbd5f5609a4c844a771"
+        },
+        {
+          "index": 1,
+          "promptId": "8533c17a-501d-466e-852c-709cabf3f080",
+          "engineSeconds": 125.853,
+          "successfulSageCalls": 0,
+          "outputSha256": "8c5f0fc02d1a9e660df402cedb36bfbf9247915d054c9e1743edd93ece67a5ff"
+        },
+        {
+          "index": 2,
+          "promptId": "f2ecfb3a-f9bf-41b0-8338-0dea1bf4407d",
+          "engineSeconds": 126.482,
+          "successfulSageCalls": 0,
+          "outputSha256": "945e61e4f105479debe9a08a9ad821ca1155f96b24f7e824d4295634ecfadbb2"
+        },
+        {
+          "index": 3,
+          "promptId": "793bbffa-6877-4a6a-bd0e-1a0a499b355b",
+          "engineSeconds": 128.331,
+          "successfulSageCalls": 0,
+          "outputSha256": "1bc207988511767e02cc10131b624e4b2da9c33037f0802f23c4fba8bc370a5c"
+        },
+        {
+          "index": 4,
+          "promptId": "3225ad9e-2e79-447b-ab44-8e5de4600819",
+          "engineSeconds": 58.203,
+          "successfulSageCalls": 0,
+          "outputSha256": "5cb1fb0aefc63e6bea6eb50ec7668e84303e66585a42e1a04b2aec16aee8457c"
+        }
+      ]
+    },
+    "a5-sage-full": {
+      "completed": true,
+      "variant": "async-sage",
+      "code": {
+        "apps/server/duocast/services/owned_process.py": "921ed50c72da5e5d027f43f8c82b4755dff7ef3d0af5dc86fdf98f1e09fa3e43",
+        "scripts/acceptance/benchmark_expert.py": "cf8dbfbcc512985aaf8c36311f300c229f26099a3013a1d22a6603f410339903",
+        "scripts/digital-human/attention_addon.py": "abe92cdb4f265ce9f7f101da3957d7808f5288dd409dac046d1ee9bcfef3fe29",
+        "scripts/digital-human/benchmark_probe.py": "0b7660e98fc9402627d15bf9df7206eb4655dde38ae574b0b110d84d634f3bab",
+        "scripts/digital-human/start_guarded.py": "61cf93e93cef00be8b8a5506a4de7183aeb62a8dfa6110acd75e641e90f748e4"
+      },
+      "startupSeconds": 30.4723612999951,
+      "totalWallSeconds": 451.2492604999861,
+      "engineExecutionSumSeconds": 409.60400000000004,
+      "attentionPackageTreeHash": "c6d80d31a47985466b39cfdc9d1b817ffa1bf1c2a4363181e632379f693bdc55",
+      "engineStoppedOnExit": true,
+      "segments": [
+        {
+          "index": 0,
+          "promptId": "4e557f90-376d-483f-80d7-87a687f792be",
+          "engineSeconds": 92.167,
+          "successfulSageCalls": 160,
+          "outputSha256": "69f01a0aaf4dc00790f6d1ce74f799ead56340544cf374a2295c6ea439f1fea7"
+        },
+        {
+          "index": 1,
+          "promptId": "3ce7ae56-b0bb-4ebd-bde0-f22e2638ec43",
+          "engineSeconds": 91.691,
+          "successfulSageCalls": 160,
+          "outputSha256": "6140f352caab737f59dee2901e137a8be7e00a766354dcc022ae8cad5ab98e57"
+        },
+        {
+          "index": 2,
+          "promptId": "3ed222ac-75e2-468f-94f1-5d3b8f1c9883",
+          "engineSeconds": 91.79,
+          "successfulSageCalls": 160,
+          "outputSha256": "7e77e7fb0944914607d59388368ec5602b27a49be5129e3fb96f395d8899e4e3"
+        },
+        {
+          "index": 3,
+          "promptId": "1dc66694-6d7b-4b16-838c-73db5d22a7e9",
+          "engineSeconds": 81.105,
+          "successfulSageCalls": 160,
+          "outputSha256": "2389fe2127f1c6131dd11eb5b8cc10fcbe4549f8013243317ce12861a6916499"
+        },
+        {
+          "index": 4,
+          "promptId": "0e4978e0-52d4-4abe-a84e-2bda5d1e2a8a",
+          "engineSeconds": 52.851,
+          "successfulSageCalls": 160,
+          "outputSha256": "b1fcfeef18d0d69c65fca86067191a9a4ff0cd112e5dc88ff76e66f6ebff735a"
+        }
+      ]
+    }
+  },
+  "comparison": {
+    "baseline": "a5-sdpa-full",
+    "candidate": "a5-sage-full",
+    "observedExecutionSpeedup": 1.3851842267165357,
+    "pairedSegments": [
+      {
+        "index": 0,
+        "decodedVideoEqual": false,
+        "decodedAudioEqual": true,
+        "speedup": 1.3942951381730988
+      },
+      {
+        "index": 1,
+        "decodedVideoEqual": false,
+        "decodedAudioEqual": true,
+        "speedup": 1.3725774612557393
+      },
+      {
+        "index": 2,
+        "decodedVideoEqual": false,
+        "decodedAudioEqual": true,
+        "speedup": 1.377949667719795
+      },
+      {
+        "index": 3,
+        "decodedVideoEqual": false,
+        "decodedAudioEqual": true,
+        "speedup": 1.5822822267431105
+      },
+      {
+        "index": 4,
+        "decodedVideoEqual": false,
+        "decodedAudioEqual": true,
+        "speedup": 1.1012658227848102
+      }
+    ],
+    "statisticalConclusion": false,
+    "qualityAccepted": false,
+    "candidateSampledMemoryMarginPassed": true,
+    "limitations": [
+      "Single paired screening run, not repeated benchmark",
+      "Pixel equality applies only to these exact test windows",
+      "Profiling result does not establish unprofiled or two-minute speed"
+    ]
+  },
+  "observedEngineExecutionTimeReduction": 0.27807436677905506,
+  "observedRunWallTimeReduction": 0.23520348455783902,
+  "sampledMemoryMargin": {
+    "baseline": 3358.0,
+    "candidate": 3362.0
+  },
+  "sdpaVideoComparedWithLegacy": [
+    {
+      "index": 0,
+      "decodedVideoEqual": true
+    },
+    {
+      "index": 1,
+      "decodedVideoEqual": true
+    },
+    {
+      "index": 2,
+      "decodedVideoEqual": true
+    },
+    {
+      "index": 3,
+      "decodedVideoEqual": true
+    },
+    {
+      "index": 4,
+      "decodedVideoEqual": true
+    }
+  ],
+  "operatorProbe": {
+    "torch": "2.8.0+cu128",
+    "cuda": "12.8",
+    "gpu": "NVIDIA GeForce RTX 5080",
+    "records": [
+      {
+        "tokens": 1024,
+        "heads": 2,
+        "backend": "sdpa",
+        "seconds": [
+          0.0002846000134013593,
+          8.749999688006938e-05,
+          7.910002022981644e-05
+        ],
+        "finite": true
+      },
+      {
+        "tokens": 1024,
+        "heads": 2,
+        "backend": "sage",
+        "seconds": [
+          0.0004883999936282635,
+          0.0002035000070463866,
+          0.00013529998250305653
+        ],
+        "finite": true
+      },
+      {
+        "tokens": 1024,
+        "heads": 2,
+        "maxAbsoluteError": 0.010986328125,
+        "relativeRMSE": 0.0382080003619194
+      },
+      {
+        "tokens": 34020,
+        "heads": 40,
+        "backend": "sdpa",
+        "seconds": [
+          0.5194985999842174,
+          0.5201250000100117,
+          0.5212102999794297
+        ],
+        "finite": true
+      },
+      {
+        "tokens": 34020,
+        "heads": 40,
+        "backend": "sage",
+        "seconds": [
+          0.08728969999356195,
+          0.08458339999197051,
+          0.08576499999617226
+        ],
+        "finite": true
+      },
+      {
+        "tokens": 34020,
+        "heads": 40,
+        "maxAbsoluteError": 0.003173828125,
+        "relativeRMSE": 0.03920675441622734
+      }
+    ],
+    "scope": "synthetic random operator inputs; not actual activation or video quality",
+    "qualityAccepted": false
+  },
+  "qualityAccepted": true,
+  "twoMinuteUnderOneHour": "not_achieved_or_tested",
+  "limitations": [
+    "One complete paired trial, not repeated or long-content acceptance",
+    "Run wall time includes engine startup and window media checks, excludes preparation and final assembly",
+    "Synthetic operator probe uses bfloat16 random inputs, not actual model activations; it cannot prove video quality",
+    "Numerical backend changes generated pixels; human approved lip stability, synchronization and face integration for this exact candidate"
+  ],
+  "humanQualityReview": {
+    "source": "explicit human reply",
+    "questionCallId": "call_198b2274b43d4e9bbf4c525abe5413d9",
+    "answer": "效果可以，保留此候选继续提速",
+    "acceptedCandidate": "a5-sage-full",
+    "scope": [
+      "lip synchronization",
+      "lip stability",
+      "face integration"
+    ],
+    "artifacts": {
+      "专家提速-SDPA-完整对照.mp4": "cc854bd332c64a1131c76bc65baf6d5d4b55c3515ac8b13dd8f74cb696084fef",
+      "专家提速-SageAttention-完整验证.mp4": "9e8794f96979212bb5651a2af853c8cf4583ec0aec74e5ae6a9bb32584f1b0d5",
+      "专家提速-SDPA与Sage-并排对照.mp4": "d8b4fe6e2e65141eb0d6976902390b956b4cc4ba9de6d8079bb3da9832835fa1"
+    },
+    "acceptsROI": false,
+    "acceptsTwoMinutePerformance": false,
+    "changesFormalProjectCheckpoint": false
+  }
+}

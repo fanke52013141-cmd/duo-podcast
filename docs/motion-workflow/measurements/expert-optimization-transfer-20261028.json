@@ -1,0 +1,235 @@
+{
+  "scope": "unprofiled single-variable expert transfer screening; not long-video acceptance",
+  "runs": {
+    "a1-full-clean-retry1": {
+      "variant": "async",
+      "completed": false,
+      "errorType": "RuntimeError",
+      "engineStoppedOnExit": true,
+      "profileNodes": false,
+      "startupSeconds": 13.238339999996242,
+      "totalWallSeconds": null,
+      "minimumSampledFreeMiB": 3619.0,
+      "segments": [
+        {
+          "index": 0,
+          "promptId": "e4d2d546-0783-4354-b509-9a372831afb8",
+          "engineSeconds": 133.613,
+          "outputSha256": "62ebe9520f1fe86b58ea052225b1f9f9bf55139b8bd21c9f3220439e67024588"
+        },
+        {
+          "index": 1,
+          "promptId": "add0b8ef-67e8-4fee-adfa-4d13385d331d",
+          "engineSeconds": 131.768,
+          "outputSha256": "5a4e50f94b45005f3f69f025c0bb05e3aa02455bf67ca572dd0fa9ccffb7b51a"
+        }
+      ]
+    },
+    "a1-full-exclusive": {
+      "variant": "async",
+      "completed": false,
+      "errorType": "RuntimeError",
+      "engineStoppedOnExit": true,
+      "profileNodes": false,
+      "startupSeconds": 12.695418099989183,
+      "totalWallSeconds": null,
+      "minimumSampledFreeMiB": null,
+      "segments": []
+    },
+    "a1-full-exclusive-v2": {
+      "variant": "async",
+      "completed": false,
+      "errorType": "RuntimeError",
+      "engineStoppedOnExit": true,
+      "profileNodes": false,
+      "startupSeconds": 10.707924900008948,
+      "totalWallSeconds": null,
+      "minimumSampledFreeMiB": 3791.0,
+      "segments": [
+        {
+          "index": 0,
+          "promptId": "43ee27e5-9516-4e0e-8fcf-9650b2ba933d",
+          "engineSeconds": 129.653,
+          "outputSha256": "976b79601aa8c6b75dd867367c45af6737b77ff78a82ea0a1d368afcefd38486"
+        },
+        {
+          "index": 1,
+          "promptId": "10c9263c-fc73-4ebe-8e47-d6fb449f6be5",
+          "engineSeconds": 125.206,
+          "outputSha256": "99b60c44fbbf6aeb23266f68eaab85b0d5b1e7f3fcba63982b447ab4dd888529"
+        },
+        {
+          "index": 2,
+          "promptId": "de96ab26-82d9-4b06-a1cb-226da2e756dc",
+          "engineSeconds": 127.905,
+          "outputSha256": "7c53e2509596d49fe5a495bc5c281390475cfc5f3d1f6e7bf6bc57ef160f5159"
+        },
+        {
+          "index": 3,
+          "promptId": "df148dce-f15e-4f26-802c-7b47cdc592b9",
+          "engineSeconds": 129.671,
+          "outputSha256": "d6ef3ac5fc37b7d7ea21b1805c692746168f497f16f96ff48c6875dc30448324"
+        }
+      ]
+    },
+    "a1-tail-recovery": {
+      "variant": "async",
+      "completed": true,
+      "errorType": null,
+      "engineStoppedOnExit": true,
+      "profileNodes": false,
+      "startupSeconds": 10.734347399993567,
+      "totalWallSeconds": 72.34030329999223,
+      "minimumSampledFreeMiB": 4570.0,
+      "segments": [
+        {
+          "index": 4,
+          "promptId": "003a5c8f-9241-4e75-8f35-20ee2d0c7763",
+          "engineSeconds": 59.272,
+          "outputSha256": "53d3d604f19a8e751367a6f237e08cf56857426c9e575e351c3635844e3f6c4a"
+        }
+      ]
+    },
+    "a1-transfer-control": {
+      "variant": "async",
+      "completed": true,
+      "errorType": null,
+      "engineStoppedOnExit": true,
+      "profileNodes": false,
+      "startupSeconds": 11.181975300001795,
+      "totalWallSeconds": 275.33789270000125,
+      "minimumSampledFreeMiB": 3697.0,
+      "segments": [
+        {
+          "index": 0,
+          "promptId": "77f43f9d-2e07-4fe8-a381-dbce62cb5c8d",
+          "engineSeconds": 132.443,
+          "outputSha256": "55d259c7229ad32d45503ef8b8e4078f06d19980b1abc8209669a361288f52aa"
+        },
+        {
+          "index": 2,
+          "promptId": "e4ad18d1-b4a7-40af-a6dd-5e339d63a386",
+          "engineSeconds": 127.544,
+          "outputSha256": "c23a2e0c82c743453f62e0aa882236d49a0745bc86162d70b3bd0c43670a7914"
+        }
+      ]
+    },
+    "a3-transfer-screen": {
+      "variant": "async-nonblocking",
+      "completed": true,
+      "errorType": null,
+      "engineStoppedOnExit": true,
+      "profileNodes": false,
+      "startupSeconds": 12.265268899995135,
+      "totalWallSeconds": 276.053848999989,
+      "minimumSampledFreeMiB": 3639.0,
+      "segments": [
+        {
+          "index": 0,
+          "promptId": "0d10e019-a9b5-4274-a45d-0a948dab25cc",
+          "engineSeconds": 128.298,
+          "outputSha256": "36c4cd001f4d055bfc473645988b958791ddabbb62390cab7afdf681fbd8cfd0"
+        },
+        {
+          "index": 2,
+          "promptId": "e843774f-b7a3-4fa0-b893-d01da79e474b",
+          "engineSeconds": 131.345,
+          "outputSha256": "4bea014a790bbbddecf480f55351b368445a2daa77469f6c46fb06dd55688ea1"
+        }
+      ]
+    },
+    "a4-prefetch-screen": {
+      "variant": "async-prefetch1",
+      "completed": false,
+      "errorType": "ManualHostMemoryPressureStop",
+      "engineStoppedOnExit": true,
+      "profileNodes": false,
+      "startupSeconds": 10.664525499989395,
+      "totalWallSeconds": null,
+      "minimumSampledFreeMiB": 7154.0,
+      "segments": [
+        {
+          "index": 0,
+          "promptId": "d30c1d3b-9fe3-4fed-bcb0-5ef6eb8076f2",
+          "engineSeconds": 129.842,
+          "outputSha256": "3d285033064d8e509d2eef9cb4b656eb82c22435ed55d526cdcdf83f99b12d6e"
+        }
+      ]
+    }
+  },
+  "recoveredClip": {
+    "fullBenchmarkRunCompleted": false,
+    "assembledFromSeparateRuns": true,
+    "decodedVideoEqualToReference": true,
+    "successfulWindowExecutionSumSeconds": 571.707,
+    "windowComparisons": [
+      {
+        "index": 0,
+        "videoEqual": true,
+        "audioEqual": true
+      },
+      {
+        "index": 1,
+        "videoEqual": true,
+        "audioEqual": true
+      },
+      {
+        "index": 2,
+        "videoEqual": true,
+        "audioEqual": true
+      },
+      {
+        "index": 3,
+        "videoEqual": true,
+        "audioEqual": true
+      },
+      {
+        "index": 4,
+        "videoEqual": true,
+        "audioEqual": true
+      }
+    ]
+  },
+  "nonblockingComparison": {
+    "baseline": "a1-transfer-control",
+    "candidate": "a3-transfer-screen",
+    "observedExecutionSpeedup": 1.0013248961073473,
+    "pairedSegments": [
+      {
+        "index": 0,
+        "decodedVideoEqual": true,
+        "decodedAudioEqual": true,
+        "speedup": 1.0323075963771844
+      },
+      {
+        "index": 2,
+        "decodedVideoEqual": true,
+        "decodedAudioEqual": true,
+        "speedup": 0.9710609463626327
+      }
+    ],
+    "statisticalConclusion": false,
+    "qualityAccepted": false,
+    "candidateSampledMemoryMarginPassed": true,
+    "limitations": [
+      "Single paired screening run, not repeated benchmark",
+      "Pixel equality applies only to these exact test windows",
+      "Profiling result does not establish unprofiled or two-minute speed"
+    ]
+  },
+  "prefetchComparison": {
+    "comparable": false,
+    "reason": "Candidate interrupted under host memory pressure; no aggregate speed ratio",
+    "completedWindow0DecodedVideoEqual": true,
+    "completedWindow0DecodedAudioEqual": true,
+    "decision": "not_selected",
+    "qualityAccepted": false
+  },
+  "limitations": [
+    "Recovered clip joins successful windows from two explicit runs; no single full-run wall timing",
+    "Failed attempts and service restarts are excluded from successful-window execution sum",
+    "Single screening pairs do not establish statistical speed or two-minute completion time"
+  ],
+  "qualityAccepted": false,
+  "twoMinuteUnderOneHour": "not_achieved_or_tested"
+}

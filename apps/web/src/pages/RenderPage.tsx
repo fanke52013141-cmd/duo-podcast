@@ -25,7 +25,7 @@ const RESOLUTION_OPTIONS = [
   { id: '1080p', label: '1080p', value: '1920x1080' },
 ];
 
-const CODECS = ['H.264'];
+const CODEC = 'H.264';
 const FPSS = [25, 30];
 
 interface Segment {
@@ -94,7 +94,6 @@ export function RenderPage({ projectId }: { projectId: string }) {
     if (proj) patchProject.mutate({projectId, expectedRevision:proj.revision, patch:{renderSpec:{...proj.renderSpec,...patch}}},{onError:e=>setError(e.message)});
   };
   const [resolutionId, setResolutionId] = useState('480p');
-  const [codec, setCodec] = useState(CODECS[0]);
   const [fps, setFps] = useState(25);
   const [fastQuality, setFastQuality] = useState<'original' | 'clear' | 'crisp'>('original');
   useEffect(()=>{
@@ -183,7 +182,6 @@ export function RenderPage({ projectId }: { projectId: string }) {
 
 
   const voiceSource = simulated ? '模拟语音' : proj?.voiceBindings?.[0]?.providerProfileId === 'minimax' ? 'MiniMax' : '本地引擎';
-  const reusedCount = 0; // 未取得后端哈希校验计划，不能把存在旧输出当作可复用。
 
   return (
     <AppShell
@@ -192,7 +190,7 @@ export function RenderPage({ projectId }: { projectId: string }) {
       timeline={
         <TimelineBar
           timeline={timeline}
-          labels={[isOverShoulder ? '过肩镜头按配音话轮切换' : segments.length ? `分段边界：${segments.map((_, i) => i + 1).join(' / ')}` : '分段边界：未规划', 'A 轨 / B 轨']}
+          labels={[isOverShoulder ? '过肩镜头按配音话轮切换' : segments.length ? '时间区间示意 · 实际进度以任务中心为准' : '时间区间：未规划', 'A 轨 / B 轨']}
           speakerOf={(turnId) => speakers.get(turnId) ?? 'A'}
         />
       }
@@ -233,9 +231,7 @@ export function RenderPage({ projectId }: { projectId: string }) {
                 <p className="wu-caption">动作素材的原生分辨率决定细节上限，特写放大会损失细节。增强会增大文件，较强锐化可能产生边缘光晕；不会恢复原本缺失的细节。</p>
               </div>}
               <label>编码</label>
-              <select className="wu-input" aria-label="编码" value={codec} onChange={(e) => setCodec(e.target.value)}>
-                {CODECS.map((c) => <option key={c} value={c}>{c}</option>)}
-              </select>
+              <input className="wu-input" aria-label="编码" value={`${CODEC} · 当前固定编码`} readOnly />
             </div>
             <div style={{ display: 'grid', gap: 6, marginTop: 8 }}>
               <span className="wu-caption">补帧：当前引擎未开放</span>
@@ -382,11 +378,13 @@ export function RenderPage({ projectId }: { projectId: string }) {
           <select id="output-version" className="wu-input" value={outputVersion ?? ''} disabled={selectOutput.isPending} onChange={e => selectOutput.mutate({ projectId, version: e.target.value }, { onError: e => setError((e as Error).message) })}>
             {versions.map(v => <option key={v.version} value={v.version}>{v.version}</option>)}
           </select>
-          <label htmlFor="redo-from">重做起点</label>
+          <label htmlFor="redo-from">重做后续内容的起点</label>
           <select id="redo-from" className="wu-input" disabled={isFast} value={redoFromSec} onChange={e => setRedoFromSec(Number(e.target.value))}>
             {segments.map(s => <option key={s.id} value={s.outputRange[0]}>{formatTimecode(s.outputRange[0], { tenths: true })}</option>)}
           </select>
-          <Button variant="secondary" disabled={isFast || isOverShoulder || !canRender || !standardSource} onClick={() => handleRender(true)}>从此段重做候选</Button>
+          <Button variant="secondary" disabled={isFast || isOverShoulder || !canRender || !standardSource}
+            title="此功能从选定时间开始重做后续内容，并非只重做一个话轮。快速模式和过肩机位暂不支持。"
+            onClick={() => handleRender(true)}>从此时间重做后续候选</Button>
         </section>}
 
         <div className="hf-s5">
@@ -398,7 +396,7 @@ export function RenderPage({ projectId }: { projectId: string }) {
               <div className="hf-kv"><div className="k">画布</div><div className="v">{proj?.aspect === 'portrait' ? '竖屏 9:16' : '横屏 16:9'} · {resolution} 导出画布</div></div>
               <div className="hf-kv"><div className="k">语音来源</div><div className="v">{voiceSource}</div></div>
               <div className="hf-kv"><div className="k">视频模式</div><div className="v">{isFast ? '快速模式 · 双人演播室' : isOverShoulder ? '双机位过肩正反打' : '双人动态同框'}</div></div>
-              <div className="hf-kv"><div className="k">分段</div><div className="v">{isFast ? '按整条配音更新口型' : isOverShoulder ? '按发言话轮，长话轮均匀分段' : demoRendered ? `演示完成 ${segments.length} 段（无真实输出）` : realRendered ? `已完成 ${segments.length} 段` : `复用 ${reusedCount} · 待生成 ${Math.max(0, segments.length - reusedCount)}`}</div></div>
+              <div className="hf-kv"><div className="k">分段</div><div className="v">{isFast ? '按整条配音更新口型' : isOverShoulder ? '按发言话轮，长话轮均匀分段' : `${segments.length} 个时间区间示意，实际生成与复用以任务记录为准`}</div></div>
               <div className="hf-kv"><div className="k">预估</div><div className="v">{renderJob ? '生成中' : '尚未测定'}</div></div>
               <div className="hf-kv"><div className="k">磁盘预算</div><div className="v">尚未测定</div></div>
               <div className="hf-kv">
@@ -410,7 +408,8 @@ export function RenderPage({ projectId }: { projectId: string }) {
 
           {/* 分段进度网格（01 §7.2） */}
           <section>
-            <div className="hf-zone-t">分段进度</div>
+            <div className="hf-zone-t">{isFast || isOverShoulder ? '生成进度' : '时间区间概览'}</div>
+            {!isFast && !isOverShoulder && <p className="wu-caption">下方按五秒展示对白区间，不代表模型窗口或逐段生成进度。请在任务中心查看实际执行状态。</p>}
             {isFast ? <p>{renderJob?.stage ?? (realRendered ? '快速模式成片已完成，可播放和下载。' : '等待按当前配音生成。')}</p> : isOverShoulder ? <p>{renderJob?.stage ?? (otsCompleted ? '过肩视频已完成，可在候选区播放比较。' : '按发言话轮生成 A/B 机位，等待生成。')}</p> : segments.length === 0 ? (
               <Alert tone="muted">合成时间轨后在此展示分段计划。</Alert>
             ) : (
@@ -423,7 +422,7 @@ export function RenderPage({ projectId }: { projectId: string }) {
                       <div className="top">
                         {demoRendered
                           ? <Badge tone="info">演示完成</Badge>
-                          : <Badge tone={reused ? 'success' : 'muted'}>{realRendered ? '已完成' : reused ? '复用' : '待生成'}</Badge>}
+                          : <Badge tone="muted">时间区间</Badge>}
                         <span className="tt">#{String(i + 1).padStart(2, '0')} {segLabel(sg, i, segments.length, speakers)}</span>
                       </div>
                       <div className="sub">
@@ -442,7 +441,7 @@ export function RenderPage({ projectId }: { projectId: string }) {
             <div className="hf-export-item">
               <b>MP4</b>
               <span className="hf-spacer" />
-              <span className="wu-caption">成片 · {resolutionId} · {codec}</span>
+              <span className="wu-caption">成片 · {resolutionId} · {CODEC}</span>
             </div>
             <div className="hf-export-item">
               <b>混音 WAV</b>

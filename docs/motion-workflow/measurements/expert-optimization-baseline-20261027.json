@@ -1,0 +1,124 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-27",
+  "origin": "existing single trial logs; no new model calls",
+  "comparisonCanConcludeSpeedup": false,
+  "target": {
+    "durationSeconds": 120,
+    "maximumVideoGenerationWallSeconds": 3600,
+    "startsAfterApprovedMotionAndAudioReady": true,
+    "status": "not_yet_tested"
+  },
+  "hardware": {
+    "gpu": "RTX 5080",
+    "vramGiB": 16,
+    "os": "Windows"
+  },
+  "clip": {
+    "sampleRate": 48000,
+    "sampleCount": 518522,
+    "durationSeconds": 10.802541666666666,
+    "exportSize": [
+      1280,
+      720
+    ],
+    "nativeSize": [
+      864,
+      480
+    ],
+    "fps": 25,
+    "actualFinalFrames": 270,
+    "plannedCoreFrames": 271,
+    "modelWindowFrames": [
+      81,
+      81,
+      81,
+      81,
+      33
+    ],
+    "totalModelFrames": 357,
+    "masterWavSha256": "38dac31d6fc49185535af7f1d16ef183b5b5c8c13dbe9861ea51aec8b6ba4490",
+    "expertFileSha256": "cc854bd332c64a1131c76bc65baf6d5d4b55c3515ac8b13dd8f74cb696084fef",
+    "fastFileSha256": "b8118390fd3d14f703cd1e52f757206843df9e90f5c7491819291a6dcac9518c"
+  },
+  "configuration": {
+    "samplerScheduleSteps": 4,
+    "startStep": 2,
+    "executedDenoisingSteps": 2,
+    "blocksToSwap": 38,
+    "attention": "sdpa",
+    "prefetchBlocks": 0,
+    "useNonBlocking": false,
+    "cudaLaunchBlocking": "1",
+    "asyncOffloadDisabled": true,
+    "pinnedMemoryDisabled": true,
+    "cpuWeightGuardPreserved": true
+  },
+  "segments": [
+    {
+      "index": 0,
+      "promptId": "12b45df2-69f6-4ef6-9643-65d5313875e3",
+      "engineExecutionSeconds": 158.636,
+      "workflowFileSha256": "8bbdde5e66105b6cd619e6b17fd1f76a53402b8e5635c16e36c69bc35924dac6",
+      "rawSha256": "2bae66c1c5b9bda794c8fa9960133b14e972b6a58aae6ff74ec0d5a4e20ea0fc",
+      "coreSha256": "73968c91a1d8af1fec1aefe0edf1cba2630ffabc271ce2ae15e103af82f0e3b9",
+      "engineCachedNodeIds": []
+    },
+    {
+      "index": 1,
+      "promptId": "4088ca54-d5d4-4936-9933-206d83f4bd0a",
+      "engineExecutionSeconds": 147.08,
+      "workflowFileSha256": "c9e9350202e0aeb7c1db9b2e158a8016c5e9fab93aa2696838a8cffa5109de52",
+      "rawSha256": "f3c7958dd74a0a7d583c63054443c83707368bcf8a4685b75ef8cb2699a6d65f",
+      "coreSha256": "b94552f80cec61c01f9e8832643f284692618b98a22cff742e39475eb6586e39",
+      "engineCachedNodeIds": []
+    },
+    {
+      "index": 2,
+      "promptId": "e090f11a-88a4-4ee3-80bd-10f2ff6e1c17",
+      "engineExecutionSeconds": 147.637,
+      "workflowFileSha256": "f9ecf58214edb4900a5217a8db63c4556252bfbf32d81881dae328f6dbe21aeb",
+      "rawSha256": "2aecfbefb6c240dd4751f6d73330c812611d3219d8041cf2cf9a8d1d26a916dd",
+      "coreSha256": "09e8ec401a5d7b37e84aa5d55d667f5c9adf6caa842659e6511cce90967f7a26",
+      "engineCachedNodeIds": []
+    },
+    {
+      "index": 3,
+      "promptId": "5074fa71-0cdd-45b6-9ff1-d9e9680bbe41",
+      "engineExecutionSeconds": 122.396,
+      "workflowFileSha256": "d1480c6689c3e8e963971277337078d43853d79a7fab42eabdce30af432badc8",
+      "rawSha256": "cd6335f2eaa502bf2708399e8bbae3099d7a997a8bf32abc4aa32246ebd74f32",
+      "coreSha256": "a4737cffdf669338e351faea58762c35a95ed83854bd18421b105117a47923ef",
+      "engineCachedNodeIds": [
+        "120",
+        "129",
+        "134",
+        "135",
+        "137",
+        "138",
+        "232"
+      ]
+    },
+    {
+      "index": 4,
+      "promptId": "58544272-59ec-453a-96c0-abefff65e695",
+      "engineExecutionSeconds": 75.983,
+      "workflowFileSha256": "490adfda1e0fac036a7a54aa26b8b0d31c818d9235d75434018d03baec7c0b1c",
+      "rawSha256": "4a13cf33f998ca4086db382813e9e6938865b3e84824b0365e2a84762f41c855",
+      "coreSha256": "413c5cb452e6ad16769d34e6625574ef45f39e91cac6a39f45a79a0edca7e2cd",
+      "engineCachedNodeIds": []
+    }
+  ],
+  "engineExecutionSumSeconds": 651.732,
+  "quality": {
+    "userPreference": "expert lip sync favored; fast lip jitter/fusion rejected",
+    "automaticQualityAcceptance": false,
+    "twoMinuteQualityVerified": false
+  },
+  "limitations": [
+    "Timing includes more than GPU denoising",
+    "Single historical trial; cache state differs across windows",
+    "Not a current optimization measurement",
+    "No formal expert project route acceptance"
+  ]
+}

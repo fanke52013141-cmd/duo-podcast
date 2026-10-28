@@ -1,0 +1,221 @@
+{
+  "scope": "native-pixel joint face ROI exploration, not production or long-content acceptance",
+  "crop": [
+    144,
+    32,
+    576,
+    336
+  ],
+  "fullNative": [
+    864,
+    480
+  ],
+  "spatialResize": false,
+  "modelPixelAreaRatio": 0.4666666666666667,
+  "preparationSeconds": 3.2550965000118595,
+  "runs": {
+    "c1-full-control": {
+      "completed": true,
+      "errorType": null,
+      "code": {
+        "apps/server/duocast/services/owned_process.py": "921ed50c72da5e5d027f43f8c82b4755dff7ef3d0af5dc86fdf98f1e09fa3e43",
+        "scripts/acceptance/benchmark_expert.py": "213f83eaf398354fe24ed008d16e4a736b36e7e2cde7dcc65b933c9c2d0130cb",
+        "scripts/digital-human/attention_addon.py": "abe92cdb4f265ce9f7f101da3957d7808f5288dd409dac046d1ee9bcfef3fe29",
+        "scripts/digital-human/benchmark_probe.py": "0b7660e98fc9402627d15bf9df7206eb4655dde38ae574b0b110d84d634f3bab",
+        "scripts/digital-human/start_guarded.py": "61cf93e93cef00be8b8a5506a4de7183aeb62a8dfa6110acd75e641e90f748e4"
+      },
+      "totalWallSeconds": 104.42441850001342,
+      "engineExecutionSumSeconds": 91.583,
+      "segments": [
+        {
+          "index": 0,
+          "promptId": "b41640a9-3ba3-4448-929d-c2dd5cf7fa89",
+          "engineSeconds": 91.583,
+          "nativeSize": [
+            864,
+            480
+          ],
+          "successfulSageCalls": 160,
+          "outputSha256": "0a63d9527683ea4ded1d7cca6333048bf42200e64c8a1b2e519032d597700a95"
+        }
+      ]
+    },
+    "c1-roi-screen-v2": {
+      "completed": false,
+      "errorType": "PromptWorkerThreadFailed",
+      "code": {
+        "apps/server/duocast/services/owned_process.py": "921ed50c72da5e5d027f43f8c82b4755dff7ef3d0af5dc86fdf98f1e09fa3e43",
+        "scripts/acceptance/benchmark_expert.py": "213f83eaf398354fe24ed008d16e4a736b36e7e2cde7dcc65b933c9c2d0130cb",
+        "scripts/digital-human/attention_addon.py": "abe92cdb4f265ce9f7f101da3957d7808f5288dd409dac046d1ee9bcfef3fe29",
+        "scripts/digital-human/benchmark_probe.py": "0b7660e98fc9402627d15bf9df7206eb4655dde38ae574b0b110d84d634f3bab",
+        "scripts/digital-human/start_guarded.py": "61cf93e93cef00be8b8a5506a4de7183aeb62a8dfa6110acd75e641e90f748e4"
+      },
+      "totalWallSeconds": null,
+      "engineExecutionSumSeconds": 0,
+      "segments": []
+    },
+    "c1-roi-screen-v3": {
+      "completed": true,
+      "errorType": null,
+      "code": {
+        "apps/server/duocast/services/owned_process.py": "921ed50c72da5e5d027f43f8c82b4755dff7ef3d0af5dc86fdf98f1e09fa3e43",
+        "scripts/acceptance/benchmark_expert.py": "5e4ea0ed5b59369273dc7c407e2d40cdfb5fc8c30f8bf2e1e08c46bce322d0af",
+        "scripts/digital-human/attention_addon.py": "abe92cdb4f265ce9f7f101da3957d7808f5288dd409dac046d1ee9bcfef3fe29",
+        "scripts/digital-human/benchmark_probe.py": "def385422a43a63f0762d8460441138c39fc0f9c22039405c266c31369c57f6c",
+        "scripts/digital-human/start_guarded.py": "61cf93e93cef00be8b8a5506a4de7183aeb62a8dfa6110acd75e641e90f748e4"
+      },
+      "totalWallSeconds": 67.82272870000452,
+      "engineExecutionSumSeconds": 53.279,
+      "segments": [
+        {
+          "index": 0,
+          "promptId": "6f0beb83-89f7-43a4-8543-437d991e77a7",
+          "engineSeconds": 53.279,
+          "nativeSize": [
+            576,
+            336
+          ],
+          "successfulSageCalls": 160,
+          "outputSha256": "dfa591666fa7361c4f4136bf8630185c640277e831c2b0f10a36de9809e656da"
+        }
+      ]
+    },
+    "c1-roi-full": {
+      "completed": true,
+      "errorType": null,
+      "code": {
+        "apps/server/duocast/services/owned_process.py": "921ed50c72da5e5d027f43f8c82b4755dff7ef3d0af5dc86fdf98f1e09fa3e43",
+        "scripts/acceptance/benchmark_expert.py": "5e4ea0ed5b59369273dc7c407e2d40cdfb5fc8c30f8bf2e1e08c46bce322d0af",
+        "scripts/digital-human/attention_addon.py": "abe92cdb4f265ce9f7f101da3957d7808f5288dd409dac046d1ee9bcfef3fe29",
+        "scripts/digital-human/benchmark_probe.py": "def385422a43a63f0762d8460441138c39fc0f9c22039405c266c31369c57f6c",
+        "scripts/digital-human/start_guarded.py": "61cf93e93cef00be8b8a5506a4de7183aeb62a8dfa6110acd75e641e90f748e4"
+      },
+      "totalWallSeconds": 248.8222329999844,
+      "engineExecutionSumSeconds": 226.547,
+      "segments": [
+        {
+          "index": 0,
+          "promptId": "cf007dd5-33bc-4dac-9100-a8568f500447",
+          "engineSeconds": 52.788,
+          "nativeSize": [
+            576,
+            336
+          ],
+          "successfulSageCalls": 160,
+          "outputSha256": "d14ffacb7bba3be78b8c6c459067c33d4f42c0cbfa89596811d400096a0d8daf"
+        },
+        {
+          "index": 1,
+          "promptId": "2f1dc77e-7880-4d33-9656-92a57a599757",
+          "engineSeconds": 50.383,
+          "nativeSize": [
+            576,
+            336
+          ],
+          "successfulSageCalls": 160,
+          "outputSha256": "4ac02f59d8a33684e6fc4338b4106d4cb6420de749a54c77e730bc88c64e89a3"
+        },
+        {
+          "index": 2,
+          "promptId": "dde923ae-f15b-485b-ae00-7f5a57e7d1f8",
+          "engineSeconds": 36.554,
+          "nativeSize": [
+            576,
+            336
+          ],
+          "successfulSageCalls": 160,
+          "outputSha256": "9f1db55ba0fe47e7ccc50511bb4b7e61cf60b7baa88ef8482461a43305d167cf"
+        },
+        {
+          "index": 3,
+          "promptId": "e93f5e6e-6284-42d8-b761-6b417acd251f",
+          "engineSeconds": 51.345,
+          "nativeSize": [
+            576,
+            336
+          ],
+          "successfulSageCalls": 160,
+          "outputSha256": "f910a4cd35d38bd4115a5ee59ec40074ed71855a9d5fd91d6ca22f9afb6a2176"
+        },
+        {
+          "index": 4,
+          "promptId": "d736eebd-4f6f-4e5b-8298-bb9319d32dce",
+          "engineSeconds": 35.477,
+          "nativeSize": [
+            576,
+            336
+          ],
+          "successfulSageCalls": 160,
+          "outputSha256": "015fcec02ae7a0cfe221c99513af4fb6fe9ab6e85dda9fc406ef6b28fde26c50"
+        }
+      ]
+    }
+  },
+  "fullPipeline": {
+    "pipelineWallSeconds": 260.8844568999775,
+    "scope": "Input-ready exclusive-GPU engine startup through composition, export and audio check; prior ROI preparation excluded",
+    "audioEqual": true
+  },
+  "compositor": {
+    "frames": 270,
+    "crop": [
+      144,
+      32,
+      576,
+      336
+    ],
+    "masterSampleRange": [
+      0,
+      518522
+    ],
+    "outsideJointCropExactBeforeEncoding": true,
+    "outsidePixelEqualityAfterLossyEncoding": false,
+    "compositionSeconds": 9.08740819999366
+  },
+  "failures": [
+    {
+      "runId": "c1-roi-screen",
+      "stage": "port preflight",
+      "modelSubmitted": false,
+      "reason": "Windows bind rejected recently used port; switched to a distinct isolated port"
+    },
+    {
+      "runId": "c1-roi-screen-v2",
+      "stage": "reference audio extraction after model sampling",
+      "reason": "Initial cropped reference omitted embedded silence; prompt worker died without history or exported video",
+      "originalPromptId": "55df4a19-6972-4845-ac5b-6460bdb10ca3",
+      "modelExecuted": true,
+      "performanceAccepted": false,
+      "originalReceiptRetained": true
+    }
+  ],
+  "qualityAccepted": true,
+  "twoMinuteUnderOneHour": "not_achieved_or_tested",
+  "limitations": [
+    "Single complete input-ready 10.8-second candidate pipeline, not repeated cold/warm trials",
+    "Pipeline time excludes previously completed ROI preparation; preparation time disclosed separately",
+    "Crop changes model context and compositing preserves source motion outside face feathers; quality must be reviewed independently",
+    "Full-frame and ROI model times are exploratory cross-run observations; monitoring code changed to detect dead prompt workers",
+    "Lossy delivery encoding changes pixel values; exact preservation applies before encoding only",
+    "Two-shot current character pair only; over-shoulder, 30-second and real two-minute runs remain unverified"
+  ],
+  "humanQualityReview": {
+    "source": "explicit human reply",
+    "questionCallId": "call_bd2055a480a6467d8b90e76a67b7423d",
+    "answer": "效果可以，采用区域候选继续长片测试",
+    "acceptedCandidate": "c1-roi-full",
+    "scope": [
+      "lip synchronization",
+      "lip stability",
+      "face feather integration",
+      "speaker handover"
+    ],
+    "artifacts": {
+      "专家提速-脸部区域-完整验证.mp4": "34687779a3a447909907b000b7e31dbb321da11b680c7279ba4b126f13794a07",
+      "专家提速-全画面与脸部区域-完整对照.mp4": "e10d0213d3a2aa93147a4089ad074f23bd4742cfe2d350a4f06faef94e9cd2f8"
+    },
+    "acceptsLongVideoQuality": false,
+    "acceptsTwoMinutePerformance": false,
+    "changesFormalProjectCheckpoint": false
+  }
+}

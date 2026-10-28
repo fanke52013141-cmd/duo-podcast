@@ -118,12 +118,16 @@ def prepare(request, request_hash):
                 raise RuntimeError('Expert reference encoding failed')
             partial.replace(target)
             files = {kind: {'path': str(folder / name), 'fileHash': file_hash(folder / name)} for kind, name in flattened.items()}
-            prepared.append({'segmentDependencyHash': key, 'cameraId': camera, 'inputNames': names, 'files': files,
+            item={'segmentDependencyHash': key, 'cameraId': camera, 'inputNames': names, 'files': files,
                              'native': {'width': width, 'height': height, 'frames': segment['modelFrames'], 'fps': 25},
                              'sourceTrace': {'packId': assets['packId'], 'packVersion': assets['packVersion'],
                                              'visibleRoles': roles, 'sourceByRole': segment['sourceByRole'],
                                              'referenceOutputFrames': segment['referenceOutputFrames'],
-                                             'referenceAudio': 'embedded_silence'}})
+                                             'referenceAudio': 'embedded_silence'}}
+            if request.get('roiCrop'):
+                from expert_roi_media import crop_prepared
+                item=crop_prepared(item,request['roiCrop'])
+            prepared.append(item)
         for id in used:
             if file_hash(clips[id]['path']) != clips[id]['fileHash']:
                 raise ValueError('Expert source video changed while preparing')

@@ -1,0 +1,441 @@
+{
+  "scope": "cold model process, filesystem cache may be warm; real new 120s dialogue",
+  "runId": "long120-roi-cold-v1",
+  "completed": true,
+  "withinOneHour": true,
+  "pipelineWallSeconds": 2854.8754159999953,
+  "preparationSeconds": 45.61028739999165,
+  "engineRunWallSeconds": 2703.004850199999,
+  "engineExecutionSumSeconds": 2575.035,
+  "compositionAndMediaCheckSeconds": 91.45088059999398,
+  "startBoundary": "ready adopted motion pack plus completed real voice units; includes master/reference/ROI preparation",
+  "startedAtUTC": "2026-10-28T01:45:49.362397+00:00",
+  "finishedAtUTC": "2026-10-28T02:33:24.238560+00:00",
+  "coldDefinition": "New owned model process; filesystem and OS cache may be warm",
+  "sampleRate": 48000,
+  "sampleCount": 5760000,
+  "fps": 25,
+  "frames": 3000,
+  "durationSeconds": 120,
+  "nativeCrop": [
+    144,
+    32,
+    576,
+    336
+  ],
+  "outputSize": [
+    1280,
+    720
+  ],
+  "newTTSTurns": 16,
+  "utteranceSpanSeconds": 112.6401875,
+  "audioSpeedChanged": false,
+  "loopedOutput": false,
+  "masterHash": "536677da5df85057668b715ecebbe89fb33b2501e6921c63fe10a9bc0d34c142",
+  "outputHash": "6b0fc91cc945bf4d47dbed09eaf0b537fe49265a4ac6d89422324c303ee5cc7d",
+  "audioDecodedEqualToEncodedMaster": true,
+  "decodedAudioSha256": [
+    "f5bb27d981aeec577745ad50b2774170d5c44aa9cd3e04ef789c1dd3699ae869",
+    "f5bb27d981aeec577745ad50b2774170d5c44aa9cd3e04ef789c1dd3699ae869"
+  ],
+  "successfulSageCalls": 7520,
+  "uniqueRawVideoHashes": 47,
+  "minimumSampledWholeDeviceFreeMiB": 3300.0,
+  "minimumSampledHostAvailableBytes": 76218368,
+  "modelWindows": [
+    {
+      "index": 0,
+      "promptId": "24e1025e-af4a-42a3-bf92-e1c2f8783276",
+      "engineSeconds": 140.615,
+      "outputHash": "8e79f0d8ea7ae4496b2b95313fa45c29839bbac43413907bdc0a338a7d9f0369",
+      "modelFrames": 81,
+      "successfulSageCalls": 160
+    },
+    {
+      "index": 1,
+      "promptId": "a247ad58-3a95-497f-9e94-b14031494f67",
+      "engineSeconds": 53.742,
+      "outputHash": "7409765b48cee2e73c1038168ecc1230269d590fd999f9b46a011236ae5a089a",
+      "modelFrames": 81,
+      "successfulSageCalls": 160
+    },
+    {
+      "index": 2,
+      "promptId": "99ce18af-9471-4016-8de5-04265643dbc6",
+      "engineSeconds": 52.844,
+      "outputHash": "a0c0838c3c82b0c35f31ed17750b906237c66f9ac751c3727f846c429f4d51f5",
+      "modelFrames": 81,
+      "successfulSageCalls": 160
+    },
+    {
+      "index": 3,
+      "promptId": "95a88775-cf47-4ec5-8368-003f0b1a56eb",
+      "engineSeconds": 55.801,
+      "outputHash": "8959b7222dddabdbe9c241d6338917948abfdb363ed9394ab6ca6f3d4cede7bb",
+      "modelFrames": 81,
+      "successfulSageCalls": 160
+    },
+    {
+      "index": 4,
+      "promptId": "84285699-aba7-4eda-ab93-affe010b45e8",
+      "engineSeconds": 158.889,
+      "outputHash": "adc2bced2bafc065a77b4ab1c93985b4da2ad5463e416b9e54ccad7ba070a4a7",
+      "modelFrames": 81,
+      "successfulSageCalls": 160
+    },
+    {
+      "index": 5,
+      "promptId": "57066302-3d08-4b74-b87b-1167e95f4663",
+      "engineSeconds": 51.643,
+      "outputHash": "b40eec4baf3f06e6a0daee08c01ad97192859b8c571c5f54f8696028853383c6",
+      "modelFrames": 81,
+      "successfulSageCalls": 160
+    },
+    {
+      "index": 6,
+      "promptId": "46dbc92b-fbb1-47dd-9342-34c3d3cad3e7",
+      "engineSeconds": 33.993,
+      "outputHash": "ead06124db5d098b12997598f85a40e941805d5c29d6307add5cfb4343558458",
+      "modelFrames": 81,
+      "successfulSageCalls": 160
+    },
+    {
+      "index": 7,
+      "promptId": "0a87ced2-42ae-4816-9053-4911acb6426e",
+      "engineSeconds": 50.9,
+      "outputHash": "796b28ba92b546fb044c6fe05c1a84dcde7fe885fd486b63dcaabc38c78ea148",
+      "modelFrames": 81,
+      "successfulSageCalls": 160
+    },
+    {
+      "index": 8,
+      "promptId": "b0b9c573-9af4-4d57-a5be-3c9ad3ffe0c5",
+      "engineSeconds": 36.39,
+      "outputHash": "074d57121c11a5f9b8581330c7ea7a03a8ac670866534f3a965985ef6401d771",
+      "modelFrames": 81,
+      "successfulSageCalls": 160
+    },
+    {
+      "index": 9,
+      "promptId": "92c1a066-c0bc-49e2-aca0-9122fec600ef",
+      "engineSeconds": 34.773,
+      "outputHash": "67357e2e93e38abc0d6fa3abea7a3faa77625d8d8429c466eb73a94aea056405",
+      "modelFrames": 81,
+      "successfulSageCalls": 160
+    },
+    {
+      "index": 10,
+      "promptId": "405edabe-deeb-4901-8a9e-3cf96ca0df97",
+      "engineSeconds": 50.781,
+      "outputHash": "3a831397a3977a24c0b938deb146942f8ca447e067024173da96b2711f633edb",
+      "modelFrames": 81,
+      "successfulSageCalls": 160
+    },
+    {
+      "index": 11,
+      "promptId": "3f35c927-91ca-431f-8c16-fe991531c85f",
+      "engineSeconds": 51.167,
+      "outputHash": "aafe8d6543b1e3f649fd50f95ea9c287ec9a9bbebcf7befb9a659ddfcbfe0689",
+      "modelFrames": 81,
+      "successfulSageCalls": 160
+    },
+    {
+      "index": 12,
+      "promptId": "f206de1c-7b20-40d3-a855-c2c9acc9ce2b",
+      "engineSeconds": 51.386,
+      "outputHash": "021cf8beb8bad93b31aa57b5891e465fcf2fdee22e206ee810696929ad408eb6",
+      "modelFrames": 81,
+      "successfulSageCalls": 160
+    },
+    {
+      "index": 13,
+      "promptId": "a870f1e2-3eb0-479d-8b2f-ed8e2b12cdaf",
+      "engineSeconds": 51.464,
+      "outputHash": "cec7ffd39c6cd323216922136eecabcec3a42eecffd896a424a8b38877ef4383",
+      "modelFrames": 81,
+      "successfulSageCalls": 160
+    },
+    {
+      "index": 14,
+      "promptId": "b558ae71-76fd-4bf5-89aa-dbc9bdc1e675",
+      "engineSeconds": 53.739,
+      "outputHash": "3e1c223ae9a14fabc8fb505efcfb1cc49b786fd073decc4e05109befe93d6b0b",
+      "modelFrames": 81,
+      "successfulSageCalls": 160
+    },
+    {
+      "index": 15,
+      "promptId": "dd2f9225-557c-48fd-b51e-a8e5eaf88681",
+      "engineSeconds": 51.669,
+      "outputHash": "54b91a87e47ab69c8f151347f1631e348c769ba3abeb0535bd140065ea286cd3",
+      "modelFrames": 81,
+      "successfulSageCalls": 160
+    },
+    {
+      "index": 16,
+      "promptId": "e61faec6-3b34-4421-93a5-1831d9a41dc3",
+      "engineSeconds": 189.576,
+      "outputHash": "8d053800f020aad229be1cc468a3e1bc28d2e5d9428a3d1d0dbbd8c1dc233aa9",
+      "modelFrames": 81,
+      "successfulSageCalls": 160
+    },
+    {
+      "index": 17,
+      "promptId": "723c3473-2783-432c-8372-4fb5d5c11c4a",
+      "engineSeconds": 38.925,
+      "outputHash": "4880fc3a86284951f599944cbe6ea68eb950704a79262a4029961a2421076edb",
+      "modelFrames": 81,
+      "successfulSageCalls": 160
+    },
+    {
+      "index": 18,
+      "promptId": "4cdae1b7-b049-484d-b38e-b4e57a725723",
+      "engineSeconds": 53.195,
+      "outputHash": "d8f461a2a4470314267d60f6cd5262a4a6f240e43c84ace0290404617b5ccd14",
+      "modelFrames": 81,
+      "successfulSageCalls": 160
+    },
+    {
+      "index": 19,
+      "promptId": "c3de936e-c01b-422b-9ad2-5d481a1149dd",
+      "engineSeconds": 37.095,
+      "outputHash": "c7fef100086ad4a3a6f578bdb3185013ae449ad10e63092acaf97060cf7d1fce",
+      "modelFrames": 81,
+      "successfulSageCalls": 160
+    },
+    {
+      "index": 20,
+      "promptId": "64a1992b-611f-4cb2-8845-d6a8ba545f89",
+      "engineSeconds": 51.748,
+      "outputHash": "f8e75e85b8f81755c4139c46bc0cea32caf7ef26e9769ed1e9b49afde2fec03f",
+      "modelFrames": 81,
+      "successfulSageCalls": 160
+    },
+    {
+      "index": 21,
+      "promptId": "fa50837a-caf3-4c3b-99f5-2a3996d0106c",
+      "engineSeconds": 35.091,
+      "outputHash": "29c9e0fa163de01b2679d502d471be4658234af4b29c4c773278394be2a0cee8",
+      "modelFrames": 81,
+      "successfulSageCalls": 160
+    },
+    {
+      "index": 22,
+      "promptId": "08d59fd4-0a1f-4ed2-a200-cf4f0f16c44b",
+      "engineSeconds": 51.823,
+      "outputHash": "14f6b6736536f8c7de6bf9854941db5bba3dd5693a47016aeca3799f90eaf321",
+      "modelFrames": 81,
+      "successfulSageCalls": 160
+    },
+    {
+      "index": 23,
+      "promptId": "efc315c9-7d32-414a-b272-66e1a213f5fe",
+      "engineSeconds": 55.781,
+      "outputHash": "2c04b0d4a97311780587f412e4adb1a980f873571d7cafc20f21b0997636def5",
+      "modelFrames": 81,
+      "successfulSageCalls": 160
+    },
+    {
+      "index": 24,
+      "promptId": "c2acd6e9-1ce8-49f2-b479-04c12ffd8344",
+      "engineSeconds": 49.716,
+      "outputHash": "58b9e3a8e952a0d458d34e759b5bc7b8375a4062edd87c0ad6684ed5e79f447b",
+      "modelFrames": 81,
+      "successfulSageCalls": 160
+    },
+    {
+      "index": 25,
+      "promptId": "9b27a299-fcb5-44fe-ac83-02906bd75280",
+      "engineSeconds": 54.574,
+      "outputHash": "b018e6092851fd1f2f662bdd366985b53529fedbbbd90d7c8329f47071421ce2",
+      "modelFrames": 81,
+      "successfulSageCalls": 160
+    },
+    {
+      "index": 26,
+      "promptId": "d09c9cd7-108f-4f8e-896b-94f99b1fbd5b",
+      "engineSeconds": 50.691,
+      "outputHash": "0e15e8e4859a77f4b2fc6c637bc9a372d369d3a34bee40e003e6d25568fbea1e",
+      "modelFrames": 81,
+      "successfulSageCalls": 160
+    },
+    {
+      "index": 27,
+      "promptId": "bc4912db-140f-4e53-a6b0-128901d0eca1",
+      "engineSeconds": 51.342,
+      "outputHash": "294d8f08444be6f3d8eae5b471ac6fbcc4d7cd8d926848013c9c6f5dbac65632",
+      "modelFrames": 81,
+      "successfulSageCalls": 160
+    },
+    {
+      "index": 28,
+      "promptId": "172a87f6-25c2-48c3-8521-16f288a0ae4b",
+      "engineSeconds": 37.194,
+      "outputHash": "1b55a5b5990642e54699c74a29aa2761d7116cef0eae2cc711552379bd04d0e1",
+      "modelFrames": 81,
+      "successfulSageCalls": 160
+    },
+    {
+      "index": 29,
+      "promptId": "7b530bb1-5a84-4653-9453-973f680bc492",
+      "engineSeconds": 55.495,
+      "outputHash": "63728eb20477d7e645943f0168f7ec9a451743ec5a8c2410e52bbfd412184cef",
+      "modelFrames": 81,
+      "successfulSageCalls": 160
+    },
+    {
+      "index": 30,
+      "promptId": "cd8a01fb-9398-4b67-bebb-89ca521bf560",
+      "engineSeconds": 50.409,
+      "outputHash": "2fc271fd7570a6a80ca61fd85fe4801f4a9b10a490e1898bdf6f3a692bf8840c",
+      "modelFrames": 81,
+      "successfulSageCalls": 160
+    },
+    {
+      "index": 31,
+      "promptId": "a19cf2bb-9793-484b-9d44-7ec3495fb9db",
+      "engineSeconds": 37.367,
+      "outputHash": "d25aab9b53f754a6727760a6cab3602fc6906d3a3c5310495a95e58e868774c3",
+      "modelFrames": 81,
+      "successfulSageCalls": 160
+    },
+    {
+      "index": 32,
+      "promptId": "b90b7e4e-d384-48da-945e-cc6742d38276",
+      "engineSeconds": 53.581,
+      "outputHash": "28a0c7a69828e07f4a387858513eaf0d8416dc4162affffaf6c39530cd1d0579",
+      "modelFrames": 81,
+      "successfulSageCalls": 160
+    },
+    {
+      "index": 33,
+      "promptId": "9e104f0b-f912-4b4f-96a1-34d69df511e4",
+      "engineSeconds": 37.012,
+      "outputHash": "78272f909cdfe9d72a7120cbaefa6df7b3ea1ea515b917d3d284544e3566c442",
+      "modelFrames": 81,
+      "successfulSageCalls": 160
+    },
+    {
+      "index": 34,
+      "promptId": "64b2ac29-1547-4b74-a4e2-55965297f8f7",
+      "engineSeconds": 54.69,
+      "outputHash": "9d729446e15954630f967b612127a3fe55626032ff79ce8d23cef624e9ef58cc",
+      "modelFrames": 81,
+      "successfulSageCalls": 160
+    },
+    {
+      "index": 35,
+      "promptId": "9723f7ca-89d6-4605-854c-a74dc4b08f53",
+      "engineSeconds": 50.541,
+      "outputHash": "d3b4b29e47b6eff764f6a5135a48a568d91131a2f364526ead3164f413615307",
+      "modelFrames": 81,
+      "successfulSageCalls": 160
+    },
+    {
+      "index": 36,
+      "promptId": "d1d6d292-af5b-497e-9185-701a5d7ee56a",
+      "engineSeconds": 37.947,
+      "outputHash": "13a54eb9d4acd74e5bb503d9cbe3f2c6596c2aa33694f96b92e113d673604fde",
+      "modelFrames": 81,
+      "successfulSageCalls": 160
+    },
+    {
+      "index": 37,
+      "promptId": "a0e0c787-1fcf-4834-92ca-6862db62dbe8",
+      "engineSeconds": 52.444,
+      "outputHash": "3235c73c11f5c58e48360271828271b4167caab606c57ca9a0c29725a84c5c44",
+      "modelFrames": 81,
+      "successfulSageCalls": 160
+    },
+    {
+      "index": 38,
+      "promptId": "61dc72ea-b6dc-4575-b7a7-be04834bbd71",
+      "engineSeconds": 37.011,
+      "outputHash": "9ab039e677b31b8d6fbbc85476a6a2f11942e0131b8b3c9040f98f2b3612989b",
+      "modelFrames": 81,
+      "successfulSageCalls": 160
+    },
+    {
+      "index": 39,
+      "promptId": "34a67622-a1a8-4a6b-9253-e2cf03ed671d",
+      "engineSeconds": 52.33,
+      "outputHash": "b8737338d2966252831ad6a98a07e17cbd8e4f4df8db4f5e068165292e5f5041",
+      "modelFrames": 81,
+      "successfulSageCalls": 160
+    },
+    {
+      "index": 40,
+      "promptId": "44676650-1c6e-4ff1-91b8-40f6b5fd794c",
+      "engineSeconds": 50.378,
+      "outputHash": "6bfe0c4142c291699eb06bbd3b45c36211c5b469eee6523da4087ca23a417f9d",
+      "modelFrames": 81,
+      "successfulSageCalls": 160
+    },
+    {
+      "index": 41,
+      "promptId": "6c54690e-d682-4fe1-971e-5927eb3c2081",
+      "engineSeconds": 55.353,
+      "outputHash": "a42211edd767f2233ad2f910e5a3593267bab4f5c2d027c6bec076e24e651f7f",
+      "modelFrames": 81,
+      "successfulSageCalls": 160
+    },
+    {
+      "index": 42,
+      "promptId": "cbfcbf45-1382-457e-a2bc-c7a029c4e72e",
+      "engineSeconds": 50.334,
+      "outputHash": "9b8520453cd9f95659799ff592151ddd15c9cbf078170afa88f3dfb523171e50",
+      "modelFrames": 81,
+      "successfulSageCalls": 160
+    },
+    {
+      "index": 43,
+      "promptId": "f7a60cbd-112b-4b99-8673-50babdec41b9",
+      "engineSeconds": 40.862,
+      "outputHash": "56339bdf5e0f795dd624514586c6715bc6ab1b318e88de06aca6db21d3de3ecc",
+      "modelFrames": 81,
+      "successfulSageCalls": 160
+    },
+    {
+      "index": 44,
+      "promptId": "ff106017-5d07-4e3f-aee3-92b6b523d67d",
+      "engineSeconds": 52.222,
+      "outputHash": "5b77955e02bd0b719036a8d348e4bf37f6fb2feff140d86c313ca2fffed5ae5e",
+      "modelFrames": 81,
+      "successfulSageCalls": 160
+    },
+    {
+      "index": 45,
+      "promptId": "50d82fe3-5473-48cc-ac00-bd687a7ea925",
+      "engineSeconds": 36.892,
+      "outputHash": "97729177226abac4b79fcaa4a5ff84d3b473bad3f42f11dd41e7821ad4c19c95",
+      "modelFrames": 81,
+      "successfulSageCalls": 160
+    },
+    {
+      "index": 46,
+      "promptId": "802dc20d-f17d-4080-8329-640b0fd4a78d",
+      "engineSeconds": 33.62,
+      "outputHash": "131d78e18a8c9679310e6134c3919ce6710112bafe36d429049a6fe846d5dd7a",
+      "modelFrames": 73,
+      "successfulSageCalls": 160
+    }
+  ],
+  "automaticQualityApproval": false,
+  "humanLongVideoReview": "passed",
+  "limitations": [
+    "Single cold-model 120s trial; OS/file cache can be warm",
+    "Voice synthesis excluded and separately recorded; all video preparation/composition/checks included",
+    "Current two-shot cucumber/eggplant case only; warm-model repeat and long-video human quality review pending"
+  ],
+  "humanQualityReview": {
+    "source": "explicit human reply",
+    "questionCallId": "call_dd72f87fbff44313b21e6298ae10f08d",
+    "answer": "长片效果通过，继续稳定性验证",
+    "acceptedCandidate": "long120-roi-cold-v1",
+    "artifactSha256": "6b0fc91cc945bf4d47dbed09eaf0b537fe49265a4ac6d89422324c303ee5cc7d",
+    "qualityAccepted": true,
+    "scope": "this complete two-minute clip",
+    "acceptsRepeatedStability": false,
+    "changesFormalProjectCheckpoint": false
+  }
+}

@@ -1,0 +1,44 @@
+{
+  "scope": "diagnostic repeat, not a paired causal speed benchmark",
+  "runId": "b3-text-diagnostic",
+  "completed": true,
+  "wallSeconds": 114.214842699992,
+  "segments": [
+    {
+      "index": 0,
+      "engineSeconds": 59.254,
+      "textNodeFrameworkCached": false,
+      "cache": {
+        "deepCopyHostWallSeconds": 0.0007578000077046454,
+        "enabled": true,
+        "encoderCallHostWallSeconds": 4.753581900004065,
+        "hits": 0,
+        "installed": true,
+        "misses": 1,
+        "modelHashWallSeconds": 7.371421099989675,
+        "timingScope": "host wall time, no extra CUDA synchronization; not isolated GPU kernel timing"
+      },
+      "decodedVideoEqual": true,
+      "decodedAudioEqual": true
+    },
+    {
+      "index": 2,
+      "engineSeconds": 38.875,
+      "textNodeFrameworkCached": true,
+      "cache": {
+        "deepCopyHostWallSeconds": 0.0007578000077046454,
+        "enabled": true,
+        "encoderCallHostWallSeconds": 4.753581900004065,
+        "hits": 0,
+        "installed": true,
+        "misses": 1,
+        "modelHashWallSeconds": 7.371421099989675,
+        "timingScope": "host wall time, no extra CUDA synchronization; not isolated GPU kernel timing"
+      },
+      "decodedVideoEqual": true,
+      "decodedAudioEqual": true
+    }
+  ],
+  "conclusion": "First-window slow outlier not reproduced. Hashing 7.37s and copy under1ms do not explain previous128s window; host pressure remains a confound. Second window reused framework text node, zero custom cache hits; cannot attribute speed to custom cache.",
+  "decision": "Keep new cache opt-in, not default; retain47m35s measured long-video baseline"
+}

@@ -1,0 +1,72 @@
+{
+  "scope": "single paired profiled screening; not final speed or quality acceptance",
+  "runs": {
+    "a0-clean": {
+      "variant": "baseline",
+      "segments": [
+        {
+          "index": 0,
+          "engineSeconds": 145.152,
+          "promptId": "9ec9c801-8375-4e6a-ba44-257fd280e4d5",
+          "outputSha256": "9ab084b7489aac71b9f1f9cc0ed23a03f316fff6f74d9d0bfb70096a0f14fcc8"
+        },
+        {
+          "index": 2,
+          "engineSeconds": 137.607,
+          "promptId": "6cc368de-0e3f-4f43-a392-724b3f6d5b89",
+          "outputSha256": "c92d4ec6490ff77f342208036b8727c814ec5599eb6e217457d067f7594c580a"
+        }
+      ],
+      "sumEngineSeconds": 282.759,
+      "minimumSampledFreeMiB": 3325.0,
+      "engineStoppedOnExit": true
+    },
+    "a1-clean": {
+      "variant": "async",
+      "segments": [
+        {
+          "index": 0,
+          "engineSeconds": 130.241,
+          "promptId": "66ecdf7a-561f-4bfd-b3f9-cad2b61d13e3",
+          "outputSha256": "b145ed10cdf7a9307cadb6aa3f77d340bac2236881dcce53e55b7ffcc45d0cbc"
+        },
+        {
+          "index": 2,
+          "engineSeconds": 129.885,
+          "promptId": "2e041102-4dbb-433e-bc9f-c45c90b7ace5",
+          "outputSha256": "8c5567c2e4f1725658aa20d7b88a7e036d253294f59613f5b59a9d58adf4b7e3"
+        }
+      ],
+      "sumEngineSeconds": 260.126,
+      "minimumSampledFreeMiB": 3590.0,
+      "engineStoppedOnExit": true
+    },
+    "a2-clean": {
+      "variant": "async-swap36",
+      "segments": [
+        {
+          "index": 0,
+          "engineSeconds": 136.252,
+          "promptId": "a02ba13e-c8e4-45e2-ae5d-dc9b20379415",
+          "outputSha256": "f44133efdebe22f92e5a871028e03d0dc3e61ab0cfaa8ebd96f74381634a38cc"
+        },
+        {
+          "index": 2,
+          "engineSeconds": 129.412,
+          "promptId": "e41178a4-b766-431f-b64f-4f51cce4ea4a",
+          "outputSha256": "676c2f5700650bc247f95a2aecd6f5e3e63863ea134d29d86729ae246fd2ca92"
+        }
+      ],
+      "sumEngineSeconds": 265.664,
+      "minimumSampledFreeMiB": 3570.0,
+      "engineStoppedOnExit": true
+    }
+  },
+  "decisions": {
+    "disableSynchronousDebug": "retain_as_candidate_approximately_8_percent_time_reduction",
+    "swap36": "not_selected_no_speed_benefit",
+    "twoMinuteUnderOneHour": "not_achieved_or_tested",
+    "decodedPixelsAndAudioEqualInSelectedWindows": true,
+    "backgroundConfoundedRunsExcluded": true
+  }
+}

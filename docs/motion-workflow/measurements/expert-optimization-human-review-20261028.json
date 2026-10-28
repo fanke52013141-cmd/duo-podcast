@@ -1,0 +1,51 @@
+{
+  "source": "explicit human reply",
+  "questionCallId": "call_198b2274b43d4e9bbf4c525abe5413d9",
+  "answer": "效果可以，保留此候选继续提速",
+  "acceptedCandidate": "a5-sage-full",
+  "scope": [
+    "lip synchronization",
+    "lip stability",
+    "face integration"
+  ],
+  "artifacts": {
+    "专家提速-SDPA-完整对照.mp4": "cc854bd332c64a1131c76bc65baf6d5d4b55c3515ac8b13dd8f74cb696084fef",
+    "专家提速-SageAttention-完整验证.mp4": "9e8794f96979212bb5651a2af853c8cf4583ec0aec74e5ae6a9bb32584f1b0d5",
+    "专家提速-SDPA与Sage-并排对照.mp4": "d8b4fe6e2e65141eb0d6976902390b956b4cc4ba9de6d8079bb3da9832835fa1"
+  },
+  "acceptsROI": false,
+  "acceptsTwoMinutePerformance": false,
+  "changesFormalProjectCheckpoint": false,
+  "additionalReviews": [
+    {
+      "source": "explicit human reply",
+      "questionCallId": "call_bd2055a480a6467d8b90e76a67b7423d",
+      "answer": "效果可以，采用区域候选继续长片测试",
+      "acceptedCandidate": "c1-roi-full",
+      "scope": [
+        "lip synchronization",
+        "lip stability",
+        "face feather integration",
+        "speaker handover"
+      ],
+      "artifacts": {
+        "专家提速-脸部区域-完整验证.mp4": "34687779a3a447909907b000b7e31dbb321da11b680c7279ba4b126f13794a07",
+        "专家提速-全画面与脸部区域-完整对照.mp4": "e10d0213d3a2aa93147a4089ad074f23bd4742cfe2d350a4f06faef94e9cd2f8"
+      },
+      "acceptsLongVideoQuality": false,
+      "acceptsTwoMinutePerformance": false,
+      "changesFormalProjectCheckpoint": false
+    },
+    {
+      "source": "explicit human reply",
+      "questionCallId": "call_dd72f87fbff44313b21e6298ae10f08d",
+      "answer": "长片效果通过，继续稳定性验证",
+      "acceptedCandidate": "long120-roi-cold-v1",
+      "artifactSha256": "6b0fc91cc945bf4d47dbed09eaf0b537fe49265a4ac6d89422324c303ee5cc7d",
+      "qualityAccepted": true,
+      "scope": "this complete two-minute clip",
+      "acceptsRepeatedStability": false,
+      "changesFormalProjectCheckpoint": false
+    }
+  ]
+}

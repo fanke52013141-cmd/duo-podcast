@@ -1,4 +1,4 @@
-"""Unrouted experimental expert provider with durable, non-resampling task state."""
+"""Opt-in experimental expert provider with durable, non-resampling task state."""
 from __future__ import annotations
 
 import asyncio
@@ -73,20 +73,26 @@ def _pcm_hash(path, sample_rate, sample_count):
 class ExpertMotionVideoProvider:
     """Requires server-owned job context; never submits an ambiguous task twice.
 
-    This adapter is deliberately not selected by current project APIs. A real
-    GPU acceptance gate is still required before enabling expert motion packs.
+    The expert-preview API selects this adapter only through explicit server
+    configuration. The Sage/ROI profile requires separate runtime identity and
+    successful native-call evidence; media still requires human quality review.
     """
     capabilities = {'provider': 'expert-motion-reference', 'simulated': False,
                     'experimental': True, 'productionReady': False, 'motionPackExpert': True}
 
     def __init__(self, artifacts, motion_store, *, base_url, input_dir, fast_runtime_root,
                  job_manager=None, transport=None, poll_interval=3.0, timeout_sec=3600,
-                 engine_preparer=None, engine_fingerprint=None):
+                 engine_preparer=None, engine_fingerprint=None, profile='expert-full-frame-reference', sage_tree_hash=None):
         self.artifacts, self.motion_store, self.manager = artifacts, motion_store, job_manager
         self.base_url, self.input_dir = base_url, Path(input_dir).resolve()
         self.runtime = Path(fast_runtime_root).resolve()
         self.transport, self.poll_interval, self.timeout_sec = transport, poll_interval, timeout_sec
         self.engine_preparer = engine_preparer
+        if profile not in {'expert-full-frame-reference','expert-sage-roi-v1'}:
+            raise ValueError('Unsupported expert execution profile')
+        if profile=='expert-sage-roi-v1' and (not isinstance(sage_tree_hash,str) or not re.fullmatch(r'[a-f0-9]{64}',sage_tree_hash)):
+            raise ValueError('Sage ROI requires the verified isolated package tree hash')
+        self.profile,self.sage_tree_hash=profile,sage_tree_hash
         if engine_fingerprint is not None and (not isinstance(engine_fingerprint, str)
                 or not re.fullmatch(r'[a-f0-9]{64}', engine_fingerprint)):
             raise ValueError('Expert engine fingerprint must be a server-verified SHA256')
@@ -96,7 +102,16 @@ class ExpertMotionVideoProvider:
     def _source_code_identity(self):
         files = [Path(__file__), Path(__file__).with_name('expert_motion_video.py'),
                  Path(__file__).parents[1] / 'services/expert_motion.py',
+                 Path(__file__).parents[1] / 'services/expert_selection_export.py',
+                 Path(__file__).parents[1] / 'services/expert_continuation.py',
                  *(self.runtime / name for name in ('prepare_expert_motion.py', 'motion_worker.py', 'motion_audio_cache.py'))]
+        if self.profile=='expert-sage-roi-v1':
+            canonical=Path(__file__).parents[1]/'services/expert_roi_geometry.py'
+            deployed=self.runtime/'expert_roi_geometry.py'
+            if not deployed.is_file() or self.artifacts._hash_file(str(canonical))!=self.artifacts._hash_file(str(deployed)):
+                raise ValueError('Deployed ROI geometry differs from the verified recipe')
+            files.extend([canonical,deployed,self.runtime/'expert_roi_media.py'])
+            files.append(Path(__file__).parents[1]/'services/expert_roi_composition.py')
         if any(not path.is_file() for path in files):
             raise ValueError('Expert preparation/runtime code is not installed completely')
         packages = self.runtime / 'venv/Lib/site-packages'
@@ -126,7 +141,7 @@ class ExpertMotionVideoProvider:
         job = self.manager.get(job_id)
         snapshot = {key: value for key, value in req.items() if key != 'jobId'}
         project = snapshot.get('projectSnapshot', {})
-        if (job is None or job.kind not in {'renders', 'sample.generate'} or job.owner_type != 'project'
+        if (job is None or job.kind not in {'renders', 'sample.generate', 'expert.generate'} or job.owner_type != 'project'
                 or job.project_id != project.get('id') or job.input_snapshot != snapshot
                 or not project.get('motionPack')):
             raise ValueError('Expert job does not own this frozen project/motion snapshot')
@@ -264,7 +279,7 @@ class ExpertMotionVideoProvider:
         if result.get('modelInferencePerformed') is not False or result.get('automaticAdoption') is not False:
             raise ValueError('Expert preparation cannot declare inferred/adopted model media')
         for item in result.get('preparedSegments', []):
-            for entry in item.get('files', {}).values():
+            for entry in [*item.get('files', {}).values(), *([item['fullReference']] if item.get('fullReference') else [])]:
                 path = Path(entry.get('path', '')).resolve()
                 if (not path.is_relative_to(root.resolve()) or not path.is_file()
                         or self.artifacts._hash_file(str(path)) != entry.get('fileHash')):
@@ -287,13 +302,39 @@ class ExpertMotionVideoProvider:
         if req.get('reuseMotionArtifactId') or req.get('redoFromSec') is not None:
             raise ValueError('Expert motion uses its own verified segment reuse; legacy redo inputs are unsupported')
         frozen_engine = self._frozen_engine(job)
+        if req.get('expertSelection') and req.get('expertEngineFingerprint') != frozen_engine:
+            raise ValueError('Expert engine changed after submission; refusing inference')
         master = self._artifact(project.audio_timeline.master_audio_asset_id, {'audio', 'mixed'})
         rate, samples, turns, pcm_hashes = self._write_tracks(project, req, master, None)
+        if req.get('expertSelection'):
+            from ..services.expert_preview import timeline_turns
+            turns = timeline_turns(req['projectSnapshot'])
         assets = await asyncio.to_thread(build_motion_worker_inputs, self.motion_store, self.artifacts,
             pin.id, pin.version, project.shot_style, turns, sample_rate=rate, total_samples=samples,
             seed=str(req.get('seed', 1)))
         edits = camera_edit_plan(assets, turns, rate)
         expert = build_expert_motion_plan(assets, edits, sample_rate=rate, total_samples=samples, seed=req.get('seed', 1))
+        roi_crop=None
+        if self.profile=='expert-sage-roi-v1':
+            from ..services.expert_roi_geometry import joint_crop
+            if project.shot_style!='twoShot' or not req.get('expertSelection'):
+                raise ValueError('Qualified Sage ROI profile supports two-shot frozen selections only')
+            if req.get('expertProfile')!=self.profile or req.get('sageTreeHash')!=self.sage_tree_hash:
+                raise ValueError('Frozen Sage ROI runtime profile changed')
+            roi_crop=joint_crop(expert['segments'],expert['segments'][0]['geometry']['native'][:2])
+        if req.get('expertSelection'):
+            from ..services.expert_preview import digest, select_windows
+            selection = req['expertSelection']
+            checked = select_windows(expert, turns, turn_ids=selection['selectedTurnIds'],
+                operation=selection['operation'], candidate_token=selection['candidateToken'])
+            if selection['operation']=='continue':
+                from ..services.expert_continuation import validate_continuation
+                validate_continuation(selection,checked['windows'])
+            if (digest(expert) != selection['sourcePlanHash'] or (selection['operation']!='continue' and checked['windows'] != selection['windows'])
+                    or checked['selectedSampleRange'] != selection['selectedSampleRange']
+                    or checked['reviewSampleRange'] != selection.get('reviewSampleRange')):
+                raise ValueError('Frozen expert selection differs from authoritative inputs')
+            expert = {**expert, 'segments': [w['segment'] for w in selection['windows']]}
         template = json.loads(Path(__file__).with_name('multitalk_workflow.json').read_text(encoding='utf-8'))
         helper = self.runtime / 'prepare_expert_motion.py'
         if not helper.is_file():
@@ -302,20 +343,27 @@ class ExpertMotionVideoProvider:
                          for name in ('ffmpeg', 'ffprobe')}
         request_key = content_hash({'implementation': VERSION, 'code': self._source_code_identity(),
             'tools': tool_identity, 'engineFingerprint': frozen_engine,
+            'profile':self.profile,'sageTreeHash':self.sage_tree_hash,'roiCrop':roi_crop,
             'projectId': project.id, 'assets': assets, 'expert': expert,
+            **({'selectionJobId': job.id} if req.get('expertSelection') else {}),
             'pcm': pcm_hashes, 'template': template})
         self._remember(job, request_key)
         folder = (self.artifacts.root / 'video_expert_motion' / request_key).resolve()
         folder.mkdir(parents=True, exist_ok=True)
         if self._write_tracks(project, req, master, folder / 'audio')[-1] != pcm_hashes:
             raise ValueError('Expert master changed during source freezing')
-        payload = {'outputDir': str(folder / 'prepared'), 'motionAssets': assets, 'expertPlan': expert,
+        reuse=req.get('expertSelection',{}).get('reuseWindows',{})
+        chosen=req.get('expertSelection',{}).get('windows',[])
+        reused_dependencies={w['segment']['dependencyHash'] for w in chosen if w['windowId'] in reuse}
+        sampling_expert={**expert,'segments':[s for s in expert['segments'] if s['dependencyHash'] not in reused_dependencies]}
+        payload = {'outputDir': str(folder / 'prepared'), 'motionAssets': assets, 'expertPlan': sampling_expert,
             'master': str(folder / 'audio/master.wav'), 'tracks': {r: str(folder / f'audio/{r}.wav') for r in 'AB'},
             'sampleRate': rate, 'sampleCount': samples, 'cameraEditPlan': edits}
+        if roi_crop:payload['roiCrop']=roi_crop
         if progress: progress('专家模式：准备已采用动作与整数采样音轨')
         prepared = await self._prepare_sources(job, folder, request_key, payload)
         items = {item['segmentDependencyHash']: item for item in prepared['preparedSegments']}
-        if set(items) != {s['dependencyHash'] for s in expert['segments']}:
+        if set(items) != {s['dependencyHash'] for s in sampling_expert['segments']}:
             raise ValueError('Expert CPU preparation omitted or added segments')
         from ..services.fast_runtime import release_all
         await release_all()
@@ -324,8 +372,21 @@ class ExpertMotionVideoProvider:
             engine_context = {}
             for index, segment in enumerate(expert['segments']):
                 self.manager.checkpoint(job)
+                window_id=chosen[index]['windowId'] if chosen else None
+                if window_id in reuse:
+                    saved=reuse[window_id]
+                    core=self._artifact(saved['artifactId'],{'video'})
+                    if self.artifacts._hash_file(str(core))!=saved['fileHash']:
+                        raise ValueError('Adopted core changed after continuation planning')
+                    await self._video(core,segment['outputEndFrame']-segment['outputStartFrame'])
+                    cores.append(core);records.append({'coreHash':saved['fileHash'],'coreArtifactId':saved['artifactId'],'reused':True})
+                    if progress:progress(f'复用已采用片段 {index+1}/{len(expert["segments"])}')
+                    continue
                 if progress: progress(f'专家模式：机位 {segment["cameraId"]}，片段 {index+1}/{len(expert["segments"])}')
                 core, record = await self._segment(client, job, request_key, segment, items[segment['dependencyHash']], folder, template, engine_context)
+                if roi_crop:
+                    from ..services.expert_roi_composition import composite_core
+                    core,record=await composite_core(self,job,segment,items[segment['dependencyHash']],core,record,folder)
                 cores.append(core)
                 records.append(record)
         self.manager.checkpoint(job)
@@ -361,6 +422,12 @@ class ExpertMotionVideoProvider:
         built = build_expert_motion_workflow(template, segment, prepared['inputNames'],
                                              output_prefix=segment['dependencyHash'])
         workflow, trace = built['workflow'], built['controlTrace']
+        if self.profile=='expert-sage-roi-v1':
+            if not prepared.get('roiCrop') or not prepared.get('fullReference'):
+                raise ValueError('Sage ROI requires native crop and full reference evidence')
+            workflow['122']['inputs']['attention_mode']='sageattn'
+            workflow['213']['inputs']['scale_to_length']=prepared['native']['height']
+            trace.update(executionProfile=self.profile,roiCrop=prepared['roiCrop'],spatialResize=False)
         workflow_hash = content_hash(workflow)
         input_hashes = {name: entry['fileHash'] for name, entry in prepared['files'].items()}
         segment_key = content_hash({'requestKey': request_key, 'source': segment,
@@ -378,6 +445,8 @@ class ExpertMotionVideoProvider:
                 raise ValueError('Frozen expert task inputs/workflow differ')
             self._remember(job, request_key, segment_key, record)
             if record.get('state') == 'complete':
+                if self.profile=='expert-sage-roi-v1' and not record.get('sageVerified'):
+                    raise ValueError('Cached Sage execution lacks successful-call evidence')
                 core = directory / 'core.mp4'
                 if self.artifacts._hash_file(str(core)) != record.get('coreHash'):
                     raise ValueError('Completed expert media changed; refusing to regenerate')
@@ -401,6 +470,8 @@ class ExpertMotionVideoProvider:
             self._copy_inputs(prepared)
             self.manager.checkpoint(job)
             record = {**expected, 'submissionIntent': True, 'state': 'submitting', 'controlTrace': trace}
+            if self.profile=='expert-sage-roi-v1':
+                record['sageCallsBefore']=(await self._sage_identity(client))['calls']
             try:
                 _atomic_json(record_path, record, exclusive=True)
             except FileExistsError as exc:
@@ -438,6 +509,11 @@ class ExpertMotionVideoProvider:
         raise TimeoutError('EXPERT_PENDING: original external task retained; resume by its recorded ID')
 
     async def _collect(self, client, job, request_key, segment_key, segment, history, directory, record_path, record):
+        if self.profile=='expert-sage-roi-v1':
+            observed=await self._sage_identity(client)
+            if observed['calls']<=record.get('sageCallsBefore',observed['calls']):
+                raise ValueError('No successful Sage native calls verified for this task')
+            record.update(sageVerified=True,sageCallsAfter=observed['calls'],sageTreeHash=self.sage_tree_hash)
         raw = directory / 'model.mp4'
         raw_id = 'VID-EXPERT-SEG-' + segment_key[:32]
         entry = self.artifacts.by_id(raw_id)
@@ -505,7 +581,18 @@ class ExpertMotionVideoProvider:
         self._remember(job, request_key, segment_key, record)
         return core, {**record, 'cacheHit': False}
 
+    async def _sage_identity(self,client):
+        response=await client.get('/duocast-benchmark/identity')
+        response.raise_for_status()
+        addon=response.json().get('attentionAddon') or {}
+        if addon.get('treeHash')!=self.sage_tree_hash or type(addon.get('calls')) is not int:
+            raise ValueError('Active Sage extension identity is missing or changed; no fallback permitted')
+        return addon
+
     async def _finish(self, job, req, request_key, folder, cores, records, expert, samples, rate, pcm_hashes):
+        if req.get('expertSelection'):
+            from ..services.expert_selection_export import export_selection
+            return await export_selection(self, job, req, request_key, folder, cores, records, expert, samples, rate, pcm_hashes)
         if _pcm_hash(folder / 'audio/master.wav', rate, samples) != pcm_hashes['master']:
             raise ValueError('Expert master PCM changed before final export')
         resolution, fps = req.get('resolution', '854x480'), req.get('fps', 25)

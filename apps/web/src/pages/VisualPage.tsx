@@ -19,6 +19,7 @@ import { useProjectStore, useServiceStore } from '../stores';
 import { RenderSettings } from '../components/RenderSettings';
 import { RegionEditor } from '../components/RegionEditor';
 import { getJson } from '../lib/api';
+import { ExpertPreviewPlanner } from '../components/ExpertPreviewPlanner';
 
 const ASPECTS: { id: 'landscape' | 'portrait'; label: string }[] = [
   { id: 'landscape', label: '横屏 16:9' },
@@ -70,8 +71,16 @@ export function VisualPage({ projectId }: { projectId: string }) {
   const pinnedReady=useMotionReadiness(proj?.motionPack,proj?.shotStyle);
   const hasMotion=!!proj?.motionPack;
   const [checks,setChecks]=useState<string[]>([]);
-  const [serverRange,setServerRange]=useState<{start:number;end:number;reason:string}|null>(null);
-  useEffect(()=>{void getJson<typeof serverRange>(`/projects/${projectId}/visual/sample-plan`).then(setServerRange).catch(()=>setServerRange(null));},[proj?.audioTimeline, projectId]);
+  const rangeInputKey=JSON.stringify([projectId,proj?.currentDraftRevision,proj?.audioTimeline,proj?.scriptRevisions]);
+  const [serverRange,setServerRange]=useState<{start:number;end:number;reason:string;inputKey:string}|null>(null);
+  useEffect(()=>{
+    let active=true;
+    setServerRange(null);
+    void getJson<{start:number;end:number;reason:string}|null>(`/projects/${projectId}/visual/sample-plan`)
+      .then(range=>{if(active)setServerRange(range?{...range,inputKey:rangeInputKey}:null);})
+      .catch(()=>{if(active)setServerRange(null);});
+    return()=>{active=false;};
+  },[rangeInputKey,projectId]);
   const isFast = proj?.generationMode === 'fast';
   useEffect(() => { if (isFast) setVisualMode('twoShot'); }, [isFast]);
   const [aspect, setAspect] = useState<'landscape' | 'portrait'>('landscape');
@@ -172,6 +181,8 @@ export function VisualPage({ projectId }: { projectId: string }) {
         ? '样片生成中…'
         : sampleFailJob
           ? `样片生成失败：${sampleFailJob.error ?? '未知错误'}`
+          : sampleDone && currentSample?.result?.simulated === false && checks.length < 4
+            ? `样片已生成，请观看并完成 ${4-checks.length} 项检查后采用`
           : '需先生成样片';
 
   const handleGenerate = () => {
@@ -195,9 +206,9 @@ export function VisualPage({ projectId }: { projectId: string }) {
       visualVariantId: hasMotion?undefined:selected?.id,
       cameraMode: visualMode === 'overShoulder' ? 'speaker' : preset === '稳定同框' ? 'twoShot' : 'speaker',
       performanceMode: proj.performanceMode ?? 'legacy',
-      rangeStartSec: serverRange?.start ?? sampleRange.start,
+      rangeStartSec: sampleRange.start,
       // 不能四舍五入：区间末尾常等于音轨总长，向上取整会超出服务端 end<=total+0.001 容差（实测 422）
-      rangeEndSec: serverRange?.end ?? sampleRange.end,
+      rangeEndSec: sampleRange.end,
       aspect,
     }, { onError: (e) => setError((e as Error).message) });
   };
@@ -245,31 +256,21 @@ export function VisualPage({ projectId }: { projectId: string }) {
     return out;
   }, [selected]);
 
-  // 样片区间：自动选第一个含 A→B→A 的连续区间（01 §6.4）
+  // Display, eligibility and submission share the server's range; stale replies cannot replace a newer plan.
   const sampleRange = useMemo(() => {
     const tl = proj?.audioTimeline;
-    const turns = revision?.turns ?? [];
-    if (!tl || !turns.length) return null;
-    for (let i = 0; i + 2 < turns.length; i += 1) {
-      if (turns[i].speaker === 'A' && turns[i + 1].speaker === 'B' && turns[i + 2].speaker === 'A') {
-        const startUnit = tl.units.find((u) => u.turnId === turns[i].id);
-        const endUnit = [...tl.units].reverse().find((u) => u.turnId === turns[i + 2].id);
-        if (startUnit && endUnit) {
-          const s0 = (tl.unitOffsets[startUnit.id] ?? 0) / tl.sampleRate;
-          const s1 = ((tl.unitOffsets[endUnit.id] ?? 0) + endUnit.sampleCount) / tl.sampleRate;
-          return { start: s0, end: s1, label: `${formatTimecode(s0, { padMinutes: true })} – ${formatTimecode(s1, { padMinutes: true })} · A→B→A` };
-        }
-      }
-    }
-    return null;
-  }, [proj?.audioTimeline, revision]);
+    if (!tl || tl.revisionId!==proj?.currentDraftRevision || !serverRange || serverRange.inputKey!==rangeInputKey
+        || !Number.isFinite(serverRange.start) || !Number.isFinite(serverRange.end)
+        || serverRange.start<0 || serverRange.start>=serverRange.end || serverRange.end>tl.sampleCount/tl.sampleRate+0.001) return null;
+    return {...serverRange,label:`${formatTimecode(serverRange.start,{padMinutes:true})} – ${formatTimecode(serverRange.end,{padMinutes:true})} · ${serverRange.reason}`};
+  }, [proj?.audioTimeline,proj?.currentDraftRevision,serverRange,rangeInputKey]);
 
   // 样片区间的真实前提：配音已确认 + 时间轨能选出 A→B→A 连续区间。
   const rangeHint = sampleRange
     ? sampleRange.label
     : !voiceApproved
       ? '待配音确认后自动选取'
-      : '未找到 A→B→A 连续区间（双方交替发言需 ≥3 条话轮），请回阶段②调整脚本';
+      : '样片区间尚未就绪，请检查当前配音版本和服务连接';
 
   const goZone = (k: 'compose' | 'shot' | 'sample') => {
     setTab(k);
@@ -592,9 +593,10 @@ export function VisualPage({ projectId }: { projectId: string }) {
             )}
           </section>
 
+          {proj && !isFast && <ExpertPreviewPlanner key={projectId} project={proj} />}
           {/* 样片区（01 §6.4） */}
           <section className="hf-zone" ref={(el) => { zoneRefs.current.sample = el; }}>
-            <div className="hf-zone-t">样片 <span className="wu-caption">自动选双方都有发言、含 A→B→A 的区间{visualMode === 'overShoulder' ? '；样片仅驱动当前发言者' : ''}</span></div>
+            <div className="hf-zone-t">样片 <span className="wu-caption">优先选双方交替发言的区间；不足三轮时取开头代表区间{visualMode === 'overShoulder' ? '；样片仅驱动当前发言者' : ''}</span></div>
             <div className="hf-sample-head">
               <span className="lb">区间</span>
               <span
@@ -605,7 +607,7 @@ export function VisualPage({ projectId }: { projectId: string }) {
                 variant="brand" size="sm" icon="sparkle"
                 busy={genSample.isPending || !!sampleJob}
                 disabled={!sampleRange || genSample.isPending || !!sampleJob || (hasMotion?pinnedReady.data?.ready!==true:(visualMode === 'overShoulder' && !otsReady))}
-                title={sampleRange ? undefined : '请先确认配音并保证话轮可组成 A→B→A 区间'}
+                title={sampleRange ? undefined : '请先准备当前版本配音，并等待样片区间加载完成'}
                 onClick={handleGenSample}
               >生成样片</Button>
               {sampleDone && <Badge tone="success" icon="check">样片生成成功</Badge>}

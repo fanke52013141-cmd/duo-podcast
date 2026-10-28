@@ -37,7 +37,7 @@ def recover_on_startup(jobs_root: Path) -> list[Job]:
         if job.status in (JobStatus.RUNNING, JobStatus.RECOVERING, JobStatus.PAUSE_REQUESTED,
                           JobStatus.CANCEL_REQUESTED):
             # 无定向查询能力的最小实现：标 unknown，避免误判重跑（02 §7.2 纪律）
-            safe_video = (job.kind in ("renders", "sample.generate") and job.input_snapshot.get("resumableVideo")
+            safe_video = (job.kind in ("renders", "sample.generate", "expert.generate") and job.input_snapshot.get("resumableVideo")
                           and job.status in (JobStatus.RUNNING, JobStatus.RECOVERING))
             safe_motion = (job.kind == "motion.prepare" and job.owner_type == "motionPack"
                            and job.input_snapshot.get("resumableMotionPreparation") is True

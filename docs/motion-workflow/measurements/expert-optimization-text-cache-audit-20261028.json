@@ -1,0 +1,25 @@
+{
+  "runId": "long120-roi-cold-v1",
+  "sourceStateSha256": "514da3f83e97a5e938e1f40e4503ee059e97f0a38adca4cb0d860708f54f7c19",
+  "identicalTextNodeConfigurations": true,
+  "groups": {
+    "textNodeCached": {
+      "count": 14,
+      "medianSeconds": 37.0115,
+      "minSeconds": 33.62,
+      "maxSeconds": 40.862,
+      "sumSeconds": 514.172
+    },
+    "textNodeReexecuted": {
+      "count": 33,
+      "medianSeconds": 52.222,
+      "minSeconds": 49.716,
+      "maxSeconds": 189.576,
+      "sumSeconds": 2060.863
+    }
+  },
+  "observedT5LoadCount": 33,
+  "interpretation": "Association only: window content, memory pressure and other node caches also vary. No causal speedup claim.",
+  "nextExperiment": "Process-local or fully model/source/precision-bound text condition cache; keep fresh sampling and compare exact decoded outputs.",
+  "qualityAccepted": false
+}

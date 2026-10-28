@@ -15,9 +15,13 @@ ROOT = Path(os.environ.get("DUOCAST_ENGINE_HOME", str(Path(__file__).resolve().p
 COMFY = Path(os.environ['DUOCAST_COMFY_ROOT'])
 # Configure before importing torch; do not change the shared environment.
 os.environ['PYTHONIOENCODING'] = 'utf-8'
-os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
+from benchmark_probe import launch_options
+engine_port, cuda_blocking = launch_options(os.environ)
+os.environ['CUDA_LAUNCH_BLOCKING'] = cuda_blocking
 os.environ['PYTORCH_CUDA_ALLOC_CONF'] = 'backend:native'
 import torch
+from attention_addon import load_package
+load_package(os.environ)
 
 original_to = torch.nn.Module.to
 
@@ -51,7 +55,7 @@ torch.nn.Module.to = guarded_to
 print('DuoCast immutable CPU block weight guard enabled', flush=True)
 os.chdir(COMFY)
 sys.path.insert(0, str(COMFY))
-sys.argv = ['main.py', '--listen', '127.0.0.1', '--port', '8191',
+sys.argv = ['main.py', '--listen', '127.0.0.1', '--port', str(engine_port),
     '--input-directory', str(ROOT/'input'), '--output-directory', str(ROOT/'output'),
     '--temp-directory', str(ROOT/'temp'), '--user-directory', str(ROOT/'user'),
     '--database-url', 'sqlite:///' + (ROOT/'user/comfyui_isolated.db').as_posix(),
@@ -97,4 +101,7 @@ def owned_tensor_load(ckpt, safe_load=False, device=None, return_metadata=False)
     return (result, header.get('__metadata__', {})) if return_metadata else result
 
 comfy.utils.load_torch_file = owned_tensor_load
+if os.environ.get('DUOCAST_BENCH_IDENTITY'):
+    from benchmark_probe import install_probe
+    install_probe(ROOT, torch)
 runpy.run_path(str(COMFY/'main.py'), run_name='__main__')

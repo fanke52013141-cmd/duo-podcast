@@ -1,0 +1,92 @@
+{
+  "scope": "single paired ROI windows with opt-in process-local text cache; not a cold speed improvement",
+  "comparison": {
+    "baseline": "b3-text-control",
+    "candidate": "b3-text-candidate",
+    "observedExecutionSpeedup": 0.6240480961923848,
+    "pairedSegments": [
+      {
+        "index": 0,
+        "decodedVideoEqual": true,
+        "decodedAudioEqual": true,
+        "speedup": 0.4320278557160955
+      },
+      {
+        "index": 2,
+        "decodedVideoEqual": true,
+        "decodedAudioEqual": true,
+        "speedup": 1.1921042950427665
+      }
+    ],
+    "statisticalConclusion": false,
+    "qualityAccepted": false,
+    "candidateSampledMemoryMarginPassed": true,
+    "limitations": [
+      "Single paired screening run, not repeated benchmark",
+      "Pixel equality applies only to these exact test windows",
+      "Profiling result does not establish unprofiled or two-minute speed"
+    ]
+  },
+  "runs": {
+    "b3-text-control": {
+      "completed": true,
+      "wallSeconds": 123.6778001000057,
+      "engineStoppedOnExit": true,
+      "segments": [
+        {
+          "index": 0,
+          "engineSeconds": 55.586,
+          "textCache": {
+            "enabled": false,
+            "hits": 0,
+            "installed": false,
+            "misses": 0
+          },
+          "outputHash": "99cffad2a1d4cecded2cbe57b51b775f7ae18556c1d9a36dc1fb1b5cb6f5fa67"
+        },
+        {
+          "index": 2,
+          "engineSeconds": 51.847,
+          "textCache": {
+            "enabled": false,
+            "hits": 0,
+            "installed": false,
+            "misses": 0
+          },
+          "outputHash": "a3d933e98e8ed8ef84bbc573b2515bd8e13bd62b914ab2b321ae99abce024241"
+        }
+      ]
+    },
+    "b3-text-candidate": {
+      "completed": true,
+      "wallSeconds": 188.08096310001565,
+      "engineStoppedOnExit": true,
+      "segments": [
+        {
+          "index": 0,
+          "engineSeconds": 128.663,
+          "textCache": {
+            "enabled": true,
+            "hits": 0,
+            "installed": true,
+            "misses": 1
+          },
+          "outputHash": "1f58d049d5411b5353ae797adcd3f39e8d49db04c2a2714688477e228b11ff60"
+        },
+        {
+          "index": 2,
+          "engineSeconds": 43.492,
+          "textCache": {
+            "enabled": true,
+            "hits": 1,
+            "installed": true,
+            "misses": 1
+          },
+          "outputHash": "6275d15faac21390ae8e327cdde142cf309ac823a91dd835c10b916bcad05b95"
+        }
+      ]
+    }
+  },
+  "decision": "Do not enable by default: cache hit improves second window but whole two-window cold trial regresses; investigate hashing/loading/host memory before long trial",
+  "twoMinuteBaselineSeconds": 2854.8754159999953
+}

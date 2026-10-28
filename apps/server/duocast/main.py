@@ -47,10 +47,19 @@ setup_logging()
 def _job_runner(manager: JobManager, store: ProjectStore, artifacts: ArtifactStore,
                 text_provider: MockTextProvider | ToAPIsTextProvider, image_provider: MockImageProvider,
                 tts_provider: TTSProvider, video_provider: MockVideoProvider | ComfyUIVideoProvider | None = None, machine=None,
-                motion_preparation=None):
+                motion_preparation=None, expert_executor=None, expert_assembly=None):
     """Job 执行分派：按 kind 路由到对应 service（06 §6.1 runner 装配）。"""
 
     async def runner(job):
+        if job.kind == 'expert.assemble':
+            if expert_assembly is None:
+                raise RuntimeError('专家整期合成服务未装配')
+            return await expert_assembly.run(job)
+        if job.kind == 'expert.generate':
+            if expert_executor is None:
+                raise RuntimeError('专家执行器尚未配置')
+            return await expert_executor.render({**job.input_snapshot, 'jobId': job.id},
+                progress=lambda stage: manager.set_stage(job, stage))
         snapshot = job.input_snapshot.get('projectSnapshot', {})
         uses_resident = job.kind in ('renders', 'sample.generate') and bool(snapshot.get('motionPack')) and snapshot.get('generationMode') == 'fast'
         if job.queue_class == 'gpu' and not uses_resident:
@@ -214,10 +223,10 @@ def _job_runner(manager: JobManager, store: ProjectStore, artifacts: ArtifactSto
     kind_channel = {"script.generate": "text", "script.rewrite": "text",
                     "tts.synthesize": "tts", "tts.audition": "tts",
                     "visual.generate": "image", "renders": "video",
-                    "sample.generate": "video", "motion.prepare": "video"}
+                    "sample.generate": "video", "motion.prepare": "video", "expert.generate": "expert", "expert.assemble": "assembly"}
     channel_provider = {
         "text": text_provider, "image": image_provider,
-        "tts": tts_provider, "video": video_provider,
+        "tts": tts_provider, "video": video_provider, "expert": expert_executor, "assembly":expert_assembly,
     }
 
     async def simulated_runner(job):
@@ -296,6 +305,10 @@ async def lifespan(app: FastAPI):
 
     # ---- 装配 ----
     app.state.project_store = project_store
+    from .storage.expert_plans import ExpertPlanStore
+    app.state.expert_plan_store = ExpertPlanStore(settings.storage_root / 'expert-plans')
+    from .storage.expert_versions import ExpertVersionStore
+    app.state.expert_version_store = ExpertVersionStore(settings.storage_root / 'expert-versions')
     app.state.artifacts = artifacts
     app.state.motion_pack_store = MotionPackStore(settings.storage_root / "motion-packs", artifacts.by_id)
     if isinstance(video, ModeVideoProvider):
@@ -306,12 +319,26 @@ async def lifespan(app: FastAPI):
     app.state.character_store = CharacterStore(settings.storage_root / "characters")
     app.state.event_bus = event_bus
     app.state.job_manager = job_manager
+    # Explicit deployment opt-in: never route a qualified ROI request to a legacy fast renderer.
+    import os
+    app.state.expert_executor = None
+    expert_root = os.environ.get('DUOCAST_EXPERT_PREPARATION_ROOT')
+    expert_identity = os.environ.get('DUOCAST_EXPERT_ENGINE_FINGERPRINT')
+    if expert_root and expert_identity:
+        from .adapters.expert_motion_provider import ExpertMotionVideoProvider
+        app.state.expert_executor = ExpertMotionVideoProvider(artifacts, app.state.motion_pack_store,
+            base_url=cfg.video_url, input_dir=settings.video_input, fast_runtime_root=expert_root,
+            job_manager=job_manager, engine_fingerprint=expert_identity,
+            profile=os.environ.get('DUOCAST_EXPERT_PROFILE','expert-sage-roi-v1'),
+            sage_tree_hash=os.environ.get('DUOCAST_EXPERT_SAGE_TREE_HASH'))
     app.state.capabilities = capabilities
     from .services.motion_preparation import MotionPreparationService
     app.state.motion_preparation_service = MotionPreparationService(
         app.state.motion_pack_store, artifacts, job_manager, getattr(video, "standard", video))
+    from .services.expert_assembly import ExpertAssemblyService
+    app.state.expert_assembly_service = ExpertAssemblyService(app.state)
     job_manager.set_runner(_job_runner(job_manager, project_store, artifacts, text_api, image_api, local_tts, video, machine,
-                                      app.state.motion_preparation_service))
+                                      app.state.motion_preparation_service, app.state.expert_executor, app.state.expert_assembly_service))
 
     # ---- 启动自检（02 §7.4 最小版） ----
     recovered = recover_on_startup(settings.storage_root / "jobs")
@@ -353,6 +380,8 @@ from .api import assets as assets_api
 from .api import diagnostics as diagnostics_api
 from .api import maintenance as maintenance_api
 from .api import planning as planning_api
+from .api import expert_previews as expert_previews_api
+from .api import expert_assembly as expert_assembly_api
 from .api import events as events_api
 from .api import export as export_api
 from .api import jobs as jobs_api
@@ -381,6 +410,8 @@ app.include_router(assets_api.router)
 app.include_router(diagnostics_api.router)
 app.include_router(maintenance_api.router)
 app.include_router(planning_api.router)
+app.include_router(expert_previews_api.router)
+app.include_router(expert_assembly_api.router)
 app.include_router(script_api.router)
 app.include_router(templates_api.router)
 app.include_router(voice_api.router)
