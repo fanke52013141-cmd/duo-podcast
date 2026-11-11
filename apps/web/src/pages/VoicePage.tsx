@@ -6,7 +6,7 @@
    ========================================================================== */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  useConfirm, useJob, useJobs, useProject, useVoiceAdopt, useVoiceAudition, useVoiceSynthesize, useVoiceRhythm,
+  useConfirm, useJob, useJobs, useProject, useVoiceAdopt, useVoiceAudition, useVoiceSynthesize, useVoiceRhythm, useImportUnitAudio, useRevokeApproval, useRestoreTimeline,
 } from '../lib/api';
 import type { AudioTimeline, Job, Project, ScriptRevision, SynthesisUnit, Turn, VoiceBinding } from '../lib/types';
 import { Alert, Badge, Button, Choice, Icon } from '../components/wu';
@@ -26,10 +26,8 @@ const ENGINES: { id: 'local' | 'minimax'; label: string; profileId: string }[] =
   { id: 'minimax', label: 'MiniMax', profileId: 'minimax' },
 ];
 
-const VOICE_OPTIONS: Record<'A' | 'B', string[]> = {
-  A: ['IndexTTS 2.5 · 参考声线'],
-  B: ['IndexTTS 2.5 · 参考声线'],
-};
+// 音色由参考音频决定，不再提供硬编码单选项下拉（42 号方案：去掉假选择）。
+const DEFAULT_VOICE_MODEL = 'IndexTTS 2.5 · 参考声线';
 
 const GAP_MAX_MS = 1200;
 
@@ -45,8 +43,8 @@ function pronTerms(t: Turn): string[] {
 function defaultBindings(proj: Project): Record<'A' | 'B', VoiceBinding> {
   const fromProj = (spk: 'A' | 'B') => proj.voiceBindings.find((b) => b.characterId === spk);
   return {
-    A: fromProj('A') ?? { id: 'VB-A', characterId: 'A', providerProfileId: 'mock-tts', modelId: VOICE_OPTIONS.A[0], localRefAudio: null, minimaxVoiceId: null, auditionState: 'none' },
-    B: fromProj('B') ?? { id: 'VB-B', characterId: 'B', providerProfileId: 'mock-tts', modelId: VOICE_OPTIONS.B[0], localRefAudio: null, minimaxVoiceId: null, auditionState: 'none' },
+    A: fromProj('A') ?? { id: 'VB-A', characterId: 'A', providerProfileId: 'mock-tts', modelId: DEFAULT_VOICE_MODEL, localRefAudio: null, minimaxVoiceId: null, auditionState: 'none' },
+    B: fromProj('B') ?? { id: 'VB-B', characterId: 'B', providerProfileId: 'mock-tts', modelId: DEFAULT_VOICE_MODEL, localRefAudio: null, minimaxVoiceId: null, auditionState: 'none' },
   };
 }
 
@@ -57,8 +55,15 @@ export function VoicePage({ projectId }: { projectId: string }) {
   const rhythm = useVoiceRhythm();
   const [rhythmGaps, setRhythmGaps] = useState<number[] | null>(null);
   const adopt = useVoiceAdopt();
+  // 批 2（42 号方案）：外部成品音频上传为单元候选（不自动采用）
+  const importAudio = useImportUnitAudio();
+  const audioUploadRef = useRef<HTMLInputElement>(null);
+  const [audioUploadUnit, setAudioUploadUnit] = useState<string | null>(null);
+  const [importNotice, setImportNotice] = useState<string | null>(null);
   const audition = useVoiceAudition();
   const confirm = useConfirm();
+  const revokeApproval = useRevokeApproval();
+  const restoreTimeline = useRestoreTimeline();
   const setView = useProjectStore((s) => s.setView);
   // 语音通道仍是模拟时，试听 / 参考音频 / MiniMax / 音色下拉都只会产生错误或空操作，
   // 一律不渲染（真实引擎接入后 capability 变 live 自动恢复）。
@@ -67,6 +72,8 @@ export function VoicePage({ projectId }: { projectId: string }) {
   const proj = project.data;
   const [bindings, setBindings] = useState<Record<'A' | 'B', VoiceBinding> | null>(null);
   const [engine, setEngine] = useState<'local' | 'minimax'>('local');
+  // 批 3（42 号方案）P1-B：自定义试听文本（默认用所选话轮首句，真实台词验音色）
+  const [auditionText, setAuditionText] = useState('');
   const [refNames, setRefNames] = useState<Record<'A' | 'B', string>>({ A: '', B: '' });
   const [selectedUnitId, setSelectedUnitId] = useState<string | null>(null);
   const [gapOverride, setGapOverride] = useState<number | null>(null);
@@ -162,7 +169,7 @@ export function VoicePage({ projectId }: { projectId: string }) {
 
   const startAudition = (spk: 'A' | 'B') => {
     setError(null);
-    audition.mutateAsync({ projectId, speaker: spk, referenceAudio: bs?.[spk].localRefAudio ?? undefined })
+    audition.mutateAsync({ projectId, speaker: spk, text: auditionText.trim() || undefined, referenceAudio: bs?.[spk].localRefAudio ?? undefined })
       .then((r) => setAuditionJob({ id: r.jobId, spk }))
       .catch((e) => setError(`试听提交失败：${e instanceof Error ? e.message : e}`));
   };
@@ -210,6 +217,20 @@ export function VoicePage({ projectId }: { projectId: string }) {
       projectId, clientToken: crypto.randomUUID(), revisionId: revision.id,
       voiceBindings: bindingsPayload, transitionGapMs: gapMs, turnIds: [turnId],
     }, { onError: (e) => setError((e as Error).message) });
+  };
+
+  // 批 2：上传成品音频 → 注入为该单元候选；试听比较后走现有「采纳」生效
+  const handleUnitAudioFile = (file: File | undefined) => {
+    if (!file || !audioUploadUnit) return;
+    setError(null);
+    setImportNotice(null);
+    importAudio.mutate({ projectId, unitId: audioUploadUnit, file }, {
+      onSuccess: (r) => {
+        setImportNotice(`已上传 ${file.name}（${r.durationSec}s）为 ${audioUploadUnit} 的候选；选中该话轮试听比较后点「采纳」生效。`);
+        setSelectedUnitId(audioUploadUnit);
+      },
+      onError: (e) => setError((e as Error).message),
+    });
   };
 
   const playAsset = (assetId: string | null | undefined) => {
@@ -441,6 +462,13 @@ export function VoicePage({ projectId }: { projectId: string }) {
           <Alert tone="info">
             配音已确认（{timeline?.revisionId}）。重新合成将覆盖当前时间轨并回到待确认；确认后可前往
             <a className="hf-link" onClick={() => setView('visual')}>阶段④ 预览画面</a>。
+            <Button variant="ghost" size="sm" busy={revokeApproval.isPending}
+              onClick={() => {
+                if (!proj) return;
+                revokeApproval.mutate({ projectId, kind: 'voice', expectedRevision: proj.revision, reason: '用户主动撤销配音确认' }, {
+                  onError: (e) => setError((e as Error).message),
+                });
+              }}>撤销确认</Button>
           </Alert>
         )}
         {timelineStale && (
@@ -464,6 +492,24 @@ export function VoicePage({ projectId }: { projectId: string }) {
               ))}
             </div>
 
+            {!ttsSimulated && (
+              <div style={{ marginTop: 8, display: 'grid', gap: 4 }}>
+                <label className="wu-caption" htmlFor="audition-text">试听文本（用真实台词验音色）</label>
+                <div className="wu-row" style={{ gap: 6 }}>
+                  <input id="audition-text" className="wu-input" style={{ flex: 1, minWidth: 0 }}
+                    placeholder="留空用默认示例句；建议填所选话轮台词"
+                    value={auditionText} maxLength={120}
+                    onChange={(e) => setAuditionText(e.target.value)} />
+                  <Button variant="ghost" size="sm" disabled={!selectedUnitId}
+                    title="用当前所选话轮的台词作为试听文本"
+                    onClick={() => {
+                      const turn = turns.find((t) => unitByTurn.get(t.id)?.id === selectedUnitId);
+                      if (turn) setAuditionText(turnText(turn).slice(0, 120));
+                    }}>用所选句</Button>
+                </div>
+              </div>
+            )}
+
             {bs && SPEAKERS.map((spk) => {
               const b = bs[spk.id];
               return (
@@ -471,15 +517,6 @@ export function VoicePage({ projectId }: { projectId: string }) {
                   <Badge tone={spk.id === 'A' ? 'info' : 'speaker-b'}>{spk.id}</Badge>
                   <div>
                     <div className="nm">{proj?.characterBindings?.[spk.id]?.name??spk.name} · {proj?.characterBindings?.[spk.id]?.role??spk.role}</div>
-                    {!ttsSimulated && (
-                      <select
-                        className="wu-input" aria-label={`${spk.id} 音色`} style={{ marginTop: 4 }}
-                        value={VOICE_OPTIONS[spk.id][0]}
-                        onChange={(e) => updateBinding(spk.id, { modelId: e.target.value })}
-                      >
-                        {VOICE_OPTIONS[spk.id].map((o) => <option key={o} value={o}>{o}</option>)}
-                      </select>
-                    )}
                     {!ttsSimulated && (
                       <div className="wu-row" style={{ gap: 8, marginTop: 4, minWidth: 0, alignItems: 'center' }}>
                         <button
@@ -518,6 +555,39 @@ export function VoicePage({ projectId }: { projectId: string }) {
                 {synthesizing ? '合成中…' : voiceApproved ? '重新生成整期配音' : timelineStale ? '重新合成（脚本已改动）' : '生成整期配音'}
               </Button>
             </div>
+
+            {/* 批 3（42 号方案）P1-D：音频历史版本回退 */}
+            {!!proj?.audioHistory?.length && (
+              <details className="hf-adv" style={{ marginTop: 8 }}>
+                <summary>音频历史（{proj.audioHistory.length}）· 可回退</summary>
+                <div className="hf-adv-body" style={{ display: 'grid', gap: 6 }}>
+                  {proj.audioHistory.map((h, i) => {
+                    const sameRev = h.revisionId === proj.currentDraftRevision;
+                    const secs = h.sampleRate ? (h.sampleCount / h.sampleRate).toFixed(1) : '—';
+                    return (
+                      <div className="wu-row" key={i} style={{ gap: 8, alignItems: 'center' }}>
+                        <span className="hf-mono" style={{ fontSize: 11 }}>#{i + 1} · {h.revisionId} · {secs}s</span>
+                        {h.masterAudioAssetId
+                          ? <Button variant="ghost" size="sm" icon="play" onClick={() => playAsset(h.masterAudioAssetId)}>试听</Button>
+                          : <span className="wu-caption">无母轨</span>}
+                        <span className="hf-spacer" />
+                        <Button variant="secondary" size="sm" disabled={!sameRev || restoreTimeline.isPending}
+                          busy={restoreTimeline.isPending}
+                          title={sameRev ? '回退到此版本（撤销配音确认）' : `属于脚本 ${h.revisionId}，请先在阶段②回退脚本`}
+                          onClick={() => {
+                            setError(null);
+                            restoreTimeline.mutate({ projectId, historyIndex: i }, {
+                              onSuccess: () => setImportNotice(`已回退到音频历史 #${i + 1}（${h.revisionId}），配音确认已撤销，请重新确认。`),
+                              onError: (e) => setError((e as Error).message),
+                            });
+                          }}>回退到此版本</Button>
+                      </div>
+                    );
+                  })}
+                  <p className="wu-caption">回退只恢复与当前脚本一致的历史版本；母轨文件缺失时不可回退。</p>
+                </div>
+              </details>
+            )}
             <p className="wu-caption" style={{ marginTop: 10, lineHeight: 1.6 }}>
               演示模式使用内置声线；换音色、绑定参考音频与音色试听在
               <a className="hf-link" onClick={() => setView('assets')}>资产库 · 角色</a>中维护。
@@ -554,6 +624,10 @@ export function VoicePage({ projectId }: { projectId: string }) {
                   <div className="hf-playrow" style={{ paddingTop: 6 }} onClick={(e) => e.stopPropagation()}>
                     <Button variant="secondary" size="sm" busy={synthesizing} disabled={synthesizing}
                       onClick={() => handleUnitSynthesize(t.id)}>重生成本条</Button>
+                    <Button variant="ghost" size="sm" icon="upload" busy={importAudio.isPending}
+                      disabled={!u || importAudio.isPending}
+                      title={u ? '上传成品音频替代本条 TTS（成为候选，采纳后生效）' : '请先合成整期配音'}
+                      onClick={() => { if (u) { setAudioUploadUnit(u.id); audioUploadRef.current?.click(); } }}>上传音频</Button>
                     {u?.adoptedAudioAssetId && <Button variant="ghost" size="sm" icon="play"
                       onClick={() => playAsset(u.adoptedAudioAssetId)}>播放</Button>}
                   </div>
@@ -567,6 +641,10 @@ export function VoicePage({ projectId }: { projectId: string }) {
                 </div>
               );
             })}
+
+            <input ref={audioUploadRef} type="file" accept="audio/*" hidden aria-label="上传单元音频"
+              onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; handleUnitAudioFile(f); }} />
+            {importNotice && <Alert tone="success" onClose={() => setImportNotice(null)}>{importNotice}</Alert>}
 
             {!turns.length && (
               <p className="wu-caption">尚无话轮。请先在阶段② 编辑对话中生成脚本。</p>

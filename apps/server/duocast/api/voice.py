@@ -83,6 +83,21 @@ def update_rhythm(project_id: str, payload: dict, request: Request):
     return timeline.model_dump(by_alias=True)
 
 
+@router.post("/restore-timeline")
+def restore_timeline(project_id: str, payload: dict, request: Request):
+    """批 3（42 号方案）P1-D：回退到 audioHistory 中的某条时间轨（按序号）。"""
+    from ..services.voice_svc import restore_timeline_version
+    try:
+        timeline = restore_timeline_version(
+            request.app.state.project_store, project_id, (payload or {}).get("historyIndex"),
+            artifact_store=request.app.state.artifacts)
+    except KeyError as exc:
+        raise HTTPException(404, "project not found") from exc
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    return {"projectId": project_id, "audioTimeline": timeline.model_dump(mode="json", by_alias=True)}
+
+
 @router.post("/units/{unit_id}/adopt")
 async def adopt(project_id: str, unit_id: str, payload: dict, request: Request) -> dict:
     """采用一条候选音频，并据所有已采用单元重新建立权威母轨。"""
@@ -104,6 +119,75 @@ async def adopt(project_id: str, unit_id: str, payload: dict, request: Request) 
     return {"projectId": project_id, "unitId": unit_id,
             "candidateAudioAssetId": candidate_asset_id,
             "audioTimeline": timeline.model_dump(mode="json", by_alias=True)}
+
+
+@router.post("/units/{unit_id}/import-audio")
+async def import_unit_audio(project_id: str, unit_id: str, request: Request) -> dict:
+    """批 2（42 号方案）：上传成品音频替代该单元的 TTS 结果。
+
+    转码为 48kHz PCM16 单声道（母轨权威规格）→ 登记资产 → 注入为候选；
+    不自动采用，人试听后走现有 /units/{id}/adopt 采纳。
+    """
+    import asyncio
+    import json as _json
+    from ..services.voice_svc import attach_unit_candidate
+    store = request.app.state.project_store
+    project = store.load(project_id)
+    if project is None:
+        raise HTTPException(404, "project not found")
+    form = await request.form()
+    upload = form.get("file")
+    if upload is None or not hasattr(upload, "read"):
+        raise HTTPException(422, "缺少上传文件字段 file")
+    data = await upload.read(50 * 1024 * 1024 + 1)
+    if not data or len(data) > 50 * 1024 * 1024:
+        raise HTTPException(422, "单元音频必须为 0–50MB")
+    provenance = {"source": "external-upload"}
+    meta_raw = form.get("meta")
+    if meta_raw:
+        try:
+            meta = _json.loads(str(meta_raw))
+            if isinstance(meta.get("provenance"), dict):
+                provenance.update({k: str(v)[:200] for k, v in meta["provenance"].items()})
+        except ValueError:
+            raise HTTPException(422, "UPLOAD_SCHEMA: meta 不是合法 JSON")
+    artifacts = request.app.state.artifacts
+    root = artifacts.root / "audio"
+    root.mkdir(parents=True, exist_ok=True)
+    asset_id = "AUD-UP-" + uuid.uuid4().hex[:12]
+    source, target = root / f"{asset_id}.source", root / f"{asset_id}.wav"
+    source.write_bytes(data)
+    registered = False
+    try:
+        process = await asyncio.create_subprocess_exec(
+            "ffmpeg", "-v", "error", "-y", "-i", str(source),
+            "-ar", "48000", "-ac", "1", "-c:a", "pcm_s16le", str(target),
+            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+        _, error = await process.communicate()
+        if process.returncode:
+            raise HTTPException(422, "无法读取上传音频：" + error.decode("utf-8", "replace")[-300:])
+        with wave.open(str(target)) as reader:
+            sample_count = reader.getnframes()
+            if sample_count <= 0 or reader.getframerate() != 48000 or reader.getnchannels() != 1 or reader.getsampwidth() != 2:
+                raise HTTPException(422, "UPLOAD_AUDIO: 音频无法转成 48kHz PCM16 单声道")
+        unit = next((u for u in (project.audio_timeline.units if project.audio_timeline else []) if u.id == unit_id), None)
+        entry = artifacts.register(asset_id, "audio", str(target), artifacts._hash_file(str(target)),
+                                   {"source": "unitImport", "turnId": unit.turn_id if unit else "",
+                                    "provenance": provenance})
+        registered = True
+        attach_unit_candidate(store, project_id, unit_id, entry["artifactId"], sample_count)
+        return {"unitId": unit_id, "candidateAudioAssetId": entry["artifactId"],
+                "sampleCount": sample_count, "durationSec": round(sample_count / 48000, 3),
+                "status": "pending-adoption",
+                "adoptEndpoint": f"/api/projects/{project_id}/voice/units/{unit_id}/adopt"}
+    except KeyError as exc:
+        raise HTTPException(404, "project not found") from exc
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    finally:
+        source.unlink(missing_ok=True)
+        if not registered:
+            target.unlink(missing_ok=True)
 
 
 @router.post("/audition")

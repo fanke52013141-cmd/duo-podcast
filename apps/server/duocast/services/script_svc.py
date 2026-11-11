@@ -41,6 +41,89 @@ def _turn_from_dict(data: dict[str, Any]) -> Turn:
     )
 
 
+# ---- 批 2（42 号方案）：结构化 JSON 脚本导入 ----
+
+_IMPORT_INTENTS = {"explain", "probe", "example", "challenge", "summarize", "other"}
+
+
+def import_structured_script(project: Project, payload: dict[str, Any], client_token: str = "") -> ScriptRevision:
+    """把外部结构化脚本（JSON）校验并构造成新的不可变草稿版本。
+
+    与 AI 生成同一版本语义：只追加 revisions，不覆盖任何已用版本；
+    字段契约对齐 domain/project.py（Turn/Line），校验失败抛 UPLOAD_SCHEMA 前缀错误。
+    """
+    from pydantic import ValidationError
+    from ..domain.project import Line, SourceAnchor
+
+    turns_data = payload.get("turns")
+    if not isinstance(turns_data, list) or not turns_data:
+        raise ValueError("UPLOAD_SCHEMA: turns 必须是非空数组")
+    turns: list[Turn] = []
+    seen_ids: set[str] = set()
+    line_no = 0
+    total_chars = 0
+    for ti, raw in enumerate(turns_data, 1):
+        if not isinstance(raw, dict):
+            raise ValueError(f"UPLOAD_SCHEMA: 第 {ti} 个话轮必须是对象")
+        speaker = raw.get("speaker")
+        if speaker not in ("A", "B"):
+            raise ValueError(f"UPLOAD_SCHEMA: 第 {ti} 个话轮 speaker 必须是 A 或 B")
+        intent = raw.get("intent", "other")
+        if intent not in _IMPORT_INTENTS:
+            raise ValueError(f"UPLOAD_SCHEMA: 第 {ti} 个话轮 intent 未知：{intent}")
+        speed = raw.get("speedRatio", 1.0)
+        if type(speed) not in (int, float) or not 0.5 <= speed <= 1.5:
+            raise ValueError(f"UPLOAD_SCHEMA: 第 {ti} 个话轮 speedRatio 必须在 0.5–1.5")
+        lines_data = raw.get("lines")
+        if not isinstance(lines_data, list) or not lines_data:
+            raise ValueError(f"UPLOAD_SCHEMA: 第 {ti} 个话轮 lines 必须是非空数组")
+        lines: list[Line] = []
+        for li, ln in enumerate(lines_data, 1):
+            if not isinstance(ln, dict):
+                raise ValueError(f"UPLOAD_SCHEMA: 话轮 {ti} 第 {li} 行必须是对象")
+            display, spoken = ln.get("displayText"), ln.get("spokenText")
+            if display is None and spoken is None:
+                raise ValueError(f"UPLOAD_SCHEMA: 话轮 {ti} 第 {li} 行缺少 displayText/spokenText")
+            display = str(display if display is not None else spoken)
+            spoken = str(spoken if spoken is not None else display)
+            if not display.strip() and not spoken.strip():
+                raise ValueError(f"UPLOAD_SCHEMA: 话轮 {ti} 第 {li} 行台词为空")
+            line_no += 1
+            line_id = ln.get("id") or f"L{line_no:03d}"
+            if not isinstance(line_id, str) or not line_id.strip():
+                raise ValueError(f"UPLOAD_SCHEMA: 话轮 {ti} 第 {li} 行 id 非法")
+            lines.append(Line(id=line_id, display_text=display, spoken_text=spoken))
+            total_chars += len(display)
+        turn_id = raw.get("id") or f"T{ti:02d}"
+        if not isinstance(turn_id, str) or not turn_id.strip() or turn_id in seen_ids:
+            raise ValueError(f"UPLOAD_SCHEMA: 话轮 id 为空或重复：{turn_id}")
+        seen_ids.add(turn_id)
+        anchors = [SourceAnchor(ref=str(a.get("ref", "")), quote=str(a.get("quote", "")))
+                   for a in (raw.get("sourceAnchors") or []) if isinstance(a, dict)]
+        turns.append(Turn(id=turn_id, speaker=speaker, intent=intent, lines=lines,
+                          tone=str(raw.get("tone", "自然")), speed_ratio=float(speed),
+                          source_anchors=anchors))
+    if total_chars > 80000:
+        raise ValueError("UPLOAD_SCHEMA: 脚本总字数超过 80000")
+    brief_data = payload.get("contentBrief") or {}
+    try:
+        brief = ContentBrief.model_validate(brief_data) if brief_data else ContentBrief()
+    except ValidationError as exc:
+        raise ValueError(f"UPLOAD_SCHEMA: contentBrief 结构无效：{exc}") from exc
+    parent = str(payload.get("parentRevisionId") or "")
+    if parent and not any(r.id == parent for r in project.script_revisions):
+        raise ValueError("UPLOAD_SCHEMA: 父版本不存在")
+    return ScriptRevision(
+        id=next_revision_id(project),
+        source_input={"kind": "script", "content": "", **({"clientToken": client_token} if client_token else {})},
+        content_brief=brief,
+        turns=turns,
+        text_api_config_ref="script-import-json",
+        parent_revision_id=parent,
+        label=str(payload.get("label") or "").strip()[:40],
+    )
+
+
 def next_revision_id(project: Project) -> str:
     """顺序版本号（与前端 nextRevisionId 同一口径）：R 后缀数值 + 1。
 

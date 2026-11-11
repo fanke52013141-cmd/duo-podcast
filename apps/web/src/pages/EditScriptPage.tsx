@@ -7,7 +7,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   nextRevisionId, upsertDraftTurns, useBranchScript, useConfirm, useGenerateScript, useJobs, useMachine, useMergeScript,
-  usePatchProject, useProject, useSaveDraft, useSaveMachine, useScriptDiff, useScriptRewrite,
+  usePatchProject, useProject, useRevokeApproval, useSaveDraft, useSaveMachine, useScriptDiff, useScriptRewrite,
 } from '../lib/api';
 import { type Job, type Project, type PronunciationEntry, type ScriptRevision, type Turn } from '../lib/types';
 import { Alert, Badge, Button, Choice, Icon, Input, Modal, Textarea } from '../components/wu';
@@ -116,6 +116,7 @@ export function EditScriptPage({ projectId }: { projectId: string }) {
   const jobs = useJobs(projectId);
   const saveDraft = useSaveDraft();
   const confirm = useConfirm();
+  const revokeApproval = useRevokeApproval();
   const regenerate = useGenerateScript();
   const rewrite = useScriptRewrite();
   const setView = useProjectStore((s) => s.setView);
@@ -497,16 +498,22 @@ export function EditScriptPage({ projectId }: { projectId: string }) {
       regenerate.mutate({
         projectId, clientToken: crypto.randomUUID(),
         sourceInput: { kind: src.kind, content: src.content ?? '' },
-        brief: { aspect: proj.aspect },
+        // P2-C：透传阶段①的时长要求，不再只带 aspect（42 号方案）
+        brief: {
+          aspect: proj.aspect,
+          durationMode: proj.creationDraft?.durationMode ?? 'auto',
+          approxMinutes: proj.creationDraft?.durationMode === 'approx' ? proj.creationDraft?.approxMinutes : undefined,
+        },
       }, { onError: (e) => setError((e as Error).message) });
     });
   };
 
   // ---- 派生 ----
   const saving = saveState === 'saving';
-  const scriptApproved = proj?.approvals.some(
-    (a) => a.kind === 'script' && a.decision === 'accepted' && !a.revokedAt && revision && a.inputRevisionId === revision.id,
-  ) ?? false;
+  // P2-C（42 号方案）F3 收尾：确认态统一读后端 stageProgress（单一事实来源），
+  // 不再前端自算 approvals；仅当前草稿可查看为「已确认」（历史版本恒为未确认）。
+  const scriptApproved = !!proj && !!revision
+    && revision.id === proj.currentDraftRevision && proj.stageProgress.script === 'done';
   const { hints, pronCount } = useMemo(() => countHints(turns), [turns]);
   const charCount = useMemo(() => turns.reduce((n, t) => n + turnText(t).length, 0), [turns]);
   const speakerCount = useMemo(() => ({
@@ -586,6 +593,10 @@ export function EditScriptPage({ projectId }: { projectId: string }) {
                 <p className="wu-caption" style={{ marginTop: 8 }}>
                   读法见<a className="hf-link" onClick={() => setDictOpen(true)}>读音词典</a>。
                 </p>
+                {/* P2-C（42 号方案）：任意话轮常驻拆分入口，不再仅限 >90 字提示 */}
+                <Button variant="secondary" size="sm" style={{ marginTop: 8 }}
+                  title="在句子边界（单行）或行分界（多行）把本话轮拆成两条"
+                  onClick={() => splitTurn(selectedTurn.id)}>拆分本话轮</Button>
               </>
             ) : (
               <p className="wu-caption">点击话轮查看属性；Ctrl/⌘ 多选。</p>
@@ -649,7 +660,8 @@ export function EditScriptPage({ projectId }: { projectId: string }) {
           </Badge>
         )}
         <span className="hf-spacer" />
-        <Button variant="secondary" size="sm" icon="refresh" disabled={generating || regenerate.isPending} onClick={handleRegenerate}>重新生成</Button>
+        <Button variant="secondary" size="sm" icon="refresh" disabled={generating || regenerate.isPending} onClick={handleRegenerate}
+          title="重新生成会新增草稿版本并替换当前草稿；旧版本保留，可回退">重新生成（替换当前草稿）</Button>
         <label className="wu-input" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '0 10px', height: 30, width: 'auto', cursor: 'pointer' }}>
           <Icon name="edit" size={14} />版本
           <select
@@ -681,6 +693,16 @@ export function EditScriptPage({ projectId }: { projectId: string }) {
         >
           {scriptApproved ? '已确认' : saving ? '保存中…' : '确认脚本'}
         </Button>
+        {scriptApproved && (
+          <Button variant="ghost" size="sm" busy={revokeApproval.isPending}
+            title="主动撤销脚本确认，回到待确认（保留审计记录）"
+            onClick={() => {
+              if (!proj) return;
+              revokeApproval.mutate({ projectId, kind: 'script', expectedRevision: proj.revision, reason: '用户主动撤销脚本确认' }, {
+                onError: (e) => setError((e as Error).message),
+              });
+            }}>撤销确认</Button>
+        )}
       </StageHead>
 
       <div className="hf-body">
@@ -1003,6 +1025,8 @@ function DictModal({ open, onClose, hintPron, project }: {
   const [read, setRead] = useState('');
   const [scope, setScope] = useState<'全局' | '本工程'>('本工程');
   const [error, setError] = useState<string | null>(null);
+  // P2（42 号方案）：词条原地编辑态（锁定原范围，避免跨范围双写竞争）
+  const [editing, setEditing] = useState<{ scope: '全局' | '本工程'; term: string } | null>(null);
 
   const globalEntries: PronunciationEntry[] = machine.data?.pronunciationDict ?? [];
   const projectEntries: PronunciationEntry[] = project?.pronunciationDict ?? [];
@@ -1024,15 +1048,37 @@ function DictModal({ open, onClose, hintPron, project }: {
   const addEntry = () => {
     setError(null);
     if (!term.trim() || !read.trim()) return;
-    if ([...globalEntries, ...projectEntries].some((e) => e.term === term.trim())) {
-      setError(`词条「${term.trim()}」已存在，请先删除原条目再修改。`);
+    const t = term.trim();
+    // 编辑时允许保留原词条本身；改成其他已存在词条仍判重
+    const duplicate = [...globalEntries, ...projectEntries].some(
+      (e) => e.term === t && !(editing && e.term === editing.term),
+    );
+    if (duplicate) {
+      setError(`词条「${t}」已存在，请换一个词条。`);
       return;
     }
-    const entry = { term: term.trim(), read: read.trim() };
-    if (scope === '全局') saveGlobalEntries([...globalEntries, entry]);
+    const entry = { term: t, read: read.trim() };
+    if (editing) {
+      if (editing.scope === '全局') saveGlobalEntries(globalEntries.map((e) => (e.term === editing.term ? entry : e)));
+      else saveProjectEntries(projectEntries.map((e) => (e.term === editing.term ? entry : e)));
+    } else if (scope === '全局') saveGlobalEntries([...globalEntries, entry]);
     else saveProjectEntries([...projectEntries, entry]);
     setTerm('');
     setRead('');
+    setEditing(null);
+  };
+  const startEdit = (entryScope: '全局' | '本工程', entryTerm: string, entryRead: string) => {
+    setError(null);
+    setEditing({ scope: entryScope, term: entryTerm });
+    setScope(entryScope);
+    setTerm(entryTerm);
+    setRead(entryRead);
+  };
+  const cancelEdit = () => {
+    setEditing(null);
+    setTerm('');
+    setRead('');
+    setError(null);
   };
   const removeEntry = (entryScope: '全局' | '本工程', entryTerm: string) => {
     setError(null);
@@ -1054,13 +1100,14 @@ function DictModal({ open, onClose, hintPron, project }: {
       <div className="hf-dict-row" style={{ display: 'grid', gridTemplateColumns: '1.2fr 1.2fr auto', gap: 8 }}>
         <Input placeholder="词条（如 3:12 / KV）" value={term} onChange={(e) => setTerm(e.target.value)} aria-label="词条" />
         <Input placeholder="读法（如 三分十二秒）" value={read} onChange={(e) => setRead(e.target.value)} aria-label="读法" />
-        <Button variant="secondary" size="sm" disabled={!term.trim() || !read.trim()} onClick={addEntry}>新增</Button>
+        <Button variant="secondary" size="sm" disabled={!term.trim() || !read.trim()} onClick={addEntry}>{editing ? '保存' : '新增'}</Button>
       </div>
       <div className="wu-row" style={{ gap: 14, margin: '8px 0 4px' }}>
-        <Choice type="radio" name="dict-scope" checked={scope === '本工程'} onChange={() => setScope('本工程')}
+        <Choice type="radio" name="dict-scope" checked={scope === '本工程'} onChange={() => { if (!editing) setScope('本工程'); }}
           label={<span>存入本工程{project ? `（${project.id}）` : ''}</span>} />
-        <Choice type="radio" name="dict-scope" checked={scope === '全局'} onChange={() => setScope('全局')}
+        <Choice type="radio" name="dict-scope" checked={scope === '全局'} onChange={() => { if (!editing) setScope('全局'); }}
           label="存入全局（所有工程生效）" />
+        {editing && <><span className="wu-caption">正在编辑「{editing.term}」（{editing.scope}）</span><Button variant="ghost" size="sm" onClick={cancelEdit}>取消编辑</Button></>}
       </div>
       {error && <Alert tone="danger">{error}</Alert>}
       {hintPron > 0 && <p className="wu-caption">当前草稿检出读音提示 {hintPron} 处，可在上方维护后由合成阶段读取。</p>}
@@ -1079,6 +1126,9 @@ function DictModal({ open, onClose, hintPron, project }: {
             <span className="read">{r.read}</span>
             <span className="hf-spacer" />
             <span className="wu-caption">{r.scope}</span>
+            <Button variant="ghost" size="sm" aria-label={`编辑 ${r.term}`} onClick={() => startEdit(r.scope, r.term, r.read)}>
+              编辑
+            </Button>
             <Button variant="ghost" size="sm" aria-label={`删除 ${r.term}`} onClick={() => removeEntry(r.scope, r.term)}>
               删除
             </Button>

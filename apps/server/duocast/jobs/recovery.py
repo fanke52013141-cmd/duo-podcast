@@ -43,9 +43,20 @@ def recover_on_startup(jobs_root: Path) -> list[Job]:
                            and job.input_snapshot.get("resumableMotionPreparation") is True
                            and job.status in (JobStatus.RUNNING, JobStatus.RECOVERING))
             safe_video = safe_video or safe_motion
-            job.status = JobStatus.QUEUED if safe_video else JobStatus.UNKNOWN
-            if safe_video:
-                job.stage = "recovering saved motion task"
+            # P0-B（42 号方案）：TTS 合成的单元级结果已落盘 completedCalls，
+            # 中断后带账本续跑只补未完成单元，不再一律标 UNKNOWN 让用户「放弃」。
+            safe_tts = job.kind == "tts.synthesize"
+            if safe_tts and job.status in (JobStatus.RUNNING, JobStatus.RECOVERING):
+                job.status = JobStatus.QUEUED
+                job.stage = "recovering interrupted synthesis"
+            elif safe_tts and job.status == JobStatus.PAUSE_REQUESTED:
+                job.status = JobStatus.PAUSED  # 尊重用户暂停意图；「继续」带账本重入队
+            elif safe_tts and job.status == JobStatus.CANCEL_REQUESTED:
+                job.status = JobStatus.CANCELLED  # 尊重取消意图；已落盘单元保留
+            else:
+                job.status = JobStatus.QUEUED if safe_video else JobStatus.UNKNOWN
+                if safe_video:
+                    job.stage = "recovering saved motion task"
             _atomic_write(job_file, job)
         # 终态也装入管理器：历史任务与幂等键重启后仍然有效。
         recovered.append(job)

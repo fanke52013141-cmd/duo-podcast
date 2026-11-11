@@ -44,6 +44,9 @@ class Settings:
     text_model: str = "deepseek-flash"
     video_url: str = "http://127.0.0.1:8191"
     video_input: Path = field(default_factory=lambda: PROJECT_ROOT / "runtime" / "video" / "input")
+    # 批 2（42 号方案）：对外 Ingest API 门禁。为空=仅本机默认放行；
+    # 设置后 /api/ingest/* 必须携带 Authorization: Bearer <token>。
+    api_token: str = ""
 
     @staticmethod
     def _env_int(name: str, default: int) -> int:
@@ -83,6 +86,7 @@ class Settings:
             text_model=os.environ.get("DUOCAST_TEXT_MODEL", "deepseek-flash"),
             video_url=os.environ.get("DUOCAST_VIDEO_URL", "http://127.0.0.1:8191"),
             video_input=Path(os.environ.get("DUOCAST_VIDEO_INPUT", str(PROJECT_ROOT / "runtime" / "video" / "input"))),
+            api_token=os.environ.get("DUOCAST_API_TOKEN", ""),
         )
 
 

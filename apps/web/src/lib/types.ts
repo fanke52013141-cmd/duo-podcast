@@ -201,6 +201,8 @@ export interface Project {
   cameraMode?: 'speaker' | 'twoShot';
   performanceMode?: 'legacy' | 'adaptive';
   shotCameraOverrides?: Record<string, 'twoShot' | 'A' | 'B'>;
+  /** P2：过肩机位锁定（A/B），持久化到工程 */
+  cameraLocks?: Record<string, boolean>;
   outputVersion: string | null;
   /** 本工程读音词典（全局词典在 machine 设置） */
   pronunciationDict?: PronunciationEntry[];
@@ -231,6 +233,8 @@ export interface Job {
   /** queued 任务的队内排位（1 起），由后端计算 */
   queuePosition?: number | null;
   result: (Record<string, unknown> & { artifactIds?: string[]; simulated?: boolean }) | null;
+  /** P0-B：原地重试派生自哪个任务（继承其已完成单元账本） */
+  retriedFrom?: string | null;
   createdAt: string;
   /** 进入 succeeded/failed/cancelled 终态的时刻（ISO8601）；进行中为 null */
   finishedAt?: string | null;

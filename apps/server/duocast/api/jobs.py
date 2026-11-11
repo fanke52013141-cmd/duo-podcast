@@ -108,3 +108,19 @@ async def abandon_job(job_id: str, request: Request) -> dict:
     except KeyError as exc:
         raise HTTPException(404, str(exc)) from exc
     return job.model_dump(mode="json", by_alias=True)
+
+
+@router.post("/{job_id}/retry")
+async def retry_job(job_id: str, request: Request) -> dict:
+    """P0-B（42 号方案）：失败/取消/未知任务原地重试。
+
+    派生新任务继承输入快照与已完成单元账本，只补失败段；
+    外部付费任务（motion.prepare / UNKNOWN 渲染）有专门护栏，返回 409 指路。
+    """
+    try:
+        job = _manager(request).retry(job_id)
+    except KeyError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(409, str(exc)) from exc
+    return job.model_dump(mode="json", by_alias=True)

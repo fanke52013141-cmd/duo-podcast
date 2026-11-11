@@ -9,7 +9,7 @@ import math
 from fastapi import APIRouter, HTTPException, Request
 
 from ..jobs.manager import JobManager
-from ..services.render_inputs import dependency_hash, validate_render_options, resolve_visual_id, resolve_camera_mode, validate_motion_source
+from ..services.render_inputs import dependency_hash, visual_dependency_hash, validate_render_options, resolve_visual_id, resolve_camera_mode, validate_motion_source
 from .voice import _merged_pronunciation
 
 router = APIRouter(prefix="/api/projects/{project_id}/visual", tags=["visual"])
@@ -99,6 +99,8 @@ async def sample(project_id: str, payload: dict, request: Request) -> dict:
         "cacheOnly": bool(payload.get("reuseMotionArtifactId") and payload.get("redoFromSec") is None),
         "projectSnapshot": project.model_dump(mode="json", by_alias=True),
         "dependencyHash": dependency_hash(project),
+        # P2（42 号方案）F4 收尾：接受样片只校验画面依赖，改配音/调间隔不再要求重生成样片
+        "visualDependencyHash": visual_dependency_hash(project),
         "visualVariantId": resolve_visual_id(project, payload),
         "performanceMode": payload.get("performanceMode", project.performance_mode),
         "reuseMotionArtifactId": payload.get("reuseMotionArtifactId"),

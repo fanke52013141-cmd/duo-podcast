@@ -541,11 +541,93 @@ export const useUploadMasterImage = () => {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ projectId, file, aspect, ...camera }: { projectId: string; file: File; aspect: 'landscape' | 'portrait'; mode?: 'overShoulder'; cameraGroupId?: string; cameraAssetId?: string; subjectSpeaker?: 'A' | 'B'; foregroundSpeaker?: 'A' | 'B' }) =>
-      uploadFile<{ variantId: string; webPath: string }>(
+      uploadFile<{ variantId?: string; webPath: string; notice?: string; motionSwap?: { motionPack: { id: string; version: string }; ready: boolean; missing: string[] } }>(
       `/projects/${projectId}/visual/upload-master`, file, { aspect, ...camera })
       ,
     onSuccess: (_data, input) => {
       qc.invalidateQueries({ queryKey: ['project', input.projectId] });
+      qc.invalidateQueries({ queryKey: ['artifacts'] });
+    },
+  });
+};
+
+/* ---------- 批 3（42 号方案）：主动撤销确认 / 音频时间轨回退 ---------- */
+
+export const useRevokeApproval = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ projectId, kind, reason, expectedRevision }: { projectId: string; kind: 'script' | 'voice' | 'sample'; reason?: string; expectedRevision?: number }) =>
+      sendJson<Project>(`/projects/${projectId}/approvals/${kind}/revoke`, 'POST', { reason, expectedRevision }),
+    onSuccess: (_d, input) => qc.invalidateQueries({ queryKey: ['project', input.projectId] }),
+  });
+};
+
+export const useRestoreTimeline = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ projectId, historyIndex }: { projectId: string; historyIndex: number }) =>
+      sendJson<{ audioTimeline: AudioTimeline }>(`/projects/${projectId}/voice/restore-timeline`, 'POST', { historyIndex }),
+    onSuccess: (_d, input) => qc.invalidateQueries({ queryKey: ['project', input.projectId] }),
+  });
+};
+
+/* ---------- 批 2（42 号方案）：外部上传导入（产物一律成为候选，人显式采用） ---------- */
+
+export interface ScriptImportResult {
+  revisionId: string; turnCount: number; currentDraftRevision: string;
+  estimatedSeconds?: { min: number; max: number }; warnings?: string[]; idempotent?: boolean;
+}
+export const useImportScript = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ projectId, envelope }: { projectId: string; envelope: Record<string, unknown> }) =>
+      sendJson<ScriptImportResult>(`/projects/${projectId}/script/import`, 'POST', envelope),
+    onSuccess: (_d, input) => qc.invalidateQueries({ queryKey: ['project', input.projectId] }),
+  });
+};
+
+export interface UnitAudioImportResult {
+  unitId: string; candidateAudioAssetId: string; sampleCount: number; durationSec: number;
+  status: string; adoptEndpoint: string;
+}
+export const useImportUnitAudio = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ projectId, unitId, file }: { projectId: string; unitId: string; file: File }) =>
+      uploadFile<UnitAudioImportResult>(`/projects/${projectId}/voice/units/${unitId}/import-audio`, file, {
+        meta: JSON.stringify({ provenance: { source: 'external-upload', tool: '本机上传' } }),
+      }),
+    onSuccess: (_d, input) => qc.invalidateQueries({ queryKey: ['project', input.projectId] }),
+  });
+};
+
+export const useImportVariant = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ projectId, file, meta }: { projectId: string; file: File; meta?: Record<string, unknown> }) =>
+      uploadFile<{ variantId: string; webPath: string; regionsApplied: boolean }>(
+        `/projects/${projectId}/visual/import-variant`, file, { meta: JSON.stringify(meta ?? {}) }),
+    onSuccess: (_d, input) => {
+      qc.invalidateQueries({ queryKey: ['project', input.projectId] });
+      qc.invalidateQueries({ queryKey: ['artifacts'] });
+    },
+  });
+};
+
+export interface OutputImportResult {
+  jobId: string; artifactId: string; durationSec: number; resolution: string; fps: number;
+  status: string; adoptEndpoint: string;
+}
+export const useImportOutput = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ projectId, file, audioMode }: { projectId: string; file: File; audioMode?: 'keep' | 'master' }) =>
+      uploadFile<OutputImportResult>(`/projects/${projectId}/render/import-output`, file, {
+        meta: JSON.stringify({ audioMode: audioMode ?? 'keep', provenance: { source: 'external-upload', tool: '本机上传' } }),
+      }),
+    onSuccess: (_d, input) => {
+      qc.invalidateQueries({ queryKey: ['project', input.projectId] });
+      qc.invalidateQueries({ queryKey: ['jobs'] });
       qc.invalidateQueries({ queryKey: ['artifacts'] });
     },
   });
@@ -642,6 +724,33 @@ export const useJobAbandon = () => {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['jobs'] }),
   });
 };
+
+/* P0-B（42 号方案）：失败/取消/未知任务原地重试，后端继承已完成单元账本。 */
+export const useJobRetry = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (jobId: string) => sendJson<Job>(`/jobs/${jobId}/retry`, 'POST', {}),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['jobs'] }),
+  });
+};
+
+/* P0-C（42 号方案）：标准模式分段复用计划（真实哈希校验，替代前端硬编码 0）。 */
+export interface RenderSegmentPlan {
+  available: boolean;
+  reason?: string;
+  inputsMatch?: boolean;
+  baselineJobId?: string;
+  segments: { id: string; startSec: number; endSec: number; reusable: boolean; reason: string }[];
+  reusableCount: number;
+  totalCount: number;
+  notice?: string;
+}
+export const useRenderSegmentPlan = (projectId: string, revision: number, enabled: boolean) =>
+  useQuery({
+    queryKey: ['render-segments', projectId, revision],
+    queryFn: () => getJson<RenderSegmentPlan>(`/projects/${projectId}/plan/render-segments`),
+    enabled,
+  });
 
 
 export interface ListeningPlan {

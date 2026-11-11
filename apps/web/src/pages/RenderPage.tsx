@@ -8,7 +8,7 @@ import { ProjectMotionBinding, useMotionReadiness } from '../components/MotionPa
    ========================================================================== */
 import { useEffect, useMemo, useState, useRef } from 'react';
 import {
-  useJobs, useProject, useRenderGenerate, useRenderAdopt, useOutputSelect, usePatchProject, type ListeningPlan,
+  useJobs, useProject, useRenderGenerate, useRenderAdopt, useOutputSelect, usePatchProject, useRenderSegmentPlan, useImportOutput, type ListeningPlan,
 } from '../lib/api';
 import type { AudioTimeline, Job, Project, SynthesisUnit } from '../lib/types';
 import { Alert, Badge, Button, Icon } from '../components/wu';
@@ -59,7 +59,8 @@ function planSegments(timeline: AudioTimeline): Segment[] {
 }
 
 function candidateLabel(job: Job): string {
-  const meta = job.result?.meta as { generationMode?: string; generationProfile?: string; performanceMode?: string; visualMode?: string } | undefined;
+  const meta = job.result?.meta as { generationMode?: string; generationProfile?: string; performanceMode?: string; visualMode?: string; imported?: boolean } | undefined;
+  if (meta?.imported) return '外部导入';
   if (meta?.visualMode === 'overShoulder') return '过肩正反打';
   return meta?.generationMode === 'fast' ? '快速模式' : meta?.generationProfile === 'dialogue' ? '按对话倾听' : meta?.generationProfile === 'listener' ? '分层倾听' : meta?.generationProfile === 'reference' ? '动作参考' : meta?.generationProfile === 'matched' ? '模型匹配' : meta?.performanceMode === 'adaptive' ? '角色编排' : '原有配置';
 }
@@ -80,6 +81,11 @@ export function RenderPage({ projectId }: { projectId: string }) {
   const adopt = useRenderAdopt();
   const selectOutput = useOutputSelect();
   const patchProject = usePatchProject();
+  // 批 2（42 号方案）：外部成片导入为候选（不自动采用）
+  const importOutput = useImportOutput();
+  const outputUploadRef = useRef<HTMLInputElement>(null);
+  const [importAudioMode, setImportAudioMode] = useState<'keep' | 'master'>('keep');
+  const [importNotice, setImportNotice] = useState<string | null>(null);
   const baselineVideo = useRef<HTMLVideoElement>(null);
   const candidateVideo = useRef<HTMLVideoElement>(null);
   const [redoFromSec, setRedoFromSec] = useState(0);
@@ -183,7 +189,9 @@ export function RenderPage({ projectId }: { projectId: string }) {
 
 
   const voiceSource = simulated ? '模拟语音' : proj?.voiceBindings?.[0]?.providerProfileId === 'minimax' ? 'MiniMax' : '本地引擎';
-  const reusedCount = 0; // 未取得后端哈希校验计划，不能把存在旧输出当作可复用。
+  // P0-C（42 号方案）：分段复用读后端真实哈希校验计划，不再硬编码 0。
+  const segmentPlan = useRenderSegmentPlan(projectId, proj?.revision ?? 0, !!proj && !!timeline && !isFast && !isOverShoulder);
+  const reusedCount = segmentPlan.data?.available ? segmentPlan.data.reusableCount : 0;
 
   return (
     <AppShell
@@ -303,10 +311,31 @@ export function RenderPage({ projectId }: { projectId: string }) {
         </Badge>
         <span className="hf-spacer" />
         <a className="hf-link" href={`/api/projects/${projectId}/backup`} download>备份工程</a>
+        <select className="wu-input" aria-label="导入成片音轨处理" style={{ width: 'auto' }}
+          value={importAudioMode} onChange={(e) => setImportAudioMode(e.target.value as 'keep' | 'master')}>
+          <option value="keep">导入保留原音轨</option>
+          <option value="master">导入仅取画面（重混母轨）</option>
+        </select>
+        <Button variant="secondary" icon="upload" busy={importOutput.isPending}
+          disabled={!timeline || importOutput.isPending}
+          title="上传外部剪辑的成片（时长须与配音一致），成为候选后人工采用"
+          onClick={() => outputUploadRef.current?.click()}>导入外部成片</Button>
+        <input ref={outputUploadRef} type="file" accept="video/mp4,video/*" hidden aria-label="导入外部成片文件"
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            e.target.value = '';
+            if (!f) return;
+            setError(null);
+            setImportNotice(null);
+            importOutput.mutate({ projectId, file: f, audioMode: importAudioMode }, {
+              onSuccess: (r) => setImportNotice(`已导入 ${f.name}（${r.durationSec.toFixed(2)}s · ${r.resolution}）为候选；请在下方「比较候选」中审看并点「采用候选」生效。`),
+              onError: (err) => setError((err as Error).message),
+            });
+          }} />
         <Button
           variant="brand" icon="play" busy={rendering} disabled={!canRender}
           onClick={() => handleRender()}
-        >{rendering ? '执行中' : simulated ? '运行流程演示' : '生成候选成片'}</Button>
+        ><span id="render-generate-action">{rendering ? '执行中' : simulated ? '运行流程演示' : '生成候选成片'}</span></Button>
       </StageHead>
 
       <div className="hf-body">
@@ -314,9 +343,20 @@ export function RenderPage({ projectId }: { projectId: string }) {
         {proj && <ImpactPlan projectId={projectId} revision={proj.revision}/>}
         {proj && <DeliveryCheck projectId={projectId} revision={proj.revision}/>}
         {simulated && <Alert tone="warning">当前为流程演示，不生成 MP4、WAV 或 SRT；下方分段为示意，真实模型效果与规格尚未验证。</Alert>}
-        {timeline && totalSecs > 300 && <Alert tone="danger">完整音轨超过 5 分钟，请先精简内容，不会自动截断尾句。</Alert>}
+        {timeline && totalSecs > 300 && <Alert tone="danger">完整音轨超过 5 分钟（超出 {(totalSecs - 300).toFixed(1)} 秒），不会自动截断尾句。
+          <a className="hf-link" onClick={() => setView('script')}>去阶段②精简内容</a>（建议优先拆分/删减最长独白）。</Alert>}
         {timeline && timeline.revisionId !== proj?.currentDraftRevision && <Alert tone="warning">当前配音属于旧脚本，请先生成或采用当前版本配音。</Alert>}
+        {/* P2-B（42 号方案）：成片过期横幅——指明需重跑并给一键入口 */}
+        {proj?.stageProgress.render === 'stale' && outputVersion && (
+          <Alert tone="warning">
+            已采用的成片 {outputVersion} 已过期：脚本、配音或画面在采用后发生了变化。
+            <Button variant="secondary" size="sm" icon="refresh" disabled={!canRender} busy={rendering}
+              onClick={() => handleRender()}>重新生成候选</Button>
+            <span className="wu-caption">旧成片仍可导出；交付当前版本前请重新生成并采用。</span>
+          </Alert>
+        )}
         {error && <Alert tone="danger" onClose={dismissError}>{error}</Alert>}
+        {importNotice && <Alert tone="success" onClose={() => setImportNotice(null)}>{importNotice}</Alert>}
         {!timeline && (
           <Alert tone="warning">
             还没有时间轨，无法渲染。请先在阶段③合成并确认配音。
@@ -416,10 +456,11 @@ export function RenderPage({ projectId }: { projectId: string }) {
             ) : (
               <div className="hf-seg-grid">
                 {segments.map((sg, i) => {
-                const reused = false;
+                const planRow = segmentPlan.data?.available ? segmentPlan.data.segments[i] : undefined;
+                const reused = planRow?.reusable ?? false;
                   const dur = sg.renderRange[1] - sg.renderRange[0];
                   return (
-                    <div className="hf-segcard" key={sg.id}>
+                    <div className="hf-segcard" key={sg.id} title={planRow?.reason}>
                       <div className="top">
                         {demoRendered
                           ? <Badge tone="info">演示完成</Badge>

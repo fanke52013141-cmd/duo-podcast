@@ -7,7 +7,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { createSingleFlight, recoveryRead, recoveryWrite, recoveryRemove, registerNavigationGuard } from '../lib/navigation';
 import type { Project } from '../lib/types';
 import {
-  useCapabilities, useGenerateScript, useJobs, useJobCancel, usePatchProject, useProject,
+  useCapabilities, useGenerateScript, useImportScript, useJobs, useJobCancel, usePatchProject, useProject,
 } from '../lib/api';
 import { STAGE_META, type SourceKind } from '../lib/types';
 import { Alert, Badge, Button, Choice, Field, Icon, Input, SegControl, Tabs, Textarea } from '../components/wu';
@@ -35,6 +35,9 @@ export function CreateEpisodePage({ projectId }: { projectId: string }) {
   const caps = useCapabilities();
   const patchProject = usePatchProject();
   const generateScript = useGenerateScript();
+  const importScript = useImportScript();
+  const scriptFileRef = useRef<HTMLInputElement>(null);
+  const [importNotice, setImportNotice] = useState<string | null>(null);
   const generateOnce=useRef(createSingleFlight());
   const cancelJob = useJobCancel();
   const setView = useProjectStore((s) => s.setView);
@@ -148,6 +151,36 @@ export function CreateEpisodePage({ projectId }: { projectId: string }) {
     }
   });
 
+  // 批 2（42 号方案）：外部脚本文件导入。.json 走结构化导入；.txt 读入后走现有解析导入。
+  const handleScriptFile = async (file: File | undefined) => {
+    if (!file || !proj) return;
+    setError(null);
+    setImportNotice(null);
+    const text = await file.text();
+    if (file.name.toLowerCase().endsWith('.json')) {
+      let parsed: unknown;
+      try { parsed = JSON.parse(text); } catch { setError('JSON 解析失败：请检查文件格式'); return; }
+      const obj = (parsed && typeof parsed === 'object') ? parsed as Record<string, unknown> : {};
+      const payload = (obj.payload && typeof obj.payload === 'object') ? obj.payload : obj;
+      importScript.mutate({
+        projectId,
+        envelope: {
+          schemaVersion: '1.0', kind: 'script', clientToken: crypto.randomUUID(),
+          expectedRevision: proj.revision,
+          provenance: { source: 'external-upload', tool: file.name },
+          payload,
+        },
+      }, {
+        onSuccess: (r) => setImportNotice(`已导入 ${r.turnCount} 条话轮 → 草稿 ${r.revisionId}${r.warnings?.length ? '。' + r.warnings.join('；') : ''}。请前往编辑对话检查后确认。`),
+        onError: (e) => setError((e as Error).message),
+      });
+    } else {
+      setContent(text);
+      setSourceKind('script');
+      setImportNotice('已读入脚本文本，点击下方「解析并导入」完成导入。');
+    }
+  };
+
   const handleAspect = (v: 'landscape' | 'portrait') => {
     if(recoverable)return;
     setAspect(v);
@@ -164,7 +197,8 @@ export function CreateEpisodePage({ projectId }: { projectId: string }) {
   };
 
   const stageState = proj?.stageProgress.create;
-  const draftRev = proj?.currentDraftRevision;
+  // P0-A：本次生成任务的真实结果（版本号 + 是否已切为当前草稿）
+  const genMeta = genJob?.result?.meta as { revisionId?: string; applied?: boolean } | undefined;
 
   return (
     <AppShell
@@ -211,6 +245,20 @@ export function CreateEpisodePage({ projectId }: { projectId: string }) {
             {sourceKind === 'topic' && content.trim().length > 200 && (
               <Alert tone="warning">话题建议 ≤200 字，过长内容建议改为「粘贴文章」入口。</Alert>
             )}
+            {sourceKind === 'script' && (
+              <div className="wu-row" style={{ gap: 8 }}>
+                <Button variant="secondary" size="sm" icon="upload" busy={importScript.isPending}
+                  disabled={generating || !!recoverable || importScript.isPending}
+                  onClick={() => scriptFileRef.current?.click()}>
+                  上传脚本文件（.json / .txt）
+                </Button>
+                <span className="wu-caption">.json 按结构化契约导入；.txt 用 A:/B: 格式</span>
+                <input ref={scriptFileRef} type="file" accept=".json,.txt,application/json,text/plain" hidden
+                  aria-label="上传脚本文件"
+                  onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; void handleScriptFile(f); }} />
+              </div>
+            )}
+            {importNotice && <Alert tone="success" onClose={() => setImportNotice(null)}>{importNotice}</Alert>}
 
             {/* 生成区：就绪 → 执行中两步进度 → 结果 */}
             {generating ? (
@@ -228,14 +276,27 @@ export function CreateEpisodePage({ projectId }: { projectId: string }) {
             ) : genDone ? (
               <div className="wu-alert" data-tone="success" style={{ display: 'grid', gap: 8 }}>
                 <div className="wu-row">
-                  <Badge tone="success" icon="check">候选脚本已生成</Badge>
-                  {draftRev && <span className="hf-mono">{draftRev}</span>}
+                  <Badge tone="success" icon="check">脚本草稿已生成</Badge>
+                  {/* P0-A：显示本次生成的版本号，而不是可能被并发改动的当前草稿指针 */}
+                  {genMeta?.revisionId && <span className="hf-mono">{genMeta.revisionId}</span>}
                 </div>
+                {genMeta?.applied === false && (
+                  <Alert tone="warning">
+                    生成期间输入被改动：新脚本 {genMeta.revisionId} 已存为历史版本，未替换当前草稿。
+                    <Button variant="secondary" size="sm" disabled={!proj || patchProject.isPending}
+                      onClick={() => proj && genMeta.revisionId && patchProject.mutate(
+                        { projectId, expectedRevision: proj.revision, patch: { currentDraftRevision: genMeta.revisionId } },
+                        { onError: (e) => setError((e as Error).message) },
+                      )}>
+                      设为当前草稿
+                    </Button>
+                  </Alert>
+                )}
                 <div className="wu-row">
                   <span className="hf-spacer" />
                   {/* 内容仍在本页输入框中，允许就地重新生成（否则只能绕道阶段②的「重新生成」） */}
                   <Button variant="secondary" size="sm" icon="refresh" disabled={!canGenerate} onClick={handleGenerate}>
-                    重新生成
+                    重新生成（替换当前草稿）
                   </Button>
                   <Button variant="secondary" size="sm" onClick={() => setView('script')}>
                     前往编辑对话<Icon name="arrowRight" size={14} />
