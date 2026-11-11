@@ -91,7 +91,6 @@ function ProjectCard({ p, jobs, onOps }: { p: Project; jobs: Job[] | undefined; 
 
       {/* 直达工程当前阶段（阶段由服务端 stageProgress 推导），而不是每次都落回阶段① */}
       <Button size="sm" onClick={() => openProject(p.id, currentStageOf(p).id)}>继续制作</Button>
-      <a className="hf-link" href={`/api/projects/${p.id}/backup`} download>备份工程（含必要媒体）</a>
     </Card>
   );
 }
@@ -220,8 +219,8 @@ export function HomePage() {
       <header className="hf-home-top">
         <span className="hf-brand"><span className="hf-mark"><i /><i /></span>双声播客工坊</span>
         <span className="hf-spacer" />
-        <Button variant="secondary" icon="gear" onClick={() => setView('services')}>环境检查与服务设置</Button>
-        <Button variant="secondary" icon="folder" onClick={() => setView('motionPacks')}>动作资产库与审看</Button>
+        <Button variant="ghost" size="sm" icon="gear" aria-label="服务设置" title="服务设置" onClick={() => setView('services')} />
+        <Button variant="ghost" size="sm" icon="film" aria-label="动作资产" title="动作资产" onClick={() => setView('motionPacks')} />
         <Button
           variant="secondary" icon="upload" disabled={importBusy}
           onClick={() => importFile.current?.click()}
@@ -246,20 +245,11 @@ export function HomePage() {
         {isLoading ? (
           <Empty title="读取工程中…" />
         ) : projects.length === 0 ? (
-          <div className="wu-empty">
-            <svg width="160" viewBox="0 0 256 192" aria-hidden="true">
-              <ellipse cx="128" cy="163" rx="93" ry="9" fill="var(--wu-semantic-muted)" />
-              <g stroke="var(--wu-global-ink)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none">
-                <rect x="66" y="40" width="140" height="104" rx="10" fill="var(--wu-semantic-surface)" />
-                <path d="M46 75h68l12 14h82v62H46Z" fill="var(--wu-semantic-brand)" />
-                <path d="M84 62h80M84 74h45" />
-                <path d="M55 112h144" opacity=".3" />
-              </g>
-            </svg>
-            <h3>还没有工程</h3>
-            <p className="wu-muted">新建一期，从话题、文章或已有脚本开始；也可以导入此前导出的工程 zip。</p>
-            <Button variant="brand" onClick={() => setModalOpen(true)}>新建本期</Button>
-          </div>
+          <Empty
+            title="还没有工程"
+            desc="从话题、文章或已有脚本开始，也可导入工程备份。"
+            action={<Button variant="brand" onClick={() => setModalOpen(true)}>新建本期</Button>}
+          />
         ) : (
           <>
             <section>
@@ -272,12 +262,12 @@ export function HomePage() {
                   placeholder="搜索工程 ID 或名称"
                   value={searchText}
                   onChange={(e) => setSearchText(e.target.value)}
-                  style={{ width: 180, height: 30 }}
+                  style={{ width: 180, height: 32 }}
                 />
                 <select
                   className="wu-input" aria-label="按阶段筛选"
                   value={stageFilter} onChange={(e) => setStageFilter(e.target.value)}
-                  style={{ width: 'auto', height: 30 }}
+                  style={{ width: 'auto', height: 32 }}
                 >
                   <option value="all">全部阶段</option>
                   <option value="create">① 创建本期</option>
@@ -286,14 +276,8 @@ export function HomePage() {
                   <option value="visual">④ 预览画面</option>
                   <option value="render">⑤ 生成导出</option>
                 </select>
-                <select className="wu-input" style={{width:'auto'}} aria-label="工程排序" value={sortOrder} onChange={e=>setSortOrder(e.target.value)}><option value="recent">最近编辑优先</option><option value="oldest">最早编辑优先</option><option value="title">名称排序</option><option value="id">工程 ID 排序</option></select>
+                <select className="wu-input" style={{width:'auto',height:32}} aria-label="工程排序" value={sortOrder} onChange={e=>setSortOrder(e.target.value)}><option value="recent">最近编辑优先</option><option value="oldest">最早编辑优先</option><option value="title">名称排序</option><option value="id">工程 ID 排序</option></select>
                 <Button variant="ghost" size="sm" onClick={()=>{setSearchText('');setStageFilter('all');setSortOrder('recent');}}>重置筛选</Button>
-                <Button
-                  variant="secondary" size="sm" icon="folder"
-                  disabled title="浏览器无法直接打开资源管理器；可下载工程备份或手动打开本机存储目录"
-                >
-                  打开工程目录
-                </Button>
               </div>
               {filteredProjects.length === 0 && projects.length > 0 ? (
                 <Empty title="没有匹配的工程" desc="换个关键词，或把阶段筛选切回「全部阶段」。" />
@@ -361,7 +345,7 @@ export function HomePage() {
           </>
         }
       >
-        <p className="wu-muted hf-hint">从模板开始，或创建空白工程——选择模板会带入模板名前缀、画幅与 A/B 声线引用，内容从零开始。</p>
+        <p className="wu-muted hf-hint">模板带入画幅与 A/B 声线引用，内容从零开始。</p>
         <fieldset className="hf-fieldset">
           <legend>制作模式</legend>
           <label className="wu-choice">
@@ -410,7 +394,7 @@ export function HomePage() {
           </>
         }
       >
-        <p className="wu-muted hf-hint">从所选工程提取可复用配置：画幅与 A/B 声线引用；脚本与产物不进入模板。</p>
+        <p className="wu-muted hf-hint">提取画幅与 A/B 声线引用；脚本与产物不进入模板。</p>
         <label className="wu-field">
           <span className="wu-label">来源工程</span>
           <select className="wu-input" aria-label="来源工程" value={saveTplProjectId} onChange={(e) => setSaveTplProjectId(e.target.value)}>
@@ -444,7 +428,7 @@ export function HomePage() {
           </>
         }
       >
-        <p className="wu-muted hf-hint">先建一个只含名称与画幅的空模板；声线引用可稍后从其他工程「保存为模板」补充。</p>
+        <p className="wu-muted hf-hint">空模板只含名称与画幅；声线可稍后从工程「保存为模板」补充。</p>
         <label className="wu-field">
           <span className="wu-label">模板名称</span>
           <Input value={newTplName} onChange={(e) => setNewTplName(e.target.value)} aria-label="新模板名称" placeholder="如：读书圈精读" />
@@ -486,6 +470,11 @@ export function HomePage() {
           <span className="wu-label">节目名</span>
           <Input value={renameTo} onChange={(e) => setRenameTo(e.target.value)} aria-label="节目名" />
         </label>
+        {opsTarget && (
+          <p style={{ margin: '8px 0 0' }}>
+            <a className="hf-link" href={`/api/projects/${opsTarget.id}/backup`} download>备份工程（含必要媒体）</a>
+          </p>
+        )}
         {patchProject.isError && (
           <div className="wu-alert" data-tone="danger">
             重命名失败：{(patchProject.error as Error)?.message}
@@ -495,7 +484,7 @@ export function HomePage() {
           <div className="wu-alert" data-tone="danger">删除失败：{deleteError}</div>
         )}
         <div className="wu-alert" data-tone="muted">
-          删除为软删除：工程目录移入 storage/trash/，可人工恢复。「打开工程目录」尚未开放。
+          删除为软删除，可从回收目录恢复。
         </div>
       </Modal>
     </div>

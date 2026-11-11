@@ -70,6 +70,7 @@ export function VoicePage({ projectId }: { projectId: string }) {
   const [refNames, setRefNames] = useState<Record<'A' | 'B', string>>({ A: '', B: '' });
   const [selectedUnitId, setSelectedUnitId] = useState<string | null>(null);
   const [gapOverride, setGapOverride] = useState<number | null>(null);
+  const [gapMenuOpen, setGapMenuOpen] = useState(false);
   const { error, setError, dismiss: dismissError } = useError();
   const [auditionJob, setAuditionJob] = useState<{ id: string; spk: 'A' | 'B' } | null>(null);
   const fileInput = useRef<Record<'A' | 'B', HTMLInputElement | null>>({ A: null, B: null });
@@ -323,7 +324,7 @@ export function VoicePage({ projectId }: { projectId: string }) {
                 </div>
                 <div className="hf-playrow" style={{ borderTop: 'none', paddingTop: 4 }}>
                   <Button variant="secondary" size="sm" busy={synthesizing} disabled={synthesizing}
-                    onClick={() => handleUnitSynthesize(selectedUnit.turnId)}>重新生成本条</Button>
+                    onClick={() => handleUnitSynthesize(selectedUnit.turnId)}>重新生成</Button>
                   <Button variant="secondary" size="sm" disabled={!selectedUnit.adoptedAudioAssetId}
                     onClick={() => playAsset(selectedUnit.adoptedAudioAssetId)}>播放已采纳</Button>
                 </div>
@@ -343,8 +344,8 @@ export function VoicePage({ projectId }: { projectId: string }) {
                     </div>
                   </div>
                 )}
-                <p className="wu-caption" style={{ marginTop: 8, lineHeight: 1.6 }}>
-                  重新生成只产出本条候选；采纳后重建整期时间轴并撤销配音确认。
+                <p className="wu-caption" style={{ marginTop: 8, lineHeight: 1.6 }} title="重新生成只产出本条候选">
+                  采纳后重建整期时间轴并撤销配音确认。
                 </p>
               </>
             ) : (
@@ -372,14 +373,24 @@ export function VoicePage({ projectId }: { projectId: string }) {
               <span className="hf-mono" style={{ color: 'var(--wu-semantic-text)' }}>{gapValue}ms</span>
             </div>
             <p className="wu-caption" style={{ lineHeight: 1.6 }}>
-              调整间隔后点击应用，复用已采用声音并重建时间轴；画面与配音确认需要重新检查。
+              应用后复用已采用声音重建时间轴，需重新确认。
             </p>
             <div style={{ display: 'flex', gap: 8 }}>
-              <Button variant="secondary" size="sm" onClick={() => {
-                setGapOverride(null);
-                setRhythmGaps(turns.slice(1).map(t => t.intent === 'summarize' ? 500 : t.intent === 'probe' ? 240 : turnText(t).length < 18 ? 180 : 320));
-              }}>建议对话间隔</Button>
-              <Button size="sm" disabled={!timeline || timelineStale || rhythm.isPending || synthesizing} onClick={() => rhythm.mutate({ projectId, transitionGapMs: gapMs }, { onError: e => setError((e as Error).message) })}>应用间隔</Button>
+              {/* 分体按钮：下拉「采用建议值」只写入滑杆供预览（原「建议对话间隔」行为），
+                  主按钮「应用间隔」才提交（原 disabled 条件不变）。 */}
+              <span className="hf-menu-wrap">
+                <Button size="sm" disabled={!timeline || timelineStale || rhythm.isPending || synthesizing} onClick={() => rhythm.mutate({ projectId, transitionGapMs: gapMs }, { onError: e => setError((e as Error).message) })}>应用间隔</Button>
+                <Button size="sm" variant="secondary" aria-label="间隔选项" aria-expanded={gapMenuOpen} onClick={() => setGapMenuOpen((o) => !o)}>⌄</Button>
+                {gapMenuOpen && (
+                  <span className="hf-menu" role="menu">
+                    <Button variant="ghost" size="sm" onClick={() => {
+                      setGapMenuOpen(false);
+                      setGapOverride(null);
+                      setRhythmGaps(turns.slice(1).map(t => t.intent === 'summarize' ? 500 : t.intent === 'probe' ? 240 : turnText(t).length < 18 ? 180 : 320));
+                    }}>采用建议值</Button>
+                  </span>
+                )}
+              </span>
             </div>
           </div>
 
@@ -427,8 +438,7 @@ export function VoicePage({ projectId }: { projectId: string }) {
         {error && <Alert tone="danger" onClose={dismissError}>{error}</Alert>}
         {synthNotApplied && (
           <Alert tone="warning">
-            上一次整期合成期间脚本被改动：结果已存入音频历史，但<b>没有替换当前时间轨</b>。
-            请基于最新脚本重新生成整期配音后再确认。
+            上一次合成期间脚本被改动：结果已存入音频历史，未替换当前时间轨。请重新生成整期配音后再确认。
           </Alert>
         )}
         {!proj?.scriptRevisions.length && (
@@ -439,14 +449,13 @@ export function VoicePage({ projectId }: { projectId: string }) {
         )}
         {voiceApproved && (
           <Alert tone="info">
-            配音已确认（{timeline?.revisionId}）。重新合成将覆盖当前时间轨并回到待确认；确认后可前往
+            配音已确认（{timeline?.revisionId}）。重新合成将回到待确认；可前往
             <a className="hf-link" onClick={() => setView('visual')}>阶段④ 预览画面</a>。
           </Alert>
         )}
         {timelineStale && (
           <Alert tone="warning">
-            时间轨对应脚本 {timeline?.revisionId}，当前草稿为 {proj?.currentDraftRevision}；脚本已改动，
-            请<b>重新生成整期配音</b>后再确认（旧时间轨保留在音频历史中）。
+            时间轨对应脚本 {timeline?.revisionId}，当前草稿为 {proj?.currentDraftRevision}；请<b>重新生成整期配音</b>后再确认。
           </Alert>
         )}
 
@@ -482,11 +491,10 @@ export function VoicePage({ projectId }: { projectId: string }) {
                     )}
                     {!ttsSimulated && (
                       <div className="wu-row" style={{ gap: 8, marginTop: 4, minWidth: 0, alignItems: 'center' }}>
-                        <button
-                          type="button" className="hf-link"
-                          style={{ background: 'none', border: 'none', padding: 0, fontSize: 11.5 }}
+                        <Button
+                          variant="ghost" size="sm"
                           onClick={() => fileInput.current[spk.id]?.click()}
-                        >{refNames[spk.id] || '选择参考音频'}</button>
+                        >{refNames[spk.id] || '选择参考音频'}</Button>
                         <input
                           ref={(el) => { fileInput.current[spk.id] = el; }}
                           type="file" accept="audio/*" hidden
@@ -519,8 +527,7 @@ export function VoicePage({ projectId }: { projectId: string }) {
               </Button>
             </div>
             <p className="wu-caption" style={{ marginTop: 10, lineHeight: 1.6 }}>
-              演示模式使用内置声线；换音色、绑定参考音频与音色试听在
-              <a className="hf-link" onClick={() => setView('assets')}>资产库 · 角色</a>中维护。
+              <a className="hf-link" onClick={() => setView('assets')}>在资产库维护声线</a>
             </p>
           </section>
 
@@ -553,7 +560,7 @@ export function VoicePage({ projectId }: { projectId: string }) {
                   {generating && <div className="hf-prog" style={{ marginTop: 6 }}><i style={{ width: `${Math.round((genDone / Math.max(1, turnCount)) * 100)}%` }} /></div>}
                   <div className="hf-playrow" style={{ paddingTop: 6 }} onClick={(e) => e.stopPropagation()}>
                     <Button variant="secondary" size="sm" busy={synthesizing} disabled={synthesizing}
-                      onClick={() => handleUnitSynthesize(t.id)}>重生成本条</Button>
+                      onClick={() => handleUnitSynthesize(t.id)}>重新生成</Button>
                     {u?.adoptedAudioAssetId && <Button variant="ghost" size="sm" icon="play"
                       onClick={() => playAsset(u.adoptedAudioAssetId)}>播放</Button>}
                   </div>
@@ -572,16 +579,12 @@ export function VoicePage({ projectId }: { projectId: string }) {
               <p className="wu-caption">尚无话轮。请先在阶段② 编辑对话中生成脚本。</p>
             )}
 
-            {/* 整期母轨 / 分轨试听只在真实引擎产出音频后出现；模拟通道不放只会失败的按钮 */}
+            {/* 整期母轨只在真实引擎产出音频后出现；模拟通道不放只会失败的按钮 */}
             {!ttsSimulated && turns.length > 0 && (
               <div className="hf-playrow">
-                {timeline?.masterAudioAssetId ? (
+                {timeline?.masterAudioAssetId && (
                   <AudioPlayer assetId={timeline.masterAudioAssetId} />
-                ) : (
-                  <Button variant="secondary" size="sm" icon="play" disabled title="整期合成后可在此试听母轨">连续试听</Button>
                 )}
-                <Button variant="secondary" size="sm" disabled title="分轨需真实引擎按说话人产出">独听 A</Button>
-                <Button variant="secondary" size="sm" disabled title="分轨需真实引擎按说话人产出">独听 B</Button>
                 <span className="hf-spacer" />
                 <span className="wu-caption">{timeline ? `${units.length} 个合成单元` : '尚未合成'}</span>
               </div>

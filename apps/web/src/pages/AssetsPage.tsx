@@ -62,6 +62,7 @@ export function AssetsPage({ project }: { project: Project | null }) {
   const [newTraits, setNewTraits] = useState('');
   const [newError, setNewError] = useState<string | null>(null);
   const inspectorFileRef = useRef<HTMLInputElement | null>(null);
+  const audioFileRef = useRef<HTMLInputElement | null>(null);
 
   const characters: Character[] = charactersQ.data ?? [];
   const list: ArtifactEntry[] = artifacts.data?.artifacts ?? [];
@@ -101,6 +102,22 @@ export function AssetsPage({ project }: { project: Project | null }) {
     }
   };
 
+  // 参考音频：上传→绑定→刷新→提示的完整链路保持不变，只是改为隐藏 input + 按钮触发
+  const handlePickAudio = async (characterId: string, file: File | undefined) => {
+    if (!file) return;
+    try {
+      const form = new FormData(); form.append('file', file);
+      const response = await fetch('/api/uploads/audio', { method: 'POST', body: form });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.detail ?? '上传失败');
+      await sendJson(`/characters/${characterId}/voice`, 'POST', { artifactId: result.artifactId });
+      await qc.invalidateQueries({ queryKey: ['characters'] });
+      setNewError('参考音频已保存；点击用于本期以更新本期声音。');
+    } catch (error) {
+      setNewError((error as Error).message);
+    }
+  };
+
   return (
     <AppShell
       project={project}
@@ -133,10 +150,14 @@ export function AssetsPage({ project }: { project: Project | null }) {
                   />
                 </div>
                 {project && <div className="wu-row">{(['A','B'] as const).map(s=><Button key={s} disabled={project.generationMode==='fast'} onClick={()=>void bind(selectedCharacter.id,s)}>用于本期 {s}{project.characterBindings?.[s]?.id===selectedCharacter.id?'（已绑定）':''}</Button>)}</div>}
-                <label>参考音频（上传后再次绑定本期以采用新声音）<input type="file" accept="audio/*" onChange={async e=>{
-                  const file=e.target.files?.[0]; if(!file)return;
-                  try { const form=new FormData();form.append('file',file); const response=await fetch('/api/uploads/audio',{method:'POST',body:form});const result=await response.json();if(!response.ok)throw new Error(result.detail??'上传失败');await sendJson(`/characters/${selectedCharacter.id}/voice`,'POST',{artifactId:result.artifactId});await qc.invalidateQueries({queryKey:['characters']});setNewError('参考音频已保存；点击用于本期以更新本期声音。'); }catch(error){setNewError((error as Error).message);}
-                }}/></label>
+                <div className="wu-row" style={{ gap: 8, marginTop: 6 }}>
+                  <Button variant="secondary" size="sm" icon="upload" onClick={() => audioFileRef.current?.click()}>上传参考音频</Button>
+                  <input
+                    ref={audioFileRef} type="file" accept="audio/*" style={{ display: 'none' }}
+                    onChange={(e) => { void handlePickAudio(selectedCharacter.id, e.target.files?.[0]); e.target.value = ''; }}
+                  />
+                </div>
+                <p className="wu-caption">上传后再次绑定本期以采用新声音。</p>
                 {newError && <p role="status" className="wu-caption">{newError}</p>}
               </>
             ) : selectedArtifact ? (
@@ -149,7 +170,7 @@ export function AssetsPage({ project }: { project: Project | null }) {
               </>
             ) : (
               <p className="wu-caption" style={{ lineHeight: 1.7 }}>
-                点击卡片查看资产详情。角色保存形象、性格描述与多语音提供方的独立绑定；场景可上传或经图片 API 生成。
+                点击卡片查看资产详情。
               </p>
             )}
           </div>
@@ -160,14 +181,10 @@ export function AssetsPage({ project }: { project: Project | null }) {
               <div className="hf-bindrow">
                 <b>本地参考音</b>
                 <span>{selectedBindings[0]?.localRefAudio ? '已绑定 · 本地引用' : '未绑定'}</span>
-                <span className="hf-spacer" />
-                <Button variant="ghost" size="sm" disabled>试听</Button>
               </div>
               <div className="hf-bindrow">
                 <b>MiniMax</b>
                 <span className="hf-mono">{selectedBindings[0]?.minimaxVoiceId ?? 'voice_id 未配置'}</span>
-                <span className="hf-spacer" />
-                <Button variant="ghost" size="sm" disabled>试听</Button>
               </div>
               <p className="wu-caption" style={{ marginTop: 8 }}>切换引擎只重做受影响角色的音频。</p>
             </div>
@@ -208,11 +225,8 @@ export function AssetsPage({ project }: { project: Project | null }) {
     >
       <div className="hf-h">
         <h2>资产库</h2>
-        <span className="wu-caption">角色不再是每期必经步骤 · 独立入口</span>
         <span className="hf-spacer" />
         <Button variant="brand" size="sm" icon="plus" onClick={() => { setNewError(null); setNewOpen(true); }}>新建角色</Button>
-        <Button variant="secondary" size="sm" disabled title="接入场景库后端后可新建">新建场景</Button>
-        <Button variant="secondary" size="sm" icon="upload" disabled title="接入素材导入后可上传">导入素材</Button>
       </div>
 
       <div className="hf-body2">
@@ -249,7 +263,7 @@ export function AssetsPage({ project }: { project: Project | null }) {
           </button>
         </div>
 
-        <div className="hf-sec-t" style={{ marginTop: 22 }}>场景 / 同框底图 / 上传素材 <span className="wu-caption">可上传或经图片 API 生成</span></div>
+        <div className="hf-sec-t" style={{ marginTop: 22 }}>场景 <span className="wu-caption">可上传或经图片 API 生成</span></div>
         <div className="hf-grid">
           {(scenes.data??[]).map((s) => (
             <div
@@ -281,9 +295,6 @@ export function AssetsPage({ project }: { project: Project | null }) {
         </div>
 
         {newError && <p role="status">{newError}</p>}
-        {list.length === 0 && (
-          <div className="hf-sec-t" style={{ marginTop: 22 }}>产物登记 <span className="wu-caption">完成阶段任务后自动登记</span></div>
-        )}
       </div>
 
       <Modal

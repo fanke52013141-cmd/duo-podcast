@@ -5,15 +5,14 @@
 import React from 'react';
 import { formatSamples } from '../lib/format';
 import { STAGE_META, STAGE_ORDER, type AudioTimeline, type Project, type StageState } from '../lib/types';
-import { Badge, Icon, type Tone } from './wu';
+import { Badge, Button, Icon, type Tone } from './wu';
 import { useProjectStore, useServiceStore, type View } from '../stores';
 import { pauseAudio, playAudio, usePlayer } from '../lib/player';
 
 const ENTRY_VIEWS: { id: View; label: string; icon: 'folder' | 'gear' | 'task' }[] = [
   { id: 'assets', label: '资产库', icon: 'folder' },
-  { id: 'motionPacks', label: '动作资产审看', icon: 'folder' },
+  { id: 'motionPacks', label: '动作资产', icon: 'folder' },
   { id: 'services', label: '服务设置', icon: 'gear' },
-  { id: 'tasks', label: '任务中心', icon: 'task' },
 ];
 
 function stageTone(state: StageState | undefined): Tone {
@@ -35,6 +34,11 @@ export function TopBar({ project }: { project: Project | null }) {
     : mockChannels.length === Object.keys(MOCK_LABELS).length
       ? '演示模式 · 不生成真实媒体'
       : `演示模式 · ${mockChannels.join('/')}模拟，其余真实引擎`;
+  const bannerShort = !simulated
+    ? '显存尚未测定'
+    : mockChannels.length === Object.keys(MOCK_LABELS).length
+      ? '演示模式'
+      : `演示 · ${mockChannels.join('/')}`;
   return (
     <header className="hf-top">
       <button type="button" className="hf-brand" onClick={leaveProject}>
@@ -43,16 +47,11 @@ export function TopBar({ project }: { project: Project | null }) {
       {/* 显式返回入口（第五轮实测 A7）：logo 点击之外再给一条稳定路径，
           用户不再只依赖不明显的品牌按钮返回工程列表。 */}
       {project && (
-        <button
-          type="button"
-          className="hf-link"
-          style={{ background: 'none', border: 'none', padding: '5px 4px', minHeight: 26, fontSize: 12.5, cursor: 'pointer' }}
-          onClick={leaveProject}
-        >‹ 工程列表</button>
+        <Button variant="ghost" size="sm" onClick={leaveProject}>‹ 工程列表</Button>
       )}
       {project && <span className="hf-proj">{project.id} · {project.title}</span>}
       <span className="hf-spacer" />
-      <span className="hf-vram">{banner}</span>
+      <span title={banner}><Badge tone={simulated ? 'warning' : 'muted'}>{bannerShort}</Badge></span>
       <button
         type="button"
         className="wu-btn"
@@ -72,7 +71,9 @@ export function StageRail({ project, onNavigate }: { project: Project | null; on
   const progress = project?.stageProgress ?? {};
   return (
     <nav className="hf-rail" aria-label="阶段导航">
-      {STAGE_ORDER.map((s, i) => {
+      {/* 无工程时（从首页进入资产/服务/动作页）只显示全局入口，
+          避免点击阶段落到无工程的兜底视图。 */}
+      {project && STAGE_ORDER.map((s, i) => {
         const st = progress[s.id];
         const active = view === s.id;
         // stale 不算完成态（11 报告 P2-17）：过期阶段保留其 warning 徽章，不再复用 done 高亮
@@ -93,7 +94,7 @@ export function StageRail({ project, onNavigate }: { project: Project | null; on
           </button>
         );
       })}
-      <div className="hf-sep" />
+      {project && <div className="hf-sep" />}
       {ENTRY_VIEWS.map((e) => (
         <button
           key={e.id}
@@ -188,8 +189,8 @@ export function TimelineBar({
         <button
           type="button"
           className="hf-tl-playbtn"
-          aria-label={realAsset ? realActive && player.playing ? '暂停音频' : '播放母轨' : demoPlaying ? '暂停演示播放' : '演示播放（无声音，播放头走动）'}
-          title={demoPlaying ? '暂停' : '演示播放：真实音频接入前，用播放头走动预览时间轴'}
+          aria-label={realAsset ? realActive && player.playing ? '暂停音频' : '播放母轨' : demoPlaying ? '暂停演示播放' : '演示播放（无声）'}
+          title={demoPlaying ? '暂停' : '演示播放（无声）'}
           onClick={() => realAsset ? realActive && player.playing ? pauseAudio() : void playAudio(realAsset, realActive ? player.current : 0) : setDemoPlaying((p) => !p)}
         >
           <Icon name={demoPlaying ? 'pause' : 'play'} size={16} />

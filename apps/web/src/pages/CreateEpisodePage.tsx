@@ -24,7 +24,7 @@ const SOURCE_TABS: { id: SourceKind; label: string }[] = [
 ];
 
 const SOURCE_HINTS: Record<SourceKind, string> = {
-  topic: '一句话或一段话即可，建议 ≤200 字',
+  topic: '一句话或一段话即可，≤200 字',
   article: '粘贴文章正文，≤8,000 字',
   script: '每行一条发言，用 A: / B: 标记说话人，空行分段。例如：\nA: 大家好，欢迎回到本期节目。\nB: 今天我们聊点具体的。'
 };
@@ -172,7 +172,7 @@ export function CreateEpisodePage({ projectId }: { projectId: string }) {
       onNavigate={setView}
       footer={null}
     >
-      <StageHead title="创建本期">
+      <StageHead title="① 创建本期">
         <span role="status" className="wu-caption">{saveLabel}</span>
         {proj && <Badge>{proj.generationMode === 'fast' ? '快速模式 · 双人演播室' : '原有模式'}</Badge>}
         {stageState && stageState !== 'ready' && <Badge tone={STAGE_META[stageState].tone}>{STAGE_META[stageState].label}</Badge>}
@@ -194,7 +194,7 @@ export function CreateEpisodePage({ projectId }: { projectId: string }) {
             onSelect={(id) => {if(!recoverable)setSourceKind(id as SourceKind);}}
             idPrefix="src"
           />
-          <div style={{ marginTop: 14, display: 'grid', gap: 10 }}>
+          <div style={{ marginTop: 12, display: 'grid', gap: 12 }}>
             <Field labelFor="src-content" label={SOURCE_TABS.find((t) => t.id === sourceKind)?.label ?? '内容'}>
               <Textarea
                 id="src-content"
@@ -206,10 +206,10 @@ export function CreateEpisodePage({ projectId }: { projectId: string }) {
               />
             </Field>
             {sourceKind === 'article' && content.trim().length > 8000 && (
-              <Alert tone="warning">文章超过 8,000 字，生成质量可能下降；建议拆分为多期，或截取核心段落。</Alert>
+              <Alert tone="warning">文章超过 8,000 字，建议拆分为多期或截取核心段落。</Alert>
             )}
             {sourceKind === 'topic' && content.trim().length > 200 && (
-              <Alert tone="warning">话题建议 ≤200 字，过长内容建议改为「粘贴文章」入口。</Alert>
+              <Alert tone="warning">话题超过 200 字，建议改用「粘贴文章」。</Alert>
             )}
 
             {/* 生成区：就绪 → 执行中两步进度 → 结果 */}
@@ -252,7 +252,7 @@ export function CreateEpisodePage({ projectId }: { projectId: string }) {
                   <span className="wu-caption">详情见任务中心。</span>
                   <span className="hf-spacer" />
                   <Button variant="secondary" size="sm" onClick={() => setView('tasks')}>查看任务中心</Button>
-                  <Button variant="brand" size="sm" disabled={!canGenerate} onClick={handleGenerate}>重试生成</Button>
+                  <Button variant="brand" size="sm" disabled={!canGenerate} onClick={handleGenerate}>重新生成</Button>
                 </div>
               </div>
             ) : (
@@ -276,7 +276,7 @@ export function CreateEpisodePage({ projectId }: { projectId: string }) {
         <section className="wu-card hf-panel req">
           <h3 className="hf-panel-t">内容要求</h3>
 
-          <div style={{ display: 'grid', gap: 6 }}>
+          <div className="wu-stack">
           <Field label="节目名">
             <Input
               placeholder="未命名节目"
@@ -315,13 +315,13 @@ export function CreateEpisodePage({ projectId }: { projectId: string }) {
             </div>
           </Field>
           {aspect === 'portrait' && (
-            <Alert tone="warning">竖屏建议采用上下分栏双人构图；构图需独立检查，不承诺横屏素材无损裁成竖屏。</Alert>
+            <Alert tone="warning">竖屏为上下分栏双人构图，需独立检查。</Alert>
           )}
 
           <Field label="角色">
             <div className="hf-upload" onClick={() => setView('assets')}>
               <div className="t"><Icon name="image" size={16} /> 角色图</div>
-              <div className="s">资产库选择或 API 生成</div>
+              <div className="s">点击前往资产库</div>
             </div>
           </Field>
           </div>

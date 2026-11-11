@@ -205,6 +205,7 @@ export function RenderPage({ projectId }: { projectId: string }) {
               <label>画布</label>
               <input
                 className="wu-input" readOnly
+                title="竖屏布局尚未开放；当前提供横屏双人同框与双方特写"
                 value={proj?.aspect === 'portrait' ? '9:16 导出画布' : `${resolutionId} → 16:9 导出画布`}
               />
             </div>
@@ -220,30 +221,26 @@ export function RenderPage({ projectId }: { projectId: string }) {
                 {FPSS.map((f) => <option key={f} value={f}>{f} fps</option>)}
               </select>
             </div>
+            {isFast && <div className="hf-fld">
+              <label htmlFor="fast-quality">画面清晰度</label>
+              <select id="fast-quality" className="wu-input" value={fastQuality} onChange={e => {setFastQuality(e.target.value as 'original' | 'clear' | 'crisp');saveSpec({fastQuality:e.target.value as 'original' | 'clear' | 'crisp'});}}>
+                <option value="original">原始 · 不增强</option>
+                <option value="clear">清晰 · 轻度锐化与低压缩（推荐）</option>
+                <option value="crisp">更清晰 · 较强锐化与低压缩</option>
+              </select>
+            </div>}
+            {isFast && <p className="wu-caption" title="动作素材的原生分辨率决定细节上限，特写放大会损失细节。增强会增大文件，较强锐化可能产生边缘光晕；不会恢复原本缺失的细节。">放大损失细节，增强增大文件。</p>}
             <div className="hf-fld">
-              {isFast && <div className="hf-fld">
-                <label htmlFor="fast-quality">画面清晰度</label>
-                <select id="fast-quality" className="wu-input" value={fastQuality} onChange={e => {setFastQuality(e.target.value as 'original' | 'clear' | 'crisp');saveSpec({fastQuality:e.target.value as 'original' | 'clear' | 'crisp'});}}>
-                  <option value="original">原始 · 不增强</option>
-                  <option value="clear">清晰 · 轻度锐化与低压缩（推荐）</option>
-                  <option value="crisp">更清晰 · 较强锐化与低压缩</option>
-                </select>
-                <p className="wu-caption">动作素材的原生分辨率决定细节上限，特写放大会损失细节。增强会增大文件，较强锐化可能产生边缘光晕；不会恢复原本缺失的细节。</p>
-              </div>}
               <label>编码</label>
               <input className="wu-input" aria-label="编码" value={`${CODEC} · 当前固定编码`} readOnly />
             </div>
-            <div style={{ display: 'grid', gap: 6, marginTop: 8 }}>
-              <span className="wu-caption">补帧：当前引擎未开放</span>
-              <span className="wu-caption">烧录字幕：当前引擎未开放</span>
-            </div>
+            <p className="wu-caption">补帧 / 烧录字幕：当前引擎未开放</p>
           </div>
 
           <div className="hf-ins-sec">
             <h4>后处理顺序</h4>
-            <p className="wu-caption" style={{ lineHeight: 1.8 }}>
-              基础视频 → 镜头裁切 → 合并配音 → 编码 → 画面与声音校验。<br />
-              导出失败只重跑相应后处理或编码，不重新生成全部口型视频。
+            <p className="wu-caption" style={{ lineHeight: 1.8 }} title="导出失败只重跑相应后处理或编码，不重新生成全部口型视频。">
+              基础视频 → 镜头裁切 → 合并配音 → 编码 → 画面与声音校验
             </p>
           </div>
           {!isOverShoulder && proj?.cameraMode !== 'twoShot' && <div className="hf-ins-sec">
@@ -263,13 +260,6 @@ export function RenderPage({ projectId }: { projectId: string }) {
           </div>}
 
           <div className="hf-ins-sec">
-            <h4>竖屏导出</h4>
-            <p className="wu-caption" style={{ lineHeight: 1.8 }}>
-              竖屏布局尚未开放；当前提供横屏双人同框与双方特写。
-            </p>
-          </div>
-
-          <div className="hf-ins-sec">
             <h4>阶段状态</h4>
             <ul className="hf-ins-list">
               <li>脚本确认：{proj?.stageProgress.script === 'done' ? '已通过' : '未确认'}</li>
@@ -287,7 +277,6 @@ export function RenderPage({ projectId }: { projectId: string }) {
               输出版本{outputVersion ? ` · ${outputVersion}` : ' · 未导出'}
             </Badge>
             <span className="hf-spacer" />
-            <span className="wu-caption">导出完成后可从资产库查看产物</span>
             <Button size="sm" onClick={() => setView('assets')}>查看资产库<Icon name="arrowRight" size={14} /></Button>
           </span>
         } />
@@ -309,7 +298,6 @@ export function RenderPage({ projectId }: { projectId: string }) {
         {proj&&<ProjectMotionBinding project={proj}/>}
         {proj && <ImpactPlan projectId={projectId} revision={proj.revision}/>}
         {proj && <DeliveryCheck projectId={projectId} revision={proj.revision}/>}
-        {simulated && <Alert tone="warning">当前为流程演示，不生成 MP4、WAV 或 SRT；下方分段为示意，真实模型效果与规格尚未验证。</Alert>}
         {timeline && totalSecs > 300 && <Alert tone="danger">完整音轨超过 5 分钟，请先精简内容，不会自动截断尾句。</Alert>}
         {timeline && timeline.revisionId !== proj?.currentDraftRevision && <Alert tone="warning">当前配音属于旧脚本，请先生成或采用当前版本配音。</Alert>}
         {error && <Alert tone="danger" onClose={dismissError}>{error}</Alert>}
@@ -320,7 +308,7 @@ export function RenderPage({ projectId }: { projectId: string }) {
           </Alert>
         )}
         {!sampleApproved && timeline && (
-          <Alert tone="warning">样片尚未确认；渲染将使用当前草稿脚本与最新主图，建议先完成样片确认。</Alert>
+            <Alert tone="warning">样片尚未确认；建议先完成样片确认。</Alert>
         )}
         {lastMeta && (
           <Alert tone="success">
@@ -332,7 +320,7 @@ export function RenderPage({ projectId }: { projectId: string }) {
             <p>当前采用：{outputVersion}</p>
             <video ref={baselineVideo} controls preload="metadata" style={{ width: '100%', maxHeight: 540 }}
               src={`/api/artifacts/${recentRender.result.artifactIds[0]}/file`} />
-            <a href={`/api/artifacts/${recentRender.result.artifactIds[0]}/file`} download>下载完整视频</a>
+            <a className="wu-btn" data-variant="ghost" data-size="sm" href={`/api/artifacts/${recentRender.result.artifactIds[0]}/file`} download><Icon name="download" size={16} /><span className="wu-btn-label">下载完整视频</span></a>
           </section>
         )}
         {candidate?.result?.artifactIds?.[0] && <section style={{ margin: '16px 0' }}>
@@ -342,7 +330,7 @@ export function RenderPage({ projectId }: { projectId: string }) {
           </select>
           <p>待比较候选 · {candidateLabel(candidate)} · 画面待人工验收</p>
           <video ref={candidateVideo} controls preload="metadata" style={{ width: '100%', maxHeight: 540 }} src={`/api/artifacts/${candidate.result.artifactIds[0]}/file`} />
-          <a className="hf-link" href={`/api/artifacts/${candidate.result.artifactIds[0]}/file`} download={`candidate-${candidate.id}.mp4`}>下载候选视频</a>
+          <a className="wu-btn" data-variant="ghost" data-size="sm" href={`/api/artifacts/${candidate.result.artifactIds[0]}/file`} download={`candidate-${candidate.id}.mp4`}><Icon name="download" size={16} /><span className="wu-btn-label">下载候选视频</span></a>
           {candidateMeta?.generationStats?.wallSeconds != null && <p>快速模式：画面处理耗时 {candidateMeta.generationStats.wallSeconds.toFixed(1)} 秒</p>}
           {candidateMeta?.generationStats && candidateMeta.generationStats.wallSeconds == null && <p>实际处理：新生成 {candidateMeta.generationStats.generated} 段 · 合成 {candidateMeta.generationStats.composited ?? 0} 段 · 缓存 {candidateMeta.generationStats.cached} 段 · 保留 {candidateMeta.generationStats.retained} 段</p>}
           {!!candidateMeta?.continuityTransitions?.length && <details open><summary>同机位续接检查</summary>
@@ -409,7 +397,7 @@ export function RenderPage({ projectId }: { projectId: string }) {
           {/* 分段进度网格（01 §7.2） */}
           <section>
             <div className="hf-zone-t">{isFast || isOverShoulder ? '生成进度' : '时间区间概览'}</div>
-            {!isFast && !isOverShoulder && <p className="wu-caption">下方按五秒展示对白区间，不代表模型窗口或逐段生成进度。请在任务中心查看实际执行状态。</p>}
+            {!isFast && !isOverShoulder && <p className="wu-caption" title="不代表模型窗口或逐段生成进度，实际执行状态见任务中心">五秒对白区间示意，实际进度见任务中心。</p>}
             {isFast ? <p>{renderJob?.stage ?? (realRendered ? '快速模式成片已完成，可播放和下载。' : '等待按当前配音生成。')}</p> : isOverShoulder ? <p>{renderJob?.stage ?? (otsCompleted ? '过肩视频已完成，可在候选区播放比较。' : '按发言话轮生成 A/B 机位，等待生成。')}</p> : segments.length === 0 ? (
               <Alert tone="muted">合成时间轨后在此展示分段计划。</Alert>
             ) : (
@@ -458,8 +446,7 @@ export function RenderPage({ projectId }: { projectId: string }) {
               <span className="hf-spacer" />
             </div>
             <div style={{ display: 'flex', gap: 8, marginTop: 10, alignItems: 'center' }}>
-              <Button variant="secondary" size="sm" disabled title="接入桌面集成后可打开输出目录">打开输出目录</Button>
-              {proj?.outputManifest ? <a className="wu-btn wu-btn-brand" href={`/api/projects/${projectId}/export/package`} download>下载交付包</a> : <span className="wu-caption">新版成片生成后可下载完整交付包</span>}
+              {proj?.outputManifest ? <a className="wu-btn" data-variant="brand" data-size="sm" href={`/api/projects/${projectId}/export/package`} download><Icon name="download" size={16} /><span className="wu-btn-label">下载交付包</span></a> : <span className="wu-caption">新版成片生成后可下载完整交付包</span>}
               <span className="wu-caption">{outputVersion ? `已导出 ${outputVersion}` : demoRendered ? '演示产物 · 无真实文件可导出' : '需先生成成片'}</span>
             </div>
           </section>

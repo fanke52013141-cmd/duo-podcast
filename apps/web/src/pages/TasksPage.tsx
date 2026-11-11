@@ -1,7 +1,7 @@
 /* ============================================================================
    HF-08 · 任务中心（真实数据流，02 §7.1 状态机 / 01 §10.1）
    三个分组同屏（运行中 / 排队 / 已结束），任务卡含状态圆点与五阶段语义进度
-   检查器：所选任务 / 五阶段进度 / 取消语义 / 连接与一致性 / 输入快照
+   检查器：所选任务 / 五阶段进度 / 连接与一致性 / 输入快照（取消语义并入卡片「取消」按钮 title）
    ========================================================================== */
 import { useMemo, useState } from 'react';
 import { sendJson, useJobPause, useJobResume, useJobCancel, useJobAbandon, useJobs } from '../lib/api';
@@ -119,9 +119,6 @@ export function TasksPage() {
 
   const selected = all.find((j) => j.id === selectedId) ?? groups.running[0] ?? groups.queued[0] ?? groups.finished[0] ?? null;
 
-  const canPause = selected != null && canPauseJob(selected);
-  const canCancel = selected != null && canCancelJob(selected);
-
   // 操作对象显式来自调用卡片（11 报告 P1-2：此前按钮作用于“被选中”的任务，会取消错任务）
   const handlePause = (j?: Job) => {
     const t = j ?? selected;
@@ -200,7 +197,7 @@ export function TasksPage() {
               </Button>
             )}
             {canCancelJob(j) && (RUNNING.includes(j.status) || inQueue) && (
-              <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); handleCancel(j); }}>
+              <Button variant="ghost" size="sm" title="暂停/取消在安全边界生效；已完成文件保留，取消结果不会替换当前版本" onClick={(e) => { e.stopPropagation(); handleCancel(j); }}>
                 {inQueue ? '取消排队' : '取消'}
               </Button>
             )}
@@ -268,24 +265,13 @@ export function TasksPage() {
             </div>
           )}
 
-          <div className="hf-ins-sec">
-            <h4>取消语义</h4>
-            <div className="hf-task-ops" style={{ marginTop: 0 }}>
-              <Button variant="secondary" size="sm" disabled={!canPause} busy={pause.isPending || resume.isPending} onClick={() => handlePause()}>
-                {selected?.status === 'paused' ? '继续' : selected?.status === 'pause_requested' ? '暂停中…' : '当前任务完成后暂停'}
-              </Button>
-              <Button variant="ghost" size="sm" disabled={!canCancel} busy={cancel.isPending} onClick={() => handleCancel()}>取消</Button>
-            </div>
-            <p className="wu-caption" style={{ marginTop: 8 }}>暂停/取消在安全边界生效。外部请求可能仍需等待结束；停止派发后续单元，已完成文件保留，取消结果不会替换当前版本。</p>
-          </div>
-
           {selected?.result && (
             <div className="hf-ins-sec">
               {/* 结果 JSON 是技术细节（第五轮实测 C2）：默认折叠，与「输入快照」一致的可展开口径 */}
               <details className="hf-adv">
                 <summary>原始结果（JSON）</summary>
                 <div className="hf-adv-body">
-                  <pre className="hf-mono" style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', background: 'var(--wu-semantic-muted)', padding: 8, borderRadius: 8, margin: 0, fontSize: 10.5 }}>
+                  <pre className="hf-mono" style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', background: 'var(--wu-semantic-muted)', padding: 8, borderRadius: 8, margin: 0, fontSize: 12 }}>
                     {JSON.stringify(selected.result, null, 2)}
                   </pre>
                 </div>
@@ -298,7 +284,7 @@ export function TasksPage() {
               <details className="hf-adv">
                 <summary>输入快照（冻结）</summary>
                 <div className="hf-adv-body">
-                  <pre className="hf-mono" style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', background: 'var(--wu-semantic-muted)', padding: 8, borderRadius: 8, margin: 0, fontSize: 10.5 }}>
+                  <pre className="hf-mono" style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', background: 'var(--wu-semantic-muted)', padding: 8, borderRadius: 8, margin: 0, fontSize: 12 }}>
                     {JSON.stringify(selected.inputSnapshot, null, 2)}
                   </pre>
                 </div>
@@ -312,7 +298,6 @@ export function TasksPage() {
     >
       <div className="hf-h">
         <h2>任务中心</h2>
-        <span className="wu-caption">本地与 API 任务统一视图</span>
         <span className="hf-spacer" />
         <span className="wu-caption">更新于 {new Date(refreshedAt).toLocaleTimeString('zh-CN', { hour12: false })}</span>
         <Button
@@ -341,10 +326,6 @@ export function TasksPage() {
           {groups.finished.map((j) => renderTask(j, false))}
           {groups.finished.length === 0 && <p className="wu-caption">今日暂无已结束任务。</p>}
         </section>
-
-        <div className="hf-foot-note">
-          <span>暂停在当前段完成后生效；取消保留已落盘内容。</span>
-        </div>
       </div>
     </AppShell>
   );

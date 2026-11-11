@@ -11,7 +11,7 @@ import {
   usePatchProject, useConfirm, useJobs, useProject, useSampleGenerate, useUploadMasterImage, useVisualGenerate,
 } from '../lib/api';
 import { SPEAKERS, type Job, type ScriptRevision, type VisualVariant } from '../lib/types';
-import { Alert, Badge, Button, Icon } from '../components/wu';
+import { Alert, Badge, Button, Choice, Icon } from '../components/wu';
 import { AppShell, FootBar, StageHead, TimelineBar } from '../components/AppShell';
 import { formatTimecode } from '../lib/format';
 import { useError } from '../lib/useError';
@@ -295,7 +295,6 @@ export function VisualPage({ projectId }: { projectId: string }) {
             {visualMode === 'twoShot' ? (
               <>
                 <div style={{ display: 'flex', gap: 8 }}>
-                  <Button variant="secondary" size="sm" busy={generating} disabled={!canGenerate} onClick={handleGenerate}>生成</Button>
                   <Button
                   variant="secondary" size="sm" icon="upload" busy={uploadMaster.isPending} disabled={isFast}
                   title="上传本地底图（PNG/JPEG ≤10MB），登记为主图变体"
@@ -326,8 +325,8 @@ export function VisualPage({ projectId }: { projectId: string }) {
                     </div>
                   ))}
                 </div>
-                <p className="wu-caption" style={{ marginTop: 8, lineHeight: 1.6 }}>
-                  两个机位应复用同一组角色、服装和场景参考。清晰主体只驱动当前发言者，前景肩背保持静止或轻微动作。
+                <p className="wu-caption" style={{ marginTop: 8, lineHeight: 1.6 }} title="清晰主体只驱动当前发言者，前景肩背保持静止或轻微动作">
+                  双机位复用同一组角色、服装与场景参考。
                 </p>
               </>
             )}
@@ -397,7 +396,6 @@ export function VisualPage({ projectId }: { projectId: string }) {
             <Badge tone={sampleApproved ? 'success' : 'warning'} icon={sampleApproved ? 'check' : 'alert'}>
               确认点 · 样片确认{sampleApproved ? '（已确认）' : ''}
             </Badge>
-            <span className="wu-caption">接受样片绑定本次输入版本、工作流与规格</span>
             <span className="hf-spacer" />
             <Button size="sm" disabled={!sampleApproved} onClick={() => setView('render')}>
               下一步<Icon name="arrowRight" size={14} />
@@ -431,7 +429,7 @@ export function VisualPage({ projectId }: { projectId: string }) {
             >{a.label}</button>
           ))}
         </span>
-        <Button variant="secondary" size="sm" disabled={!canAccept} onClick={handleAccept}>接受样片</Button>
+        <Button variant="secondary" size="sm" disabled={!canAccept} title="接受样片绑定本次输入版本、工作流与规格" onClick={handleAccept}>接受样片</Button>
         <span className="wu-caption">{acceptHint}</span>
       </StageHead>
 
@@ -440,11 +438,11 @@ export function VisualPage({ projectId }: { projectId: string }) {
         {hasMotion&&<p>工程使用固定动作包 {proj?.motionPack?.version}，无需生成旧主图变体。完成配音后直接生成下方样片。</p>}
         {proj && <RenderSettings project={proj}/>}
         {error && <Alert tone="danger" onClose={dismissError}>{error}</Alert>}
-        {isFast && <Alert tone="info">快速模式使用已验证的双人演播室模板，可调整对白、配音和镜头裁切。更换人物或场景请新建原有模式节目。</Alert>}
+        {isFast && <Alert tone="info">快速模式：模板已验证，可改对白、配音与镜头裁切；更换人物或场景请新建原有模式节目。</Alert>}
         {otsNotice && visualMode === 'overShoulder' && <Alert tone="info">{otsNotice}</Alert>}
         {!voiceApproved && (
           <Alert tone="warning">
-            阶段③ 配音尚未确认。画面生成不依赖配音，但样片确认建议在配音锁定后进行。
+            配音尚未确认；样片确认建议在配音锁定后进行。
             <a className="hf-link" onClick={() => setView('voice')}>前往阶段③ 试听配音</a>
           </Alert>
         )}
@@ -463,7 +461,7 @@ export function VisualPage({ projectId }: { projectId: string }) {
 
           {/* 构图区（01 §6.2） */}
           <section className="hf-zone" ref={(el) => { zoneRefs.current.compose = el; }}>
-            <div className="hf-zone-t">构图 <span className="wu-caption">{visualMode === 'twoShot' ? '同框底图 · 人物区域标注 · 竖屏提示' : 'A / B 两个匹配机位 · 当前发言者清晰，听者以前景肩背出现'}</span></div>
+            <div className="hf-zone-t" title={visualMode === 'twoShot' ? '同框底图 · 人物区域标注' : 'A / B 两个匹配机位 · 当前发言者清晰，听者以前景肩背出现'}>构图</div>
             {visualMode === 'twoShot' ? (
               <>
                 <div className="hf-canvas" data-aspect={aspect}>
@@ -508,9 +506,6 @@ export function VisualPage({ projectId }: { projectId: string }) {
                         ? twoShotVariants.map((v) => <option key={v.id} value={v.id}>{v.id} · {v.aspect === 'portrait' ? '竖屏' : '横屏'}</option>)
                         : <option value="">尚未生成</option>}
                     </select>
-                  </span>
-                  <span className="item">场景
-                    <Button disabled={isFast} onClick={()=>masterFileRef.current?.click()}>上传双人场景底图</Button>
                   </span>
                   <span className="item">角色 A
                     <Button disabled={isFast} onClick={()=>setView('assets')}>{proj?.characterBindings?.A?.name??SPEAKERS.A.name} · 去绑定</Button>
@@ -567,7 +562,7 @@ export function VisualPage({ projectId }: { projectId: string }) {
 
           {/* 镜头区（01 §6.3） */}
           <section className="hf-zone" ref={(el) => { zoneRefs.current.shot = el; }}>
-            <div className="hf-zone-t">镜头 <span className="wu-caption">{visualMode === 'twoShot' ? '后处理 · 改镜头不触发基础视频重渲染' : '按话轮选 A / B 发言机位；更换机位底图会重做对应视频片段'}</span></div>
+            <div className="hf-zone-t" title={visualMode === 'twoShot' ? '后处理 · 改镜头不触发基础视频重渲染' : '按话轮选 A / B 发言机位；更换机位底图会重做对应视频片段'}>镜头</div>
             {visualMode === 'twoShot' ? (
               <div className="hf-sample-head">
                 <span className="lb">镜头预设</span>
@@ -596,12 +591,12 @@ export function VisualPage({ projectId }: { projectId: string }) {
           {proj && !isFast && <ExpertPreviewPlanner key={projectId} project={proj} />}
           {/* 样片区（01 §6.4） */}
           <section className="hf-zone" ref={(el) => { zoneRefs.current.sample = el; }}>
-            <div className="hf-zone-t">样片 <span className="wu-caption">优先选双方交替发言的区间；不足三轮时取开头代表区间{visualMode === 'overShoulder' ? '；样片仅驱动当前发言者' : ''}</span></div>
+            <div className="hf-zone-t" title={`优先选双方交替发言的区间；不足三轮时取开头代表区间${visualMode === 'overShoulder' ? '；样片仅驱动当前发言者' : ''}`}>样片</div>
             <div className="hf-sample-head">
               <span className="lb">区间</span>
               <span
                 className="hf-mono"
-                style={{ color: 'var(--wu-semantic-text)', background: 'var(--wu-semantic-muted)', padding: '3px 10px', borderRadius: 6 }}
+                style={{ color: 'var(--wu-semantic-text)', background: 'var(--wu-semantic-muted)', padding: '3px 10px', borderRadius: 8 }}
               >{rangeHint}</span>
               <Button
                 variant="brand" size="sm" icon="sparkle"
@@ -611,17 +606,17 @@ export function VisualPage({ projectId }: { projectId: string }) {
                 onClick={handleGenSample}
               >生成样片</Button>
               {sampleDone && <Badge tone="success" icon="check">样片生成成功</Badge>}
-              {sampleDone && <span className="wu-caption">请检查双方口型、倾听反应和身份，再接受样片。</span>}
+              {sampleDone && <span className="wu-caption">请检查口型、倾听反应与身份后接受。</span>}
               {(genSample.isPending || sampleJob) && <Badge tone="info">生成中…</Badge>}
             </div>
             {/* 演示样片无画面：明确告知「接受」前并不存在可人工检查的片段（12 报告 P0 的诚实口径） */}
             {sampleDone && sampleSimulated && (
               <p className="wu-caption" style={{ marginTop: 6 }}>
-                演示模式：样片任务走通但无真实画面；接受前无法人工检查口型与身份。真实视频引擎接入后此处产出可播放片段。
+                演示样片无真实画面，接受前无法人工检查口型与身份。
               </p>
             )}
             {currentSample?.result?.simulated === false && currentSample.result.artifactIds?.length ? <video key={currentSample.id} controls preload="metadata" style={{ width: '100%', maxHeight: 480 }} src={`/api/artifacts/${currentSample.result.artifactIds[0]}/file`} /> : null}
-            {currentSample?.result?.simulated===false && <div>{['口型与发言一致','人物身份稳定','倾听反应自然','切点连续'].map(item=><label key={item}><input type="checkbox" checked={checks.includes(item)} onChange={e=>setChecks(s=>e.target.checked?[...s,item]:s.filter(x=>x!==item))}/>{item}</label>)}</div>}
+            {currentSample?.result?.simulated===false && <div className="hf-check">{['口型与发言一致','人物身份稳定','倾听反应自然','切点连续'].map(item=><Choice key={item} type="checkbox" checked={checks.includes(item)} onChange={v=>setChecks(s=>v?[...s,item]:s.filter(x=>x!==item))} label={item}/>)}</div>}
           </section>
         </div>
       </div>

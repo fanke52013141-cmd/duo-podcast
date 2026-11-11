@@ -10,7 +10,7 @@ import {
   usePatchProject, useProject, useSaveDraft, useSaveMachine, useScriptDiff, useScriptRewrite,
 } from '../lib/api';
 import { type Job, type Project, type PronunciationEntry, type ScriptRevision, type Turn } from '../lib/types';
-import { Alert, Badge, Button, Choice, Icon, Input, Modal, Textarea } from '../components/wu';
+import { Alert, Badge, Button, Choice, Empty, Icon, Input, Modal, Textarea } from '../components/wu';
 import { AppShell, FootBar, StageHead } from '../components/AppShell';
 import { formatTimecode } from '../lib/format';
 import { useError } from '../lib/useError';
@@ -145,6 +145,7 @@ export function EditScriptPage({ projectId }: { projectId: string }) {
   // F5 分支：从任一版本派生新草稿
   const [branchOpen, setBranchOpen] = useState(false);
   const [branchLabel, setBranchLabel] = useState('');
+  const [versionMenuOpen, setVersionMenuOpen] = useState(false);
   // F5 对比/合并
   const [diffOpen, setDiffOpen] = useState(false);
   const [diffBase, setDiffBase] = useState('');
@@ -518,6 +519,15 @@ export function EditScriptPage({ projectId }: { projectId: string }) {
     });
   };
 
+  // 下载当前编辑副本（与恢复 Alert 的「下载恢复副本」是不同数据，两个入口都保留）
+  const downloadDraftCopy = () => {
+    const blob = new Blob([JSON.stringify({ revisionId: revision?.id, turns: turnsRef.current }, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `${projectId}-script-draft.json`; a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+
   return (
     <AppShell
       project={proj ?? null}
@@ -574,7 +584,7 @@ export function EditScriptPage({ projectId }: { projectId: string }) {
                   </span>
                 </div>
                 <p className="wu-caption" style={{ marginTop: 8 }}>
-                  读法见<a className="hf-link" onClick={() => setDictOpen(true)}>读音词典</a>。
+                  读法可在读音词典中维护。
                 </p>
               </>
             ) : (
@@ -640,7 +650,7 @@ export function EditScriptPage({ projectId }: { projectId: string }) {
         )}
         <span className="hf-spacer" />
         <Button variant="secondary" size="sm" icon="refresh" disabled={generating || regenerate.isPending} onClick={handleRegenerate}>重新生成</Button>
-        <label className="wu-input" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '0 10px', height: 30, width: 'auto', cursor: 'pointer' }}>
+        <label className="wu-input" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '0 10px', height: 32, width: 'auto', cursor: 'pointer' }}>
           <Icon name="edit" size={14} />版本
           <select
             className="hf-mini-select"
@@ -657,11 +667,20 @@ export function EditScriptPage({ projectId }: { projectId: string }) {
             ))}
           </select>
         </label>
-        <Button variant="secondary" size="sm" icon="plus" disabled={!revision || saving} onClick={() => { setBranchLabel(''); setBranchOpen(true); }}>建分支</Button>
-        <Button variant="secondary" size="sm" disabled={!proj || (proj.scriptRevisions?.length ?? 0) < 2} onClick={openDiff}>版本对比</Button>
-        {!viewIsDraft && (
-          <Button variant="secondary" size="sm" disabled={patchProject.isPending} onClick={handleMakeDraft}>设为当前草稿</Button>
-        )}
+        {/* 版本相关操作收进菜单；各项继承原 disabled / 显示条件，能力不变 */}
+        <span className="hf-menu-wrap">
+          <Button variant="secondary" size="sm" aria-expanded={versionMenuOpen} onClick={() => setVersionMenuOpen((o) => !o)}>版本 ⌄</Button>
+          {versionMenuOpen && (
+            <span className="hf-menu" role="menu">
+              <Button variant="ghost" size="sm" icon="plus" disabled={!revision || saving} onClick={() => { setVersionMenuOpen(false); setBranchLabel(''); setBranchOpen(true); }}>建分支</Button>
+              <Button variant="ghost" size="sm" disabled={!proj || (proj.scriptRevisions?.length ?? 0) < 2} onClick={() => { setVersionMenuOpen(false); openDiff(); }}>版本对比</Button>
+              {!viewIsDraft && (
+                <Button variant="ghost" size="sm" disabled={patchProject.isPending} onClick={() => { setVersionMenuOpen(false); handleMakeDraft(); }}>设为当前草稿</Button>
+              )}
+              <Button variant="ghost" size="sm" icon="download" onClick={() => { setVersionMenuOpen(false); downloadDraftCopy(); }}>下载当前编辑副本</Button>
+            </span>
+          )}
+        </span>
         <Button
           variant="brand" size="sm" icon="check"
           disabled={!revision || scriptApproved || generating || saving || !viewIsDraft}
@@ -683,8 +702,7 @@ export function EditScriptPage({ projectId }: { projectId: string }) {
             <select aria-label="按角色筛选话轮" className="wu-input" style={{width:'auto'}} value={speakerFilter} onChange={e=>{setSpeakerFilter(e.target.value);setReplacePreview(false);setSelected([]);}}><option value="all">全部角色</option><option value="A">角色 A</option><option value="B">角色 B</option></select>
             <Button variant="secondary" disabled={!findText||!!editingId||saving} onClick={()=>setReplacePreview(true)}>预览替换</Button>
             <Button variant="ghost" onClick={()=>{setFindText('');setSpeakerFilter('all');setReplacePreview(false);}}>清除筛选</Button>
-            <Button variant="ghost" onClick={()=>{const blob=new Blob([JSON.stringify({revisionId:revision?.id,turns:turnsRef.current},null,2)],{type:'application/json'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=`${projectId}-script-draft.json`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}}>下载当前编辑副本</Button>
-          </div><p className="wu-caption">全文 {scriptStats(turns).chars} 字 · 预计 {scriptStats(turns).minSeconds}–{scriptStats(turns).maxSeconds} 秒（按字数估算，实际以合成为准）。筛选不改变生成范围。</p>
+          </div><p className="wu-caption" title="按字数估算，实际以合成为准">全文 {scriptStats(turns).chars} 字 · 预计 {scriptStats(turns).minSeconds}–{scriptStats(turns).maxSeconds} 秒 · 筛选不改变生成范围</p>
           {replacePreview&&<Alert tone="warning">将在{speakerFilter==='all'?'全部角色':`角色 ${speakerFilter}`}中替换 {replaceTurns(turns,findText,replaceText,speakerFilter).count} 处「{findText}」为「{replaceText}」。自定义读音保持不变，请在配音前核对。
             <Button disabled={saving||!!editingId||!replaceTurns(turns,findText,replaceText,speakerFilter).count} onClick={()=>{const result=replaceTurns(turnsRef.current,findText,replaceText,speakerFilter);applyTurns(()=>result.turns);setToolMessage(`已替换 ${result.count} 处，等待自动保存`);setReplacePreview(false);}}>确认替换</Button><Button variant="ghost" onClick={()=>setReplacePreview(false)}>取消</Button></Alert>}
           {toolMessage&&<p role="status">{toolMessage}</p>}
@@ -693,13 +711,13 @@ export function EditScriptPage({ projectId }: { projectId: string }) {
           </section>
           {scriptApproved && (
             <Alert tone="info">
-              已绑定脚本 {revision?.id}。编辑将创建新草稿版本，不覆盖已用版本；确认后可选自动启动配音。
+              已绑定脚本 {revision?.id}。编辑将创建新草稿，不覆盖已用版本。
               <a className="hf-link" onClick={() => setView('voice')}>前往阶段③ 试听配音</a>
             </Alert>
           )}
           {error && <Alert tone="danger" onClose={dismissError}>{error}</Alert>}
           {!viewIsDraft && revision && (
-            <Alert tone="warning">正在查看历史版本 {revision.id}（非当前草稿）；编辑将基于该版本创建新草稿。</Alert>
+            <Alert tone="warning">正在查看历史版本 {revision.id}；编辑将基于该版本创建新草稿。</Alert>
           )}
 
           {candidate && (
@@ -742,12 +760,7 @@ export function EditScriptPage({ projectId }: { projectId: string }) {
             )}
 
             {turns.length === 0 && (
-              <div className="wu-empty">
-                <div style={{ fontWeight: 700 }}>还没有话轮</div>
-                <p className="wu-caption" style={{ margin: '6px auto 14px', maxWidth: 420 }}>
-                  在阶段①生成对话，或点下方「发言」手动添加。
-                </p>
-              </div>
+              <Empty title="还没有话轮" desc="在阶段①生成对话，或点下方「发言」手动添加。" />
             )}
 
             {turns.map((t, idx) => {
@@ -853,7 +866,7 @@ export function EditScriptPage({ projectId }: { projectId: string }) {
           {saveState === 'saving' ? '保存中…'
             : saveState === 'error' ? <span style={{ color: 'var(--wu-semantic-danger)' }}>保存失败 · 再编辑可重试</span>
             : saveState === 'saved' ? '已保存'
-            : '自动保存 · 2s 防抖'}
+            : '已自动保存'}
         </span>
       </div>
 
@@ -879,7 +892,7 @@ export function EditScriptPage({ projectId }: { projectId: string }) {
       >
         <div style={{ display: 'grid', gap: 10 }}>
           <p className="wu-caption" style={{ margin: 0 }}>
-            会复制当前查看版本的全部话轮，生成一个新草稿并立即切换过去；原版本、已用版本与确认记录都保持不变。
+            复制当前版本为新草稿并切换过去，原版本与确认记录不变。
           </p>
           <Input
             aria-label="分支名称"
