@@ -29,6 +29,17 @@
 - **验证**：后端 **1014 passed / 18 skipped**（新增 13 项分辨率 + 12 项近景框回归）；前端 34 项 + tsc + 生产构建通过。
 - **边界**：近景框为静态画布坐标（不做人脸追踪），框过小放大会损失细节；真实 GPU 切镜效果验收仍留 RTX 5080。
 
+## 2026-11-12 批 · LongCat-Avatar-1.5 引擎接入（43号方案批B，代码层）
+
+评估与路线见 [43-数字人引擎评估与升级建议](43-数字人引擎评估与升级建议.md)（含第六部分落地状态）。本机无 5080，本批只做代码层与 CPU 可验逻辑。
+
+- **新增 `adapters/longcat_video.py` + `longcat_workflow.json`**：LongCat-Video-Avatar-1.5（GGUF Q5_K_M + Whisper-Large-v3 双音轨 + longcat_distill_euler 12步蒸馏 + rank128 LoRA），节点参数逐一核对自 WanVideoWrapper 源码与官方示例。复用逐镜头缓存/近景裁切/拼接/严格校验/候选登记管线；**MultiTalk 已验收路径零改动**。
+- **引擎可选**：`video_engine=multitalk|longcat`（环境变量 DUOCAST_VIDEO_ENGINE / 服务设置页），`longcat_model`/`longcat_lora` 可配；能力快照带 engine 标识；motion_digest 含引擎与工作流，切引擎缓存自动隔离。
+- **能力边界显式拒绝**：LongCat v1 仅 accepted+twoShot；过肩/倾听/专家/动作参考/局部重做报错指明切回 MultiTalk；⑤页禁用重做控件并提示。
+- **批 A 脚本**：`scripts/gpu5080/prepare-longcat.ps1` 一键检查驱动≥572/torch cu128+sm_120/WanVideoWrapper LongCat 节点/五件模型文件，只检查不下载。
+- **验证**：后端 **1037 passed / 18 skipped**（新增 23 项 LongCat 回归）；前端 34 项 + tsc + 构建全绿。
+- **仍待 5080（批 C/D）**：真实 WanVideoWrapper 版本节点参数复核、MultiTalk vs LongCat A/B 样片验收（口型/聆听者/漂移/耗时/显存）、Q5_K_M 显存实测、5 分钟整期与 720p→1080p 导出验收。LongCat 倾听/专家/局部重做 v1 不支持。
+
 ## 已实现能力
 
 五阶段制作、工程版本存储、任务队列、确认点、SSE、真实提供方适配、快速模式、交付检查与备份维护均已有代码。九月“全部提供方都是mock”的历史描述不代表当前实现。

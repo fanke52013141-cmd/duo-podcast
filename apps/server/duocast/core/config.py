@@ -44,6 +44,11 @@ class Settings:
     text_model: str = "deepseek-flash"
     video_url: str = "http://127.0.0.1:8191"
     video_input: Path = field(default_factory=lambda: PROJECT_ROOT / "runtime" / "video" / "input")
+    # 43 号方案批 B：标准模式视频引擎选择。multitalk=已 GPU 验收的 Wan2.1+MultiTalk；
+    # longcat=LongCat-Video-Avatar-1.5（GGUF+Whisper+蒸馏少步，效果须 5080 验收）。
+    video_engine: str = "multitalk"
+    longcat_model: str = "LongCat/LongCat-Avatar-1.5-Q5_K_M.gguf"
+    longcat_lora: str = "LongCat_distill_lora_rank128_bf16.safetensors"
     # 批 2（42 号方案）：对外 Ingest API 门禁。为空=仅本机默认放行；
     # 设置后 /api/ingest/* 必须携带 Authorization: Bearer <token>。
     api_token: str = ""
@@ -86,6 +91,9 @@ class Settings:
             text_model=os.environ.get("DUOCAST_TEXT_MODEL", "deepseek-flash"),
             video_url=os.environ.get("DUOCAST_VIDEO_URL", "http://127.0.0.1:8191"),
             video_input=Path(os.environ.get("DUOCAST_VIDEO_INPUT", str(PROJECT_ROOT / "runtime" / "video" / "input"))),
+            video_engine=os.environ.get("DUOCAST_VIDEO_ENGINE", "multitalk"),
+            longcat_model=os.environ.get("DUOCAST_LONGCAT_MODEL", "LongCat/LongCat-Avatar-1.5-Q5_K_M.gguf"),
+            longcat_lora=os.environ.get("DUOCAST_LONGCAT_LORA", "LongCat_distill_lora_rank128_bf16.safetensors"),
             api_token=os.environ.get("DUOCAST_API_TOKEN", ""),
         )
 

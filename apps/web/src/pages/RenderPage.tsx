@@ -92,6 +92,8 @@ export function RenderPage({ projectId }: { projectId: string }) {
   const [candidateId, setCandidateId] = useState('');
   const setView = useProjectStore((s) => s.setView);
   const simulated = useServiceStore((s) => s.capabilities?.video.mode === 'mock');
+  const videoEngine = useServiceStore((s) => (s.capabilities?.video.capabilities as { engine?: string } | undefined)?.engine);
+  const isLongCat = !simulated && videoEngine === 'longcat-avatar-1.5';
 
   const proj: Project | undefined = project.data;
   const pinnedReady=useMotionReadiness(proj?.motionPack,proj?.shotStyle);
@@ -423,13 +425,15 @@ export function RenderPage({ projectId }: { projectId: string }) {
             {versions.map(v => <option key={v.version} value={v.version}>{v.version}</option>)}
           </select>
           <label htmlFor="redo-from">重做起点</label>
-          <select id="redo-from" className="wu-input" disabled={isFast} value={redoFromSec} onChange={e => setRedoFromSec(Number(e.target.value))}>
+          <select id="redo-from" className="wu-input" disabled={isFast || isLongCat} title={isLongCat ? 'LongCat 引擎 v1 暂不支持局部重做，请整段生成或切换 MultiTalk 引擎' : undefined} value={redoFromSec} onChange={e => setRedoFromSec(Number(e.target.value))}>
             {segments.map(s => <option key={s.id} value={s.outputRange[0]}>{formatTimecode(s.outputRange[0], { tenths: true })}</option>)}
           </select>
-          <Button variant="secondary" disabled={isFast || isOverShoulder || !canRender || !standardSource} onClick={() => handleRender(true)}>从此段重做候选</Button>
+          <Button variant="secondary" disabled={isFast || isLongCat || isOverShoulder || !canRender || !standardSource} onClick={() => handleRender(true)}>从此段重做候选</Button>
         </section>}
 
         <div className="hf-s5">
+          {isLongCat && isOverShoulder && <Alert tone="warning">LongCat 引擎当前仅支持双人同框；过肩正反打请在服务设置切回 MultiTalk 引擎，或改用同框机位。</Alert>}
+          {isLongCat && !isOverShoulder && <Alert tone="info">LongCat-Avatar-1.5 引擎（待 5080 样片验收）：仅标准生成配置，不支持局部重做；倾听/专家配置请切回 MultiTalk。</Alert>}
           {/* 开始生成前确认（01 §7.1） */}
           <section className="hf-summary">
             <div className="hf-summary-t">开始生成前确认 <span className="wu-caption">点击「{simulated ? '运行流程演示' : '生成候选成片'}」时冻结输入快照</span></div>
@@ -437,7 +441,7 @@ export function RenderPage({ projectId }: { projectId: string }) {
               <div className="hf-kv"><div className="k">{simulated ? '演示估算时长' : '实际时长'}</div><div className="v hf-mono">{timeline ? formatTimecode(totalSecs, { tenths: true }) : '—'}</div></div>
               <div className="hf-kv"><div className="k">画布</div><div className="v">{proj?.aspect === 'portrait' ? '竖屏 9:16' : '横屏 16:9'} · {resolution} 导出画布</div></div>
               <div className="hf-kv"><div className="k">语音来源</div><div className="v">{voiceSource}</div></div>
-              <div className="hf-kv"><div className="k">视频模式</div><div className="v">{isFast ? '快速模式 · 双人演播室' : isOverShoulder ? '双机位过肩正反打' : '双人动态同框'}</div></div>
+              <div className="hf-kv"><div className="k">视频模式</div><div className="v">{isFast ? '快速模式 · 双人演播室' : isOverShoulder ? '双机位过肩正反打' : '双人动态同框'}{!isFast && !simulated ? (isLongCat ? ' · LongCat-1.5 引擎' : ' · MultiTalk 引擎') : ''}</div></div>
               <div className="hf-kv"><div className="k">分段</div><div className="v">{isFast ? '按整条配音更新口型' : isOverShoulder ? '按发言话轮，长话轮均匀分段' : demoRendered ? `演示完成 ${segments.length} 段（无真实输出）` : realRendered ? `已完成 ${segments.length} 段` : `复用 ${reusedCount} · 待生成 ${Math.max(0, segments.length - reusedCount)}`}</div></div>
               <div className="hf-kv"><div className="k">预估</div><div className="v">{renderJob ? '生成中' : '尚未测定'}</div></div>
               <div className="hf-kv"><div className="k">磁盘预算</div><div className="v">尚未测定</div></div>

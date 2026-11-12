@@ -4,7 +4,7 @@ import re
 from dataclasses import replace
 from urllib.parse import urlsplit
 
-FIELDS = {"text_provider", "image_provider", "tts_provider", "video_provider", "text_model", "comfyui_url", "video_url", "text_base_url", "image_base_url", "credential_env", "budget_yuan"}
+FIELDS = {"text_provider", "image_provider", "tts_provider", "video_provider", "text_model", "comfyui_url", "video_url", "text_base_url", "image_base_url", "credential_env", "budget_yuan", "video_engine", "longcat_model", "longcat_lora"}
 
 
 def validate_config(data):
@@ -21,7 +21,7 @@ def validate_config(data):
             raise ValueError("凭据引用必须为环境变量名称")
         if key == "budget_yuan" and (type(value) not in (int, float) or not 0 <= value <= 100000):
             raise ValueError("预算须为 0–100000 元")
-        allowed = {"text_provider": {"mock", "toapis"}, "image_provider": {"mock", "toapis"}, "tts_provider": {"mock", "comfyui"}, "video_provider": {"mock", "comfyui"}}
+        allowed = {"text_provider": {"mock", "toapis"}, "image_provider": {"mock", "toapis"}, "tts_provider": {"mock", "comfyui"}, "video_provider": {"mock", "comfyui"}, "video_engine": {"multitalk", "longcat"}}
         if key in allowed and value not in allowed[key]:
             raise ValueError("不支持的提供方")
     return data
@@ -49,6 +49,8 @@ def preflight_config(data):
             warnings.append("当前服务进程未读取到指定凭据环境变量；设置后须重启，再检测连接")
     if data.get("video_provider", "mock") != "mock" and data.get("tts_provider", "mock") == "mock":
         warnings.append("视频使用真实服务而语音仍为演示；真实成片前请配置并确认真实语音")
+    if data.get("video_provider") == "comfyui" and data.get("video_engine") == "longcat":
+        warnings.append("LongCat 引擎须先在引擎机装好 GGUF 主模型/蒸馏 LoRA/Whisper 编码器并完成 5080 样片验收；未验收前建议保留 multitalk")
     return {"valid": not errors, "errors": errors, "warnings": warnings,
             "notice": "仅校验本机配置，不验证模型存在、网络连通或推理质量"}
 
