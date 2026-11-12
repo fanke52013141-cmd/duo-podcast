@@ -29,6 +29,11 @@ if (-not $engineReady) {
 if ($runtimeConfig.fastEngineRoot) { $env:DUOCAST_FAST_ENGINE = $runtimeConfig.fastEngineRoot }
 $env:DUOCAST_VIDEO_PROVIDER = 'comfyui'
 $env:DUOCAST_VIDEO_URL = 'http://127.0.0.1:8191'
+# 44号标准模式加速胜出组合（2026-11-13 实测 29s 片 79.1min→24.5min，3.23x，画质/口型已验证）。
+# 块交换/预取在本机无收益、torch.compile 因 inductor 循环导入不可用，均保持默认。见 44 号文档第五节。
+if (-not $env:DUOCAST_VIDEO_ATTENTION) { $env:DUOCAST_VIDEO_ATTENTION = 'sageattn' }
+if (-not $env:DUOCAST_VIDEO_TEXT_CFG) { $env:DUOCAST_VIDEO_TEXT_CFG = '1.0' }
+if (-not $env:DUOCAST_VIDEO_AUDIO_CFG) { $env:DUOCAST_VIDEO_AUDIO_CFG = '1.0' }
 $env:DUOCAST_VIDEO_INPUT = Join-Path $engineHome 'input'
 $env:DUOCAST_TTS_PROVIDER = 'comfyui'
 $env:DUOCAST_TEXT_PROVIDER = 'toapis'

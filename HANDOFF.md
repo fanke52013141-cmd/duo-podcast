@@ -35,13 +35,13 @@
 - 依据：坐姿双人播客是 InfiniteTalk 主场（LongCat 强项是全身表演，用不上）；消费级硬件速度无收益（2 分钟约 40–90 分钟 vs 现约 2 小时）；5080 无社区一手实测；质量优势无独立头对头证明。
 - 评估过程与实现细节留存 git 历史提交 `7b1f094`（含 43 号评估文档），未来需要时可查阅或 cherry-pick 恢复；当前代码库不含任何 LongCat 相关代码与文档。
 
-## 2026-11-12 批 · 标准模式加速调优参数（44号，待 5080 实测）
+## 2026-11-12 批 · 标准模式加速调优参数（44号，2026-11-13 已完成 5080 实测）
 
 - **8 个加速参数可配置**（环境变量 `DUOCAST_VIDEO_*`，默认值=现网行为零变化）：块交换数/预取、注意力后端（sdpa→sageattn）、text/audio CFG、torch.compile 开关、LoRA 文件名/强度。落点：config.py、comfyui_video.py（`_apply_acceleration`+`acceleration_fingerprint`）、main.py 装配与 `activeConfig.video_acceleration` 可见。
 - **缓存指纹含全部加速参数**：切配置自动重算对应片段，不误用旧配置产物；同配置回退命中旧缓存。
-- **审计结论**：现网 fp8+lightx2v 4步蒸馏底子正确；最大瓶颈是块交换 38/40+prefetch 0 与 sdpa 注意力。预期块交换调优+SageAttention 后 2 分钟视频从约 2 小时降至 40–70 分钟（**预期非承诺，以实测为准**）。LoRA 不换（FusionX 长片色偏加剧；DMAD/NVFP4 列观察）。
-- **回家测试按 [44-标准模式加速调优交接](44-标准模式加速调优交接.md) 梯级 A/B**：基线→块交换→SageAttention→CFG 置换→compile→整期复核，每步单变量、同工程同种子，结果填第五节记录表。**第 3.0 节为下载清单**：加速测试不需新模型；需装 torch cu128/triton-windows/SageAttention sm_120 wheel，核对 5 个节点包（WanVideoWrapper/KJNodes/VHS/LayerStyle/pysssss）。
-- **验证**：后端 **1029 passed / 18 skipped**（新增 15 项加速参数回归）；前端 34 项 + tsc + 构建全绿。GPU 提速幅度与画质影响留 5080 实测。
+- **5080 实测胜出组合（29.1s 固定工程 EP9930）：`sageattn + text/audio CFG 1.0`，块交换/预取保持默认、compile 关。整片 79.1min→24.5min，3.23× 提速（省 69%），显存 15.0→13.8GB，口型/聆听者/手部/身份动态验证通过。** 已固化到 start.ps1 + 用户环境变量。详见 [44 号文档第五节](44-标准模式加速调优交接.md)。
+- **与审计预期的差异**：块交换/预取在本机无收益（显存被 137 帧窗口激活值占满，降 swap 反而换页）；SageAttention 是最大收益（1.97×）；CFG 单前向再省 41%；torch.compile 因 inductor 循环导入不可用。SageAttention 2.1.1 须装在引擎实际用的 `InfiniteTalk_Runtime\venv`（非 `ComfyUI\python`），装后重启引擎。
+- **验证**：后端 **1029 passed / 18 skipped**（新增 15 项加速参数回归）；前端 34 项 + tsc + 构建全绿。长片（2/5 分钟）色偏/衔接建议用真实整期复核。
 
 ## 已实现能力
 
