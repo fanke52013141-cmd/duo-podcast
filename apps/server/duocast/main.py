@@ -250,6 +250,10 @@ async def lifespan(app: FastAPI):
         "text_model": cfg.text_model, "text_base_url": runtime_config.get("text_base_url", "https://toapis.com"),
         "image_base_url": runtime_config.get("image_base_url", "https://toapis.com"),
         "comfyui_url": cfg.comfyui_url, "video_url": cfg.video_url,
+        "video_acceleration": {"attention": cfg.video_attention, "blocks_to_swap": cfg.video_blocks_to_swap,
+                               "prefetch_blocks": cfg.video_prefetch_blocks, "text_cfg": cfg.video_text_cfg,
+                               "audio_cfg": cfg.video_audio_cfg, "compile": cfg.video_compile,
+                               "lora": cfg.video_lora, "lora_strength": cfg.video_lora_strength},
         "credential_env": runtime_config.get("credential_env", "DUOCAST_TOAPIS_KEY"),
         "credentialPresent": bool(cfg.toapis_key), "budget_yuan": runtime_config.get("budget_yuan", 2),
     }
@@ -286,7 +290,11 @@ async def lifespan(app: FastAPI):
     else:
         local_tts = MockTTSProvider()
     video = (ComfyUIVideoProvider(base_url=cfg.video_url, input_dir=settings.video_input,
-                                artifact_store=artifacts)
+                                artifact_store=artifacts,
+                                attention=cfg.video_attention, blocks_to_swap=cfg.video_blocks_to_swap,
+                                prefetch_blocks=cfg.video_prefetch_blocks, text_cfg=cfg.video_text_cfg,
+                                audio_cfg=cfg.video_audio_cfg, compile_model=cfg.video_compile,
+                                lora=cfg.video_lora or None, lora_strength=cfg.video_lora_strength)
              if cfg.video_provider == "comfyui" else MockVideoProvider())
     from .services.fast_catalog import catalog
     if (engine_root() or any(t.get("ready") for t in catalog())) and not video.capabilities.get("simulated", True):

@@ -47,6 +47,16 @@ class Settings:
     # 批 2（42 号方案）：对外 Ingest API 门禁。为空=仅本机默认放行；
     # 设置后 /api/ingest/* 必须携带 Authorization: Bearer <token>。
     api_token: str = ""
+    # 44 号 · 标准模式加速调优参数（默认值=现网行为，零变化）。
+    # 回家在 5080 上按 44 号文档梯级 A/B；参数纳入缓存指纹，切配置不误用旧片段。
+    video_attention: str = "sdpa"          # sdpa | sageattn | sageattn_3 | flash_attn_2 | flash_attn_3 | comfy
+    video_blocks_to_swap: int = 38         # 0–48；38 为现网极限省显存值，5080 可试 24–28
+    video_prefetch_blocks: int = 0         # 0–40；异步预取，1 通常能补回大部分交换速度损失
+    video_text_cfg: float = 2.0            # 现网 listening-v4-cfg2 策略；蒸馏 LoRA 官方建议 1.0（A/B）
+    video_audio_cfg: float = 1.0           # 口型引导；官方建议蒸馏 LoRA 配 2.0（与 text_cfg 置换 A/B）
+    video_compile: bool = False            # torch.compile（blocks-only，节点 177）；Blackwell 需 triton-windows
+    video_lora: str = ""                   # 空=模板默认 lightx2v 4 步蒸馏；可换 LoRA 做 A/B
+    video_lora_strength: float = 0.8
 
     @staticmethod
     def _env_int(name: str, default: int) -> int:
@@ -55,6 +65,21 @@ class Settings:
         except ValueError:
             return default
         return value if value > 0 else default
+
+    @staticmethod
+    def _env_nonneg_int(name: str, default: int) -> int:
+        try:
+            value = int(os.environ.get(name, str(default)))
+        except ValueError:
+            return default
+        return value if value >= 0 else default
+
+    @staticmethod
+    def _env_float(name: str, default: float) -> float:
+        try:
+            return float(os.environ.get(name, str(default)))
+        except ValueError:
+            return default
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -87,6 +112,14 @@ class Settings:
             video_url=os.environ.get("DUOCAST_VIDEO_URL", "http://127.0.0.1:8191"),
             video_input=Path(os.environ.get("DUOCAST_VIDEO_INPUT", str(PROJECT_ROOT / "runtime" / "video" / "input"))),
             api_token=os.environ.get("DUOCAST_API_TOKEN", ""),
+            video_attention=os.environ.get("DUOCAST_VIDEO_ATTENTION", "sdpa"),
+            video_blocks_to_swap=cls._env_nonneg_int("DUOCAST_VIDEO_BLOCKS_TO_SWAP", 38),
+            video_prefetch_blocks=cls._env_nonneg_int("DUOCAST_VIDEO_PREFETCH_BLOCKS", 0),
+            video_text_cfg=cls._env_float("DUOCAST_VIDEO_TEXT_CFG", 2.0),
+            video_audio_cfg=cls._env_float("DUOCAST_VIDEO_AUDIO_CFG", 1.0),
+            video_compile=os.environ.get("DUOCAST_VIDEO_COMPILE", "0") == "1",
+            video_lora=os.environ.get("DUOCAST_VIDEO_LORA", ""),
+            video_lora_strength=cls._env_float("DUOCAST_VIDEO_LORA_STRENGTH", 0.8),
         )
 
 
