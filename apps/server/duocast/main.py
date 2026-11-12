@@ -247,7 +247,6 @@ async def lifespan(app: FastAPI):
     app.state.public_config = {
         "text_provider": cfg.text_provider, "image_provider": cfg.image_provider,
         "tts_provider": cfg.tts_provider, "video_provider": cfg.video_provider,
-        "video_engine": cfg.video_engine,
         "text_model": cfg.text_model, "text_base_url": runtime_config.get("text_base_url", "https://toapis.com"),
         "image_base_url": runtime_config.get("image_base_url", "https://toapis.com"),
         "comfyui_url": cfg.comfyui_url, "video_url": cfg.video_url,
@@ -286,17 +285,9 @@ async def lifespan(app: FastAPI):
         )
     else:
         local_tts = MockTTSProvider()
-    if cfg.video_provider == "comfyui":
-        # 43 号方案批 B：标准模式引擎可选 MultiTalk（已验收）或 LongCat-Avatar-1.5（待 5080 验收）。
-        if cfg.video_engine == "longcat":
-            from .adapters.longcat_video import LongCatVideoProvider
-            video = LongCatVideoProvider(base_url=cfg.video_url, input_dir=settings.video_input,
-                                         artifact_store=artifacts, model=cfg.longcat_model, lora=cfg.longcat_lora)
-        else:
-            video = ComfyUIVideoProvider(base_url=cfg.video_url, input_dir=settings.video_input,
-                                         artifact_store=artifacts)
-    else:
-        video = MockVideoProvider()
+    video = (ComfyUIVideoProvider(base_url=cfg.video_url, input_dir=settings.video_input,
+                                artifact_store=artifacts)
+             if cfg.video_provider == "comfyui" else MockVideoProvider())
     from .services.fast_catalog import catalog
     if (engine_root() or any(t.get("ready") for t in catalog())) and not video.capabilities.get("simulated", True):
         video = ModeVideoProvider(video, artifacts)

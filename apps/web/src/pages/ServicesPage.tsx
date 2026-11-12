@@ -6,7 +6,7 @@ import { useProjectStore } from '../stores';
 import { sendJson } from '../lib/api';
 
 const CHANNELS = [{key:'text', label:'文本', real:'toapis'}, {key:'image', label:'图片', real:'toapis'}, {key:'tts', label:'语音', real:'comfyui'}, {key:'video', label:'视频', real:'comfyui'}];
-const DEFAULTS: Record<string, string | number> = {text_provider:'mock',image_provider:'mock',tts_provider:'mock',video_provider:'mock',video_engine:'multitalk',longcat_model:'LongCat/LongCat-Avatar-1.5-Q5_K_M.gguf',longcat_lora:'LongCat_distill_lora_rank128_bf16.safetensors',text_model:'deepseek-flash',text_base_url:'https://toapis.com',image_base_url:'https://toapis.com',comfyui_url:'http://127.0.0.1:8188',video_url:'http://127.0.0.1:8191',credential_env:'DUOCAST_TOAPIS_KEY',budget_yuan:2};
+const DEFAULTS: Record<string, string | number> = {text_provider:'mock',image_provider:'mock',tts_provider:'mock',video_provider:'mock',text_model:'deepseek-flash',text_base_url:'https://toapis.com',image_base_url:'https://toapis.com',comfyui_url:'http://127.0.0.1:8188',video_url:'http://127.0.0.1:8191',credential_env:'DUOCAST_TOAPIS_KEY',budget_yuan:2};
 
 export function ServicesPage() {
   const machine = useMachine();
@@ -39,17 +39,6 @@ export function ServicesPage() {
             {c.key==='text' && <Field label="模型"><Input aria-label="文本模型" value={config.text_model} onChange={e=>change('text_model',e.target.value)}/></Field>}
             {c.key==='image' && <p className="wu-caption">图片适配器使用 gpt-image-2-vip 文生图；人物参考编辑尚未开放，可上传已审看的双人底图。</p>}
             {(c.key==='tts'||c.key==='video') && <Field label="引擎地址"><Input aria-label={c.label+'引擎地址'} value={config[c.key==='tts'?'comfyui_url':'video_url']} onChange={e=>change(c.key==='tts'?'comfyui_url':'video_url',e.target.value)}/></Field>}
-            {c.key==='video' && config.video_provider==='comfyui' && <>
-              <Field label="标准模式引擎"><select className="wu-input" aria-label="标准模式引擎" value={config.video_engine} onChange={e=>change('video_engine',e.target.value)}>
-                <option value="multitalk">MultiTalk / InfiniteTalk · 已验收</option>
-                <option value="longcat">LongCat-Avatar-1.5 · 待 5080 验收</option>
-              </select></Field>
-              {config.video_engine==='longcat' && <>
-                <Field label="LongCat 主模型（GGUF）"><Input aria-label="LongCat 主模型" value={config.longcat_model} onChange={e=>change('longcat_model',e.target.value)}/></Field>
-                <Field label="蒸馏 LoRA"><Input aria-label="LongCat 蒸馏 LoRA" value={config.longcat_lora} onChange={e=>change('longcat_lora',e.target.value)}/></Field>
-                <p className="wu-caption">LongCat 仅支持标准生成配置与双人同框；倾听/专家/过肩/局部重做仍走 MultiTalk。切换引擎会使分段缓存按新引擎重算。模型文件与 GPU 效果须在引擎机（RTX 5080）验收后才可用于正式成片。</p>
-              </>}
-            </>}
             <Badge tone="muted">{machine.data?.capabilities[c.key==='text'?'textApi':c.key==='image'?'imageApi':c.key as 'tts'|'video']?.mode==='mock'?'演示可运行':'已装配 · 待检测及样片验证'}</Badge>
             <Button variant="secondary" busy={test.isPending} onClick={()=>test.mutate(c.key,{onSuccess:r=>setResults(s=>({...s,[c.key]:(r.simulated?'演示自检：':'')+(r.message??r.error??'检测完成')+(r.checkedAt?' · '+new Date(r.checkedAt).toLocaleTimeString(): '')})),onError:e=>setResults(s=>({...s,[c.key]:e.message}))})}>检测当前配置</Button>
             {results[c.key] && <p role="status">{results[c.key]}</p>}
