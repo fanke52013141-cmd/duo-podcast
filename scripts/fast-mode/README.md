@@ -4,9 +4,11 @@
 
 ## 这次版本
 
-`deferred-scale-v2`：在导出所需的画布上融合 256 像素口型输出，避免先缩回小脸再整幅放大；保留源素材长宽比例，并避免把已是高清的素材先降采样。监听帧沿用原闭口动作库。原有模式和旧工程默认行为不变。
+`deferred-scale-v2` + 牙齿细节修复：在导出所需的画布上融合 256 像素口型输出，避免先缩回小脸再整幅放大；保留源素材长宽比例，并避免把已是高清的素材先降采样。监听帧沿用原闭口动作库。原有模式和旧工程默认行为不变。
 
-界面新建节目可选快速模式，生成导出可选原始 / 清晰 / 更清晰三个编码增强档位。增强只是温和锐化和降低压缩，不是 AI 超分。GFPGAN、时序修复仅在独立实验中测试，没有进入生产依赖或默认处理链。
+口型解码后、贴回画布前默认过一道 CodeFormer 牙齿/唇部修复（`face_restore.py`，保真度 0.7，请求字段 `faceRestore` 可关或调 0–1）。GPU 批处理上限 2，初始化按空闲显存自动 GPU→CPU 兜底（`DUOCAST_RESTORE_DEVICE` 可强制）。权重 `models/codeformer/codeformer.pth` 离线自备；缺失且未关闭修复时 worker 明确报错，不静默降级。
+
+界面新建节目可选快速模式，生成导出可选原始 / 清晰 / 更清晰三个编码增强档位。编码增强只是温和锐化和降低压缩，不是 AI 超分；AI 修复只作用于生成的嘴部区域。低清模板可用 `upscale_template.py` 一次性超分重建（Real-ESRGAN + 光流时序稳定，见 39 号文档），渲染期零额外耗时。
 
 ## 外置运行时布局
 
@@ -14,12 +16,14 @@
 
 ```text
 fast-runtime/
-  worker.py, render_geometry.py, quality.py, runtime_version.json
+  worker.py, motion_worker.py, motion_audio_cache.py, resident_worker.py,
+  render_geometry.py, quality.py, face_restore.py, runtime_version.json
   venv/Scripts/python.exe
   vendor/MuseTalk/
   models/musetalkV15/{musetalk.json,unet.pth}
   models/sd-vae/{config.json,diffusion_pytorch_model.bin}
   models/whisper/{config.json,pytorch_model.bin,preprocessor_config.json}
+  models/codeformer/codeformer.pth
   assets/{stage.png,template_A.mp4,template_B.mp4,manifest.json,face_coordinates.json,parsing_bisenet.pth}
   cache/
 ```
@@ -41,6 +45,8 @@ $env:DUOCAST_FAST_ENGINE='C:\DuoCast\fast-runtime'
 ## 准备高清动作素材
 
 建议使用实际生成或拍摄的 720p 及以上双人同框视频。1080p 导出画布不能替代高清输入；人脸像素尺寸、转头角度和原生口型模型仍会限制细节。新版代码支持高清模板，但本次没有把一秒高清实验升级为正式动作库。
+
+已有低清模板（如 432×480）可用 `upscale_template.py` 做一次性超分重建：Real-ESRGAN 4× 后光流引导时序稳定（消除逐帧 GAN 的"沸腾"），降采样到 2× 重编码并同步放大人脸坐标。需要本机 `realesrgan-ncnn-vulkan`（realesrgan-x4plus 模型）。超分是 AI 重建细节（皮肤轻磨皮），改变模板身份，须先人工验收同帧对比与动态样片，再备份旧素材、替换并离线重钉受影响工程。流程与验证记录见 [39-画质治本优化与底图素材规范](../../39-画质治本优化与底图素材规范.md)。
 
 准备一段经过审看、无预热畸变的双人横屏动作视频，A 在左、B 在右；视频中两人都需要有说话和闭口倾听的区间。源视频的说话时间元数据采用：
 
