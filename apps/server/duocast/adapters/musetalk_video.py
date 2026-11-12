@@ -161,6 +161,8 @@ class MuseTalkVideoProvider:
         worker_req = {'outputDir':str(folder), 'master':str(folder/'master.wav'), 'tracks':{s:str(folder/f'{s}.wav') for s in roles},
             'turns':turns, 'sampleRate':rate, 'sampleCount':end-start, 'seed':req.get('seed',42),
             'resolution':req.get('resolution','1920x1080'), 'fps':req.get('fps',25), 'fastQuality':req.get('fastQuality','original')}
+        if req.get('faceRestore') is not None:
+            worker_req['faceRestore'] = req['faceRestore']
         if frozen is not None and project.motion_pack is not None:
             worker_req['expectedRuntimeIdentity'] = frozen['identity']
         if project.motion_pack is not None:
@@ -211,7 +213,7 @@ class MuseTalkVideoProvider:
         artifact_id = 'VID-FAST-'+uuid.uuid4().hex
         self.artifacts.register(artifact_id,'video',str(final),req.get('dependencyHash',''),req,'musetalk-fast-v2')
         return {'artifactIds':[artifact_id], 'meta':{'path':str(final),'durationSec':duration,'resolution':worker_req['resolution'],
-            'fps':worker_req['fps'],'fastQuality':worker_req['fastQuality'],'generationMode':'fast','cameraMode':req.get('cameraMode',project.camera_mode),'cameraPlan':cameras,'qualityStatus':'needs_review',
+            'fps':worker_req['fps'],'fastQuality':worker_req['fastQuality'],'faceRestore':worker_req.get('faceRestore'),'generationMode':'fast','cameraMode':req.get('cameraMode',project.camera_mode),'cameraPlan':cameras,'qualityStatus':'needs_review',
             'generationStats':{**json.loads((folder/'metrics.json').read_text(encoding='utf-8')),
                                **({'runtime': runtime_stats} if runtime_stats is not None else {})}}}
 

@@ -16,6 +16,7 @@ os.environ.update(HF_HUB_OFFLINE='1', TRANSFORMERS_OFFLINE='1', PYTHONDONTWRITEB
 sys.path.insert(0, str(ROOT / 'vendor/MuseTalk'))
 from quality import quality_options
 from render_geometry import composite_size, project_box, preparation_key
+from face_restore import FaceRestorer, restore_fidelity
 import cv2
 import numpy as np
 import torch
@@ -95,9 +96,21 @@ def initialize_runtime():
     whisper = WhisperModel.from_pretrained(str(models / 'whisper'), local_files_only=True).half().cuda().eval()
     processor = AudioProcessor(str(models / 'whisper'))
     parser = Parser()
+    restorer = None
+    codeformer = models / 'codeformer/codeformer.pth'
+    if codeformer.is_file():
+        device = os.environ.get('DUOCAST_RESTORE_DEVICE')
+        if device not in ('cuda', 'cpu'):
+            # Auto: only restore on GPU when there is headroom for MuseTalk's
+            # activation peak plus the ~1.6GB restoration batch; otherwise CPU.
+            free, _ = torch.cuda.mem_get_info()
+            device = 'cuda' if free >= 6 * 1024**3 else 'cpu'
+        restorer = FaceRestorer(codeformer, device=device)
+        print(f'faceRestore device={device}', flush=True)
     return {'torch': torch, 'cv2': cv2, 'np': np, 'ROOT': ROOT,
             'vae': vae, 'unet': unet, 'pe': pe, 'whisper': whisper,
-            'processor': processor, 'parser': parser, 'get_image': get_image}
+            'processor': processor, 'parser': parser, 'get_image': get_image,
+            'restorer': restorer}
 
 
 def run_with_runtime(request, runtime):
@@ -114,6 +127,7 @@ def run(request, runtime=None):
     out.mkdir(parents=True, exist_ok=True)
     quality_name = request.get('fastQuality', 'original')
     quality = quality_options(quality_name)
+    fidelity = restore_fidelity(request)
     duration = request['sampleCount'] / request['sampleRate']
     if not 0 < duration <= 300: raise ValueError('Duration outside 0–300 seconds')
     count = math.ceil(duration * 25)
@@ -122,6 +136,9 @@ def run(request, runtime=None):
     torch.cuda.reset_peak_memory_stats()
     runtime = runtime or initialize_runtime()
     vae, unet, pe, whisper, processor, parser = (runtime[key] for key in ('vae', 'unet', 'pe', 'whisper', 'processor', 'parser'))
+    restorer = runtime.get('restorer')
+    if fidelity is not None and restorer is None:
+        raise ValueError('人脸修复模型未安装（models/codeformer/codeformer.pth），无法启用牙齿细节修复')
     if request.get('motionAssets'):
         from motion_worker import run_motion
         return run_motion(request, {**runtime, 'quality': quality})
@@ -161,7 +178,10 @@ def run(request, runtime=None):
                 if batch:
                     cond = pe(chunks[batch].cuda().half())
                     predicted = unet.model(latents[[indices[i] for i in batch]].cuda().half(), torch.tensor([0], device='cuda'), encoder_hidden_states=cond).sample
-                    for i, face in zip(batch, vae.decode_latents(predicted)):
+                    decoded = vae.decode_latents(predicted)
+                    if fidelity is not None and restorer is not None:
+                        decoded = restorer.restore_batch(decoded, fidelity)
+                    for i, face in zip(batch, decoded):
                         box = project_box(coords[speaker][indices[i]], (source_width, source_height), (width, height))
                         x1, y1, x2, y2 = box
                         face = cv2.resize(face, (x2-x1, y2-y1), interpolation=cv2.INTER_LANCZOS4)
@@ -195,6 +215,7 @@ def run(request, runtime=None):
         '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '192k', '-movflags', '+faststart', str(out/'final.mp4')], check=True)
     metrics = {'wallSeconds': time.monotonic()-started, 'durationSec': duration, 'frames': count, 'roles': stats,
         'fastQuality': quality_name, 'sourceSizes': source_sizes, 'compositing': 'deferred-scale-v2',
+        'faceRestore': fidelity if fidelity is not None else 'off',
         'peakCudaGB': torch.cuda.max_memory_allocated()/1e9, 'motionSource': 'approved template v1', 'engine': 'MuseTalk 1.5'}
     (out/'metrics.json').write_text(json.dumps(metrics, indent=2), encoding='utf-8')
     for speaker in ('A','B'): (out/f'role_{speaker}.mp4').unlink()

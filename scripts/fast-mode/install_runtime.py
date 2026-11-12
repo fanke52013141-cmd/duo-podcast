@@ -16,7 +16,8 @@ import uuid
 import warnings
 
 LEGACY_FILES = ("worker.py", "render_geometry.py", "motion_worker.py", "motion_audio_cache.py", "resident_worker.py", "quality.py")
-FILES = (*LEGACY_FILES, "prepare_expert_motion.py")
+V2_FILES = (*LEGACY_FILES, "prepare_expert_motion.py")
+FILES = (*V2_FILES, "face_restore.py")
 MANIFEST = "runtime_version.json"
 BACKUPS = ".runtime-releases"
 PENDING = ".runtime-install-pending.json"
@@ -112,7 +113,7 @@ def _backup(target, release_id):
         raise ValueError("Invalid backup ID; use the exact releaseId, never a path")
     folder = _safe(target / BACKUPS / release_id)
     metadata = _read_json(folder / "snapshot.json")
-    registries = {1: {*LEGACY_FILES, MANIFEST}, 2: {*FILES, MANIFEST}}
+    registries = {1: {*LEGACY_FILES, MANIFEST}, 2: {*V2_FILES, MANIFEST}, 3: {*FILES, MANIFEST}}
     if (not isinstance(metadata, dict) or metadata.get("schemaVersion") not in registries or metadata.get("releaseId") != release_id
             or metadata.get("runtime") != str(target) or set(metadata.get("files", {})) != registries[metadata["schemaVersion"]]):
         raise ValueError("Backup identity or file manifest differs")
@@ -169,13 +170,13 @@ def install(source, target):
             records[name] = {"existed": original is not None, "sha256": _hash(original) if original is not None else None, "mode": mode}
             if original is not None:
                 _atomic_bytes(folder / name, original, mode)
-        metadata = {"schemaVersion": 2, "runtime": str(target), "releaseId": release_id, "files": records,
+        metadata = {"schemaVersion": 3, "runtime": str(target), "releaseId": release_id, "files": records,
                     "installedHashes": {name: _hash(content) for name, content in data.items()}}
         _json_write(folder / "snapshot.json", metadata)
         _backup(target, release_id)
         identity_changed = records["worker.py"]["existed"] and records["worker.py"]["sha256"] != _hash(data["worker.py"])
         notices = (["worker.py identity changed: existing fast-template pins/catalog reviews must be revalidated; no template identity was rewritten"] if identity_changed else [])
-        version = {"schemaVersion": 2, "implementation": "motion-runtime-transactional-v1", "releaseId": release_id,
+        version = {"schemaVersion": 3, "implementation": "motion-runtime-transactional-v1", "releaseId": release_id,
                    "files": {name: {"sha256": _hash(content), "bytes": len(content)} for name, content in data.items()},
                    "warnings": notices, "templateIdentityRewritten": False}
         _json_write(target / PENDING, {"releaseId": release_id})

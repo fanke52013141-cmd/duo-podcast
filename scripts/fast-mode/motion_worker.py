@@ -259,6 +259,11 @@ def _run(request, expanded, geometry, rt, torch, cv2):
     out.mkdir(parents=True, exist_ok=True)
     clips, count = request["motionAssets"]["clips"], request["motionAssets"]["plan"]["totalFrames"]
     quality = rt["quality"]
+    from face_restore import restore_fidelity
+    fidelity = restore_fidelity(request)
+    restorer = rt.get("restorer")
+    if fidelity is not None and restorer is None:
+        raise ValueError("人脸修复模型未安装（models/codeformer/codeformer.pth），无法启用牙齿细节修复")
     readers, features, latent_banks = {}, {}, {}
     used = {item[0] for roles in expanded.values() for sequence in roles.values() for item in sequence}
     for clip_id in used:
@@ -350,9 +355,12 @@ def _run(request, expanded, geometry, rt, torch, cv2):
                         faces = rt["vae"].decode_latents(predicted)
                         if len(faces) != len(batch):
                             raise ValueError("VAE decoded fewer mouth frames than requested")
-                        for index, face in zip(batch, faces):
+                        for face in faces:
                             if len(face.shape) != 3 or face.shape[2] != 3 or not rt["np"].isfinite(face).all():
                                 raise ValueError("VAE decoded invalid face pixels")
+                        if fidelity is not None and restorer is not None:
+                            faces = restorer.restore_batch(faces, fidelity)
+                        for index, face in zip(batch, faces):
                             clip_id, source, _ = sequence[index]
                             canvas = readers[clip_id].get(source)
                             box = clips[clip_id]["coordinates"][source]
@@ -393,6 +401,7 @@ def _run(request, expanded, geometry, rt, torch, cv2):
         metrics = {"wallSeconds": time.monotonic()-started, "durationSec": request["sampleCount"]/request["sampleRate"],
                    "frames": count, "motionSource": "pinned-reviewed-motion-pack", "packId": request["motionAssets"]["packId"],
                    "packVersion": request["motionAssets"]["packVersion"], "engine": "MuseTalk 1.5",
+                   "faceRestore": fidelity if fidelity is not None else "off",
                    "audioFeaturePasses": feature_cache['miss'] + feature_cache['invalid'],
                    "audioFeatureCacheHits": feature_cache['hit'], "audioFeatureCacheMisses": feature_cache['miss'],
                    "audioFeatureCacheInvalid": feature_cache['invalid'],

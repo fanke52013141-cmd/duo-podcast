@@ -112,6 +112,10 @@ def validate_render_options(project, payload, pronunciation=None, real_video=Tru
         quality_options(payload.get("fastQuality", "original"))
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
+    face_restore = payload.get("faceRestore")
+    if face_restore is not None and face_restore != "off":
+        if isinstance(face_restore, bool) or not isinstance(face_restore, (int, float)) or not 0 <= face_restore <= 1:
+            raise HTTPException(422, "牙齿细节修复必须为 off 或 0–1 的保真度")
     if project.generation_mode == "fast":
         from ..adapters.musetalk_video import validate_fast_options
         try:

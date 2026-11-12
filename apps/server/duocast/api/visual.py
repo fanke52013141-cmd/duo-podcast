@@ -96,6 +96,7 @@ async def sample(project_id: str, payload: dict, request: Request) -> dict:
         "resolution": payload.get("resolution", "854x480"),
         "fps": payload.get("fps", 25),
         "fastQuality": payload.get("fastQuality", "original"),
+        "faceRestore": payload.get("faceRestore"),
         "cacheOnly": bool(payload.get("reuseMotionArtifactId") and payload.get("redoFromSec") is None),
         "projectSnapshot": project.model_dump(mode="json", by_alias=True),
         "dependencyHash": dependency_hash(project),
