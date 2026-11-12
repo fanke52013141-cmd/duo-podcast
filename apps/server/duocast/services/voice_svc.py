@@ -100,7 +100,8 @@ def _effective_bindings(project: Project, supplied: dict[str, dict]) -> dict[str
         binding.id[3:4] if binding.id.startswith("VB-") and binding.id[3:4] in ("A", "B") else "": {
             "id": binding.id, "characterId": binding.character_id,
             "providerProfileId": binding.provider_profile_id, "modelId": binding.model_id,
-            "localRefAudio": binding.local_ref_audio, "minimaxVoiceId": binding.minimax_voice_id,
+            "localRefAudio": binding.local_ref_audio.model_dump(by_alias=True) if binding.local_ref_audio else None,
+            "minimaxVoiceId": binding.minimax_voice_id,
         }
         for binding in project.voice_bindings
     }
