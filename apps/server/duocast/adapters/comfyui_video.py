@@ -6,6 +6,7 @@ import hashlib
 import json
 import math
 import marshal
+import os
 from types import CodeType
 from pathlib import Path
 import shutil
@@ -53,6 +54,11 @@ class ComfyUIVideoProvider:
         self.compile_model = compile_model
         self.lora = lora
         self.lora_strength = lora_strength
+        # 47号背景退化修复：clean=每段重锚定干净底图（打断参考帧链式累积退化）；
+        # chain=现网行为（上一段末帧做参考，保衔接但背景逐段退化）。默认 chain，验证后再切。
+        self.anchor_mode = os.environ.get("DUOCAST_ANCHOR_MODE", "chain").strip().lower()
+        if self.anchor_mode not in {"chain", "clean"}:
+            raise ValueError("DUOCAST_ANCHOR_MODE 须为 chain 或 clean")
         self._lock = asyncio.Lock()
         def normalized(code):
             constants = tuple(normalized(c) if isinstance(c, CodeType) else c for c in code.co_consts)
@@ -64,7 +70,8 @@ class ComfyUIVideoProvider:
         return {"attention": self.attention, "blocksToSwap": self.blocks_to_swap,
                 "prefetchBlocks": self.prefetch_blocks, "textCfg": self.text_cfg,
                 "audioCfg": self.audio_cfg, "compile": self.compile_model,
-                "lora": self.lora, "loraStrength": self.lora_strength}
+                "lora": self.lora, "loraStrength": self.lora_strength,
+                "anchor": self.anchor_mode}
 
     def _apply_acceleration(self, wf: dict) -> dict:
         """把加速参数写入工作流（纯函数式修改，CPU 可测）。节点 177 为现成 compile 设置节点。"""
@@ -217,7 +224,7 @@ class ComfyUIVideoProvider:
                 stop = min(total, cursor + 5)
                 shot_key = round(cursor*rate)*100000000 + round(stop*rate)
                 clip = motion_folder / f"shot_{shot_key}.mp4"
-                reference_hash = self.artifacts._hash_file(str(segments[-1])) if segments else self.artifacts._hash_file(str(image))
+                reference_hash = self.artifacts._hash_file(str(image)) if (self.anchor_mode == "clean" or not segments) else self.artifacts._hash_file(str(segments[-1]))
                 marker = clip.with_suffix(".complete.json")
                 valid = False
                 retained = False
@@ -255,7 +262,8 @@ class ComfyUIVideoProvider:
                         else:
                             await self._prepare_engine(client)
                             await self._shot(client, digest, shot_key, cursor, stop, rate, data, tracks, motion_folder, original,
-                                segments[-1] if segments else None, performance, req.get("seed", 1), performance_mode, visual["personRegions"])
+                                segments[-1] if segments else None, performance, req.get("seed", 1), performance_mode, visual["personRegions"],
+                                clean_anchor=(self.anchor_mode == "clean"))
                             stats["generated"] += 1
                         await self._prepare_engine(client)
                         stats["engineUsed"] = True
@@ -280,7 +288,8 @@ class ComfyUIVideoProvider:
                             stats["engineUsed"] = True
                         await self._shot(client, digest, shot_key, cursor, stop, rate, data, tracks, motion_folder, clip,
                                          segments[-1] if segments else None, performance, req.get("seed", 1),
-                                         performance_mode, visual["personRegions"], "accepted" if generation_profile == "dialogue" else generation_profile, reference)
+                                         performance_mode, visual["personRegions"], "accepted" if generation_profile == "dialogue" else generation_profile, reference,
+                                         clean_anchor=(self.anchor_mode == "clean"))
                         stats["generated"] += 1
                     marker.write_text(json.dumps({"referenceHash": reference_hash, "fileHash": self.artifacts._hash_file(str(clip)), "automaticReferenceArtifactId": automatic_id}), encoding="utf-8")
                 else:
@@ -448,7 +457,7 @@ class ComfyUIVideoProvider:
         except httpx.HTTPError as exc:
             raise RuntimeError("数字人引擎未启动或已崩溃，请查看引擎日志后重试；已完成镜头会保留") from exc
 
-    async def _shot(self, client, digest, index, start, end, rate, data, tracks, folder, clip, previous_clip=None, performance=None, seed=1, performance_mode="legacy", regions=None, generation_profile="accepted", reference=None, camera=None):
+    async def _shot(self, client, digest, index, start, end, rate, data, tracks, folder, clip, previous_clip=None, performance=None, seed=1, performance_mode="legacy", regions=None, generation_profile="accepted", reference=None, camera=None, clean_anchor=False):
         tag = f"{digest}_{index:04d}"
         for kind, track in (("a", tracks["A"]), ("b", tracks["B"]), ("mix", data)):
             with wave.open(str(self.input_dir / f"{tag}_{kind}.wav"), "wb") as writer:
@@ -467,7 +476,7 @@ class ComfyUIVideoProvider:
             await self._prepare_motion_reference(reference["path"], self.input_dir / reference_filename)
         configure_generation_profile(wf, generation_profile, reference_filename)
         wf["133"]["inputs"]["image"] = f"{digest}.png"
-        if previous_clip:
+        if previous_clip and not clean_anchor:
             reference = self.input_dir / f"{tag}_reference.png"
             await self._command("ffmpeg", "-v", "error", "-y", "-sseof", -0.04, "-i", previous_clip,
                                 "-frames:v", 1, reference)

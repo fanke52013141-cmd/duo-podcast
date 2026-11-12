@@ -34,6 +34,10 @@ $env:DUOCAST_VIDEO_URL = 'http://127.0.0.1:8191'
 if (-not $env:DUOCAST_VIDEO_ATTENTION) { $env:DUOCAST_VIDEO_ATTENTION = 'sageattn' }
 if (-not $env:DUOCAST_VIDEO_TEXT_CFG) { $env:DUOCAST_VIDEO_TEXT_CFG = '1.0' }
 if (-not $env:DUOCAST_VIDEO_AUDIO_CFG) { $env:DUOCAST_VIDEO_AUDIO_CFG = '1.0' }
+# 47号背景退化修复（2026-11-13 实测 EP9930 29s：背景偏离趋势比 1.87→0.89，末帧背景与首帧同级）。
+# clean=同框每段重锚定干净底图，打断参考帧链式累积退化；仅作用同框路径，过肩不受影响。
+# 回退：设 DUOCAST_ANCHOR_MODE=chain 重启即恢复旧行为。见 47 号文档。
+if (-not $env:DUOCAST_ANCHOR_MODE) { $env:DUOCAST_ANCHOR_MODE = 'clean' }
 $env:DUOCAST_VIDEO_INPUT = Join-Path $engineHome 'input'
 $env:DUOCAST_TTS_PROVIDER = 'comfyui'
 $env:DUOCAST_TEXT_PROVIDER = 'toapis'
