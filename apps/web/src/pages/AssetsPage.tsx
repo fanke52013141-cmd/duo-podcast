@@ -46,7 +46,11 @@ export function AssetsPage({ project }: { project: Project | null }) {
   const sceneFile = useRef<HTMLInputElement>(null);
   const bind = async (characterId: string, speaker: 'A'|'B') => {
     if (!project) return;
-    try { await sendJson(`/projects/${project.id}/characters/${speaker}`, 'POST', {characterId,expectedRevision:project.revision}); await qc.invalidateQueries({queryKey:['project',project.id]}); }
+    try {
+      const r = await sendJson<{motionSwap?: {notice?: string}}>(`/projects/${project.id}/characters/${speaker}`, 'POST', {characterId,expectedRevision:project.revision});
+      await qc.invalidateQueries({queryKey:['project',project.id]});
+      if (r.motionSwap) setNewError(r.motionSwap.notice ?? '已派生新动作包，请重新准备动作素材并人工采用后再渲染。');
+    }
     catch(e) { setNewError((e as Error).message); }
   };
   const artifacts = useArtifacts();
@@ -149,7 +153,7 @@ export function AssetsPage({ project }: { project: Project | null }) {
                   onChange={(e) => { handlePickImage(selectedCharacter.id, e.target.files?.[0]); e.target.value = ''; }}
                   />
                 </div>
-                {project && <div className="wu-row">{(['A','B'] as const).map(s=><Button key={s} disabled={project.generationMode==='fast'} onClick={()=>void bind(selectedCharacter.id,s)}>用于本期 {s}{project.characterBindings?.[s]?.id===selectedCharacter.id?'（已绑定）':''}</Button>)}</div>}
+                {project && <div className="wu-row">{(['A','B'] as const).map(s=><Button key={s} onClick={()=>void bind(selectedCharacter.id,s)}>用于本期 {s}{project.characterBindings?.[s]?.id===selectedCharacter.id?'（已绑定）':''}</Button>)}</div>}
                 <div className="wu-row" style={{ gap: 8, marginTop: 6 }}>
                   <Button variant="secondary" size="sm" icon="upload" onClick={() => audioFileRef.current?.click()}>上传参考音频</Button>
                   <input
@@ -277,7 +281,7 @@ export function AssetsPage({ project }: { project: Project | null }) {
               <img className="hf-thumb" alt={s.name} src={`/api/artifacts/${s.id}/file`}/>
               <div className="name">{s.name}</div>
               <div className="desc">全局场景素材 · 上传双人底图可直接使用</div>
-              {project&&<Button disabled={project.generationMode==='fast'} onClick={async e=>{e.stopPropagation();try{const result=await sendJson<{notice:string}>(`/projects/${project.id}/visual/use-scene`,'POST',{sceneId:s.id,expectedRevision:project.revision});setNewError(result.notice);await qc.invalidateQueries({queryKey:['project',project.id]});}catch(error){setNewError((error as Error).message);}}}>用于本期底图</Button>}
+              {project&&<Button onClick={async e=>{e.stopPropagation();try{const result=await sendJson<{notice:string}>(`/projects/${project.id}/visual/use-scene`,'POST',{sceneId:s.id,expectedRevision:project.revision});setNewError(result.notice);await qc.invalidateQueries({queryKey:['project',project.id]});}catch(error){setNewError((error as Error).message);}}}>用于本期底图</Button>}
             </div>
           ))}
           <div className="hf-asset" role="button" tabIndex={0} onClick={() => latestVariant && setSel({ kind: 'artifact', id: latestVariant.masterImage.artifactId })}>

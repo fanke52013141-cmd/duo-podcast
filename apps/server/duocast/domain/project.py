@@ -121,6 +121,8 @@ class Project(BaseModel):
     generation_mode: Literal["standard", "fast"] = "standard"
     performance_mode: Literal["legacy", "adaptive"] = "legacy"
     shot_camera_overrides: dict[str, Literal["twoShot", "A", "B"]] = Field(default_factory=dict)
+    # P2（42 号方案）：过肩机位锁定持久化（A/B），刷新不丢；仅 UI 防误改，不参与渲染依赖
+    camera_locks: dict[str, bool] = Field(default_factory=dict)
     script_revisions: list[ScriptRevision] = Field(default_factory=list)
     voice_bindings: list[VoiceBinding] = Field(default_factory=list)  # A/B 角色声音绑定（01 §11.2）
     audio_timeline: Optional[AudioTimeline] = None  # 阶段③产物（01 §11.2）

@@ -157,7 +157,7 @@ export function TimelineBar({
     }, 100);
     return () => window.clearInterval(id);
   }, [demoPlaying, totalSecs]);
-  React.useEffect(() => { setDemoPlaying(false); setDemoSecs(0); }, [timeline?.revisionId]);
+  React.useEffect(() => { setDemoPlaying(false); setDemoSecs(0); }, [timeline?.revisionId, realAsset]);
   const showDemo = demoPlaying || demoSecs > 0;
   const shownPct = realActive && totalSecs > 0 ? player.current / totalSecs * 100 : showDemo && totalSecs > 0 ? (demoSecs / totalSecs) * 100 : playPct;
 
@@ -189,11 +189,11 @@ export function TimelineBar({
         <button
           type="button"
           className="hf-tl-playbtn"
-          aria-label={realAsset ? realActive && player.playing ? '暂停音频' : '播放母轨' : demoPlaying ? '暂停演示播放' : '演示播放（无声）'}
-          title={demoPlaying ? '暂停' : '演示播放（无声）'}
+          aria-label={realAsset ? realActive && player.playing ? '暂停音频' : '播放母轨' : demoPlaying ? '暂停演示播放' : '演示播放（无声音，播放头走动）'}
+          title={realAsset ? realActive && player.playing ? '暂停真实音频' : '播放已有母轨文件' : demoPlaying ? '暂停' : '演示播放：无音频文件，仅预览时间轴'}
           onClick={() => realAsset ? realActive && player.playing ? pauseAudio() : void playAudio(realAsset, realActive ? player.current : 0) : setDemoPlaying((p) => !p)}
         >
-          <Icon name={demoPlaying ? 'pause' : 'play'} size={16} />
+          <Icon name={(realAsset ? realActive && player.playing : demoPlaying) ? 'pause' : 'play'} size={16} />
         </button>
         {realActive ? fmt(player.current) : showDemo ? fmt(demoSecs) : curSecs} / {formatSamples(total, timeline.sampleRate)}
       </span>

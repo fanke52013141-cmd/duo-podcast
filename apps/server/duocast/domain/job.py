@@ -69,6 +69,8 @@ class Job(BaseModel):
     retryable: bool = False
     result: Optional[dict[str, Any]] = None  # {artifactIds: [...]}
     completed_calls: dict[str, dict[str, Any]] = Field(default_factory=dict)
+    # P0-B（42 号方案）：原地重试派生自哪个任务；新任务继承其 completedCalls 账本。
+    retried_from: Optional[str] = None
     created_at: str = ""
     started_at: Optional[str] = None
     finished_at: Optional[str] = None  # 进入 succeeded/failed/cancelled 终态时写入（ISO8601）

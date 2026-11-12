@@ -12,6 +12,15 @@ from ..storage.project_store import InvalidProjectInput
 router = APIRouter(prefix="/api/jobs", tags=["jobs"])
 
 
+@router.get('/{job_id}/external-status')
+async def external_status(job_id: str, request: Request):
+    from ..services.external_status import inspect_external
+    job = _manager(request).get(job_id)
+    if job is None:
+        raise HTTPException(404, '任务不存在')
+    return await inspect_external(job, request.app.state.runtime_settings.video_url)
+
+
 def _manager(request: Request) -> JobManager:
     return request.app.state.job_manager
 
@@ -98,4 +107,20 @@ async def abandon_job(job_id: str, request: Request) -> dict:
         job = _manager(request).abandon(job_id)
     except KeyError as exc:
         raise HTTPException(404, str(exc)) from exc
+    return job.model_dump(mode="json", by_alias=True)
+
+
+@router.post("/{job_id}/retry")
+async def retry_job(job_id: str, request: Request) -> dict:
+    """P0-B（42 号方案）：失败/取消/未知任务原地重试。
+
+    派生新任务继承输入快照与已完成单元账本，只补失败段；
+    外部付费任务（motion.prepare / UNKNOWN 渲染）有专门护栏，返回 409 指路。
+    """
+    try:
+        job = _manager(request).retry(job_id)
+    except KeyError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(409, str(exc)) from exc
     return job.model_dump(mode="json", by_alias=True)

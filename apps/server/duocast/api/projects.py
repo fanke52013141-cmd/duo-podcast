@@ -23,9 +23,17 @@ router = APIRouter(prefix="/api/projects", tags=["projects"])
 
 # 客户端可修改的字段（11 报告 P2-5：拒绝注入 revision/id/audioTimeline 等内部字段）
 ALLOWED_PATCH_FIELDS = {"title", "aspect", "scriptRevisions", "currentDraftRevision",
-                        "approvals", "voiceBindings", "pronunciationDict", "selectedVisualVariantId", "cameraMode", "performanceMode", "shotCameraOverrides", "creationDraft", "characterBindings", "renderSpec", "motionPack", "shotStyle"}
+                        "approvals", "voiceBindings", "pronunciationDict", "selectedVisualVariantId", "cameraMode", "performanceMode", "shotCameraOverrides", "cameraLocks", "creationDraft", "characterBindings", "renderSpec", "motionPack", "shotStyle"}
 # 三个默认确认点必须绑定当前草稿（11 报告 P1-6；stage_svc 的推导口径与此一致）
 CONFIRM_KINDS = {"script", "voice", "sample"}
+
+
+def _validate_render_spec(spec: object) -> None:
+    """创建与 PATCH 共用的生成规格校验（分辨率/帧率/快速清晰度）。"""
+    if not isinstance(spec, dict) or set(spec) - {"resolution", "fps", "fastQuality"}:
+        raise HTTPException(422, "生成规格字段无效")
+    if spec.get("resolution", "854x480") not in {"854x480", "1280x720", "1920x1080"} or type(spec.get("fps", 25)) is not int or spec.get("fps", 25) not in {25, 30} or spec.get("fastQuality", "original") not in {"original", "clear", "crisp"}:
+        raise HTTPException(422, "生成规格不支持")
 # 工程 id 白名单：字母/数字/下划线/连字符/空格/中文，不含路径分隔符与点号（P1-4 路径穿越）
 PROJECT_ID_RE = re.compile(r"^[A-Za-z0-9_\-\u4e00-\u9fff][A-Za-z0-9 _\-\u4e00-\u9fff]{0,62}$")
 
@@ -140,6 +148,10 @@ async def create_project(request: Request, payload: dict) -> dict:
             patch["voiceBindings"] = bindings
         if patch:
             proj = store.apply(proj.id, patch, expected_revision=proj.revision)
+    # 创建时即可选定导出分辨率（标准模式按需求出片；④/⑤页仍可随时改）。
+    if payload.get("renderSpec") is not None:
+        _validate_render_spec(payload["renderSpec"])
+        proj = store.apply(proj.id, {"render_spec": payload["renderSpec"]}, expected_revision=proj.revision)
     if motion_pin:
         proj = store.apply(proj.id, {"motion_pack": motion_pin.model_dump(), "shot_style": shot_style,
             "generation_mode": generation_mode}, expected_revision=proj.revision)
@@ -217,11 +229,11 @@ async def patch_project(project_id: str, payload: dict, request: Request) -> dic
     if unknown:
         raise HTTPException(422, f"字段不允许修改: {sorted(unknown)}")
     if "renderSpec" in patch:
-        spec = patch["renderSpec"]
-        if not isinstance(spec, dict) or set(spec)-{"resolution", "fps", "fastQuality"}:
-            raise HTTPException(422, "生成规格字段无效")
-        if spec.get("resolution", "854x480") not in {"854x480", "1280x720", "1920x1080"} or type(spec.get("fps", 25)) is not int or spec.get("fps", 25) not in {25, 30} or spec.get("fastQuality", "original") not in {"original", "clear", "crisp"}:
-            raise HTTPException(422, "生成规格不支持")
+        _validate_render_spec(patch["renderSpec"])
+    if "cameraLocks" in patch:
+        locks = patch["cameraLocks"]
+        if not isinstance(locks, dict) or set(locks) - {"A", "B"} or any(type(v) is not bool for v in locks.values()):
+            raise HTTPException(422, "机位锁定必须是 {A?: bool, B?: bool}")
     if patch.get("aspect") == "portrait" and _live_video(request):
         raise HTTPException(422, "当前真实引擎仅支持横屏，请保留横屏画幅")
     if "approvals" in patch and isinstance(patch["approvals"], list):
@@ -264,13 +276,19 @@ async def patch_project(project_id: str, payload: dict, request: Request) -> dic
             if not demo_sample and not {"口型与发言一致", "人物身份稳定", "倾听反应自然", "切点连续"}.issubset(set(spec.get("checks", []))):
                 raise HTTPException(422, "请完成真实样片的口型、身份、倾听和切点人工检查")
             artifact_ok = demo_sample or spec.get("sampleArtifactId") in result.get("artifactIds", [])
+            # P2（42 号方案）F4 收尾：接受时只校验「画面依赖」——生成样片后改配音/调间隔
+            # 不再要求重生成样片；旧快照无 visualDependencyHash 时回落全量哈希（兼容）。
+            snap = job.input_snapshot if job is not None else {}
+            if snap.get("visualDependencyHash"):
+                hash_ok = snap["visualDependencyHash"] == visual_dependency_hash(current)
+            else:
+                hash_ok = snap.get("dependencyHash") == dependency_hash(current)
             if (job is None or job.project_id != project_id or job.status.value != "succeeded"
-                    or not artifact_ok
-                    or job.input_snapshot.get("dependencyHash") != dependency_hash(current)):
+                    or not artifact_ok or not hash_ok):
                 raise HTTPException(
                     409,
-                    "样片无法接受：任务不存在、未成功、产物不符，或生成样片后脚本/配音/构图又改动过。"
-                    "请重新生成样片后再接受；若反复出现，请回到阶段②③检查是否还有未确认的改动。",
+                    "样片无法接受：任务不存在、未成功、产物不符，或生成样片后脚本/构图又改动过。"
+                    "请重新生成样片后再接受；若反复出现，请回到阶段②④检查是否还有未确认的改动。",
                 )
             # 样片确认只绑定「画面依赖」：之后调间隔/换配音不应让已接受的样片作废（F4）。
             spec["dependencyHash"] = visual_dependency_hash(current)
@@ -287,5 +305,32 @@ async def patch_project(project_id: str, payload: dict, request: Request) -> dic
         raise HTTPException(422, detail=exc.errors(
             include_url=False, include_context=False, include_input=False,
         )) from exc
+    store.flush()
+    return _inject_states(request, updated)
+
+
+@router.post("/{project_id}/approvals/{kind}/revoke")
+async def revoke_approval(project_id: str, kind: str, payload: dict, request: Request) -> dict:
+    """批 3（42 号方案）P1-E：用户主动撤销确认，无需借道副作用操作。
+
+    走现有 revoke 软撤销（保留 revokedAt/revokedReason 审计），
+    阶段状态由 stageProgress 自动推导回「待确认」。
+    """
+    from ..services.approvals import active, revoke
+    if kind not in CONFIRM_KINDS:
+        raise HTTPException(422, "未知确认类型")
+    store = _init_store(request)
+    project = store.load(project_id)
+    if project is None:
+        raise HTTPException(404, "工程不存在")
+    if not any(a.kind == kind for a in active(project.approvals)):
+        raise HTTPException(409, "当前没有该类型的有效确认可撤销")
+    payload = payload or {}
+    reason = str(payload.get("reason") or "用户主动撤销确认")[:200]
+    try:
+        updated = store.apply(project_id, {"approvals": revoke(project.approvals, (kind,), reason)},
+                              expected_revision=payload.get("expectedRevision", project.revision))
+    except ProjectRevisionConflict as exc:
+        raise HTTPException(409, detail=str(exc)) from exc
     store.flush()
     return _inject_states(request, updated)

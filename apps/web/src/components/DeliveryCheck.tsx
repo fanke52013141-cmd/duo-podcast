@@ -10,7 +10,12 @@ export function DeliveryCheck({projectId, revision}: {projectId: string; revisio
     {check.isPending&&<p role="status">正在检查文件与版本…</p>}
     {check.error&&<Alert tone="danger">{check.error.message}<Button onClick={()=>void check.refetch()}>重新检查</Button></Alert>}
     {check.data&&<><Alert tone={check.data.ready?'success':'warning'}>{check.data.ready?'当前文件与版本检查通过':'请处理以下交付问题'}。{check.data.notice}</Alert>
-      <ul>{check.data.issues.map(i=><li key={i.code}>{i.level==='warning'?'提示：':''}{i.message} <Button size="sm" variant="ghost" onClick={()=>setView(i.target)}>前往处理</Button></li>)}</ul>
+      <ul>{check.data.issues.map(i=><li key={i.code}>{i.level==='warning'?'提示：':''}{i.message} <Button size="sm" variant="ghost" onClick={()=>{
+        // P2-B（42 号方案）：render 类问题已在⑤页时不再 setView('render') 自循环，
+        // 直接滚动定位到生成主按钮；其他页/其他目标仍跳转对应阶段。
+        if(i.target==='render'){const el=document.getElementById('render-generate-action');if(el){el.scrollIntoView({behavior:'smooth',block:'center'});return;}}
+        setView(i.target);
+      }}>前往处理</Button></li>)}</ul>
       <Button variant="secondary" size="sm" onClick={()=>void check.refetch()}>重新检查</Button></>}
   </section>;
 }

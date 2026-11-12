@@ -48,6 +48,49 @@ async def generate_script(project_id: str, payload: dict, request: Request) -> d
     return {"jobId": job.id, "clientToken": client_token}
 
 
+@router.post("/import")
+async def import_script(project_id: str, payload: dict, request: Request) -> dict:
+    """批 2（42 号方案）：外部结构化脚本导入（JSON）。
+
+    与 AI 生成同一版本语义：新草稿版本只追加不覆盖；clientToken 幂等；
+    expectedRevision 乐观锁。兼容统一信封（payload 字段）与裸 payload 两种形态。
+    """
+    from ..services.script_svc import import_structured_script
+    store = request.app.state.project_store
+    project = store.load(project_id)
+    if project is None:
+        raise HTTPException(404, "project not found")
+    if not isinstance(payload, dict):
+        raise HTTPException(422, "UPLOAD_SCHEMA: 请求体必须是 JSON 对象")
+    data = payload.get("payload") if isinstance(payload.get("payload"), dict) else payload
+    token = str(payload.get("clientToken") or "")
+    if token:
+        existing = next((r for r in project.script_revisions
+                         if r.source_input.get("clientToken") == token), None)
+        if existing is not None:
+            return {"revisionId": existing.id, "turnCount": len(existing.turns),
+                    "currentDraftRevision": project.current_draft_revision,
+                    "idempotent": True, "warnings": []}
+    expected = payload.get("expectedRevision")
+    if expected is not None and expected != project.revision:
+        raise HTTPException(409, "工程已变化，请刷新后重新导入")
+    try:
+        revision = import_structured_script(project, data, token)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    saved = apply_script_revision(store, project_id, revision,
+                                  expected_project_revision=project.revision)
+    chars = sum(len(ln.display_text) for t in revision.turns for ln in t.lines)
+    estimate = {"min": round(chars / 5 + len(revision.turns) * 0.2),
+                "max": round(chars / 3 + len(revision.turns) * 0.6)}
+    warnings = []
+    if estimate["max"] > 300:
+        warnings.append("预估时长可能超过 5 分钟上限，建议精简后再合成配音")
+    return {"revisionId": revision.id, "turnCount": len(revision.turns),
+            "currentDraftRevision": saved.current_draft_revision,
+            "estimatedSeconds": estimate, "warnings": warnings}
+
+
 @router.post("/branch")
 async def branch_script(project_id: str, payload: dict, request: Request) -> dict:
     """从任一版本派生新草稿（F5 分支）。

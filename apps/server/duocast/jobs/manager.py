@@ -25,6 +25,19 @@ JobRunner = Callable[[Job], Awaitable[dict[str, Any]]]
 # kind → 默认优先级（12 报告 C-1：整期渲染排后，交互链路任务插队先跑，数值小者先）
 KIND_PRIORITY: dict[str, int] = {"renders": 10}
 
+# P0-B（42 号方案）：失败原因分类——网络/超时/引擎暂不可用属可重试；
+# 输入校验类错误重试无意义。retryable 只是 UI 提示，重试入口始终由人显式触发。
+_RETRYABLE_HINTS = (
+    "timeout", "timed out", "connect", "connection", "超时", "连接",
+    "temporarily", "暂不可用", "稍后", "reset by peer", "eof occurred",
+    "502", "503", "504", "i2v_engine_failed", "engine failed", "引擎失败",
+)
+
+
+def classify_retryable(error: str) -> bool:
+    lowered = (error or "").lower()
+    return any(hint in lowered for hint in _RETRYABLE_HINTS)
+
 
 class _PriorityQueue:
     """类内 (priority, created_at, 入队序) 最小堆。取代 asyncio.Queue 的纯 FIFO，
@@ -296,6 +309,38 @@ class JobManager:
                         error=job.error or "已放弃：外部任务状态无法核实", retryable=False)
         return job
 
+    def retry(self, job_id: str) -> Job:
+        """P0-B（42 号方案）：失败/取消/未知任务原地重试。
+
+        派生新任务并**继承原 inputSnapshot 与 completedCalls 账本**，已完成单元
+        经 ControlledProvider 缓存跳过，只补失败段；不修改原终态任务（审计保留）。
+        外部付费任务有专门护栏：motion.prepare 走 resume_external 只读续查；
+        renders/sample.generate 的 UNKNOWN 必须先核对原外部任务，禁止盲目重提交。
+        """
+        job = self._require(job_id)
+        if job.status not in (JobStatus.FAILED, JobStatus.CANCELLED, JobStatus.UNKNOWN):
+            raise ValueError("仅失败、已取消或状态未知的任务可重试")
+        if job.kind == "motion.prepare":
+            raise ValueError("动作准备任务请使用「继续查询原外部任务」，避免重复付费提交")
+        if job.kind in ("renders", "sample.generate") and job.status == JobStatus.UNKNOWN:
+            raise ValueError("外部执行状态未核实，请先核对原任务结果，再决定是否重试")
+        base_token = job.client_token or job.id
+        attempt_no = 1
+        while self._find_by_token(f"{base_token}-retry-{attempt_no}", job.project_id, job.kind,
+                                  job.owner_type, job.owner_id or job.project_id) is not None:
+            attempt_no += 1
+        new_job = self.submit(
+            kind=job.kind, project_id=job.project_id, queue_class=job.queue_class,
+            client_token=f"{base_token}-retry-{attempt_no}",
+            input_snapshot=job.input_snapshot, attempt=job.attempt + 1,
+            owner_type=job.owner_type, owner_id=job.owner_id,
+        )
+        # submit 与此处之间无 await，worker 不会抢先读取账本。
+        new_job.completed_calls = deepcopy(job.completed_calls)
+        new_job.retried_from = job.id
+        self._persist(new_job)
+        return new_job
+
     def queue_position(self, job: Job) -> int | None:
         """queued 任务的队内排位（1 起）；不在队中返回 None。"""
         if job.status != JobStatus.QUEUED:
@@ -379,7 +424,7 @@ class JobManager:
                 raise
             except Exception as exc:  # noqa: BLE001
                 job.error = str(exc)
-                job.retryable = False
+                job.retryable = classify_retryable(job.error)
                 self.transition(job, JobStatus.FAILED)
 
     def _require(self, job_id: str) -> Job:

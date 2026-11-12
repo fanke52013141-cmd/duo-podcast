@@ -86,12 +86,15 @@ def test_historical_delivery_uses_frozen_script_and_reuses_zip(tmp_path):
 def test_only_resumable_model_jobs_requeue_after_restart(tmp_path):
     from duocast.domain.job import Job,JobStatus
     from duocast.jobs.recovery import recover_on_startup
-    for kind,resumable in [('renders',True),('tts.synthesize',False)]:
+    # P0-B（42 号方案）：tts.synthesize 单元账本已落盘，中断后带账本续跑（QUEUED）；
+    # 其余不可续跑类型（如 script.rewrite）仍保持 UNKNOWN 纪律。
+    for kind,resumable in [('renders',True),('tts.synthesize',False),('script.rewrite',False)]:
         job=Job(id=kind,kind=kind,status=JobStatus.RUNNING,input_snapshot={'resumableVideo':resumable})
         folder=tmp_path/kind;folder.mkdir();(folder/'job.json').write_text(job.model_dump_json(by_alias=True),encoding='utf-8')
     states={j.kind:j.status for j in recover_on_startup(tmp_path)}
     assert states['renders']==JobStatus.QUEUED
-    assert states['tts.synthesize']==JobStatus.UNKNOWN
+    assert states['tts.synthesize']==JobStatus.QUEUED
+    assert states['script.rewrite']==JobStatus.UNKNOWN
 
 
 def test_manual_camera_override_is_applied_to_global_plan():

@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8">
+<title>CPU分屏布局验收</title>
+<style>
+body{margin:12px;font:14px system-ui;background:#eee}
+.row{display:flex;gap:16px;align-items:start}
+iframe{border:1px solid #aaa;display:block;background:white}h2{font-size:16px}
+</style>
+<h1>隔离测试：640 / 900 像素分屏</h1>
+<div class="row">
+  <section><h2>640 × 800</h2><iframe title="640像素验收" src="/" width="640" height="800"></iframe></section>
+  <section><h2>900 × 800</h2><iframe title="900像素验收" src="/" width="900" height="800"></iframe></section>
+</div>
+</html>

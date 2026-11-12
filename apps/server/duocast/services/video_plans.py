@@ -38,6 +38,18 @@ def crop_region(region):
     return {"x": x, "y": y, "width": width, "height": height * 0.55}
 
 
+def closeup_box(visual, speaker):
+    """近景裁切框：显式近景虚线框优先，完全按框切镜；未设置时沿用自动半身推导。
+
+    ``visual`` 为 VisualVariant 的 by_alias dict；``closeupRegions`` 为空（旧工程
+    默认）时行为与 crop_region 完全一致，不改变既有工程的切镜结果。
+    """
+    explicit = (visual.get("closeupRegions") or {}).get(speaker)
+    if explicit:
+        return {k: float(explicit[k]) for k in ("x", "y", "width", "height")}
+    return crop_region(visual["personRegions"][speaker])
+
+
 def adaptive_prompt(performance, regions, start, end, warmup=0.32):
     def host(speaker):
         region = regions[speaker]

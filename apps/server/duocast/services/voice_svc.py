@@ -434,6 +434,64 @@ def adopt_unit_candidate(
     return updated.audio_timeline
 
 
+def restore_timeline_version(store: ProjectStore, project_id: str, history_index: int,
+                             artifact_store=None) -> AudioTimeline:
+    """批 3（42 号方案）P1-D：把 audioHistory 中的某条时间轨回退为当前权威版本。
+
+    只允许回退到与当前草稿一致的历史版本（跨脚本版本先回退脚本，防错配）；
+    母轨文件完整性复核通过才回退；回退撤销 voice 确认并保留审计。
+    """
+    project = store.load(project_id)
+    if project is None:
+        raise KeyError("PROJECT_NOT_FOUND")
+    if type(history_index) is not int or not 0 <= history_index < len(project.audio_history):
+        raise ValueError("RESTORE_INVALID: 历史版本序号无效")
+    entry = project.audio_history[history_index]
+    if entry.revision_id != project.current_draft_revision:
+        raise ValueError(f"RESTORE_REVISION: 该历史配音属于脚本 {entry.revision_id}，"
+                         f"当前草稿是 {project.current_draft_revision}；请先在阶段②回退脚本")
+    if artifact_store is not None and entry.master_audio_asset_id:
+        master = artifact_store.by_id(entry.master_audio_asset_id)
+        if not master or not Path(master["path"]).is_file() or artifact_store._hash_file(master["path"]) != master.get("fileHash"):
+            raise ValueError("RESTORE_MEDIA: 历史母轨文件缺失或已改变，无法回退")
+    timeline = entry.model_copy(deep=True)
+    updated = store.apply(project_id, {
+        "audio_timeline": timeline,
+        "audio_history": [*project.audio_history, timeline],
+        "approvals": revoke(project.approvals, ("voice",), "回退到历史配音版本"),
+    }, expected_revision=project.revision)
+    return updated.audio_timeline
+
+
+def attach_unit_candidate(store: ProjectStore, project_id: str, unit_id: str,
+                          asset_id: str, sample_count: int) -> AudioTimeline:
+    """批 2（42 号方案）：把外部上传的成品音频注入为单元候选。
+
+    只登记候选，不采用、不重建母轨、不动确认——采用走现有 adopt_unit_candidate，
+    与 AI 局部合成候选完全同权。
+    """
+    project = store.load(project_id)
+    if project is None:
+        raise KeyError("PROJECT_NOT_FOUND")
+    timeline = project.audio_timeline
+    if timeline is None:
+        raise ValueError("UPLOAD_AUDIO: 请先合成整期配音，再上传单元音频")
+    if timeline.revision_id != project.current_draft_revision:
+        raise ValueError("UPLOAD_AUDIO: 配音已过期，请先重新合成当前脚本的配音")
+    timeline = timeline.model_copy(deep=True)
+    unit = next((u for u in timeline.units if u.id == unit_id), None)
+    if unit is None:
+        raise ValueError(f"UPLOAD_AUDIO: 合成单元不存在：{unit_id}")
+    if type(sample_count) is not int or sample_count <= 0:
+        raise ValueError("UPLOAD_AUDIO: 样本数无效")
+    if asset_id not in unit.candidate_audio_asset_ids:
+        unit.candidate_audio_asset_ids.append(asset_id)
+    unit.candidate_sample_counts[asset_id] = sample_count
+    updated = store.apply(project_id, {"audio_timeline": timeline},
+                          expected_revision=project.revision)
+    return updated.audio_timeline
+
+
 def _build_master_track(
     timeline: AudioTimeline,
     unit_paths: dict[str, str],

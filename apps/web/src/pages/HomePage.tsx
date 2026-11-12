@@ -100,7 +100,7 @@ export function HomePage() {
   const [importMessage,setImportMessage] = useState('');
   const importing=useRef(false);
   const [importBusy,setImportBusy]=useState(false);
-  const [importResult,setImportResult]=useState<{projectId:string;missing:string[];summary:{sourceProjectId:string;mediaCount:number;mediaBytes:number;scriptVersions:number;recheck:string[];external:string[]}}|null>(null);
+  const [importResult,setImportResult]=useState<{projectId:string;missing:string[];summary:{sourceProjectId:string;mediaCount:number;mediaBytes:number;scriptVersions:number;recheck:string[];external:string[];motionPack?:{imported:boolean;id:string|null;requiresReview:boolean}}}|null>(null);
   const qc = useQueryClient();
   const setView = useProjectStore(s => s.setView);
   const { data: projects = [], isLoading } = useProjects();
@@ -118,6 +118,8 @@ export function HomePage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [templateId, setTemplateId] = useState<string>('blank');
   const [generationMode, setGenerationMode] = useState<'fast' | 'standard'>('fast');
+  // 标准模式创建时即可选定导出分辨率（④/⑤页仍可随时改）。
+  const [createResolution, setCreateResolution] = useState('854x480');
   const [fastTemplates,setFastTemplates] = useState<{id:string;label:string;ready:boolean;version:string}[]>([]);
   const [fastTemplateId,setFastTemplateId] = useState('');
   const [motionPin,setMotionPin]=useState<MotionPin|null>(null),[shotStyle,setShotStyle]=useState<ShotStyle>('twoShot'),[motionReady,setMotionReady]=useState(false);
@@ -157,6 +159,7 @@ export function HomePage() {
         generationMode,
         fastTemplateId: generationMode==='fast'&&!motionPin ? fastTemplateId||undefined : undefined,
         motionPack:generationMode==='fast'?motionPin??undefined:undefined,shotStyle:generationMode==='fast'&&motionPin?shotStyle:undefined,
+        renderSpec:generationMode==='standard'?{resolution:createResolution}:undefined,
       });
       setModalOpen(false);
       openProject(proj.id);
@@ -239,6 +242,7 @@ export function HomePage() {
         {importMessage&&<p role="status">{importMessage}</p>}
         {importResult&&<section aria-label="工程导入结果" className="wu-card"><h3>工程已另存：{importResult.projectId}</h3><p>原工程 {importResult.summary.sourceProjectId} 保持完整；导入 {importResult.summary.scriptVersions} 个脚本版本、{importResult.summary.mediaCount} 个媒体文件（{(importResult.summary.mediaBytes/1024**2).toFixed(1)} MB）。</p>
           <p>需重新确认：{importResult.summary.recheck.join('、')}。需在本机配置：{importResult.summary.external.join('、')}。</p>
+          {importResult.summary.motionPack?.requiresReview&&<p role="status">{importResult.summary.motionPack.imported?`动作包已另存为 ${importResult.summary.motionPack.id}；自动检查与人工采用记录已重置，请在动作库重新检查和审看。`:'此备份未包含固定动作包快照，请补齐原动作包或重新选择可用动作包；不能据此直接生成。'}</p>}
           <p>缺失媒体 {importResult.missing.length} 项</p>{importResult.missing.length>0&&<ul>{importResult.missing.map((id,i)=><li key={i}>{id}</li>)}</ul>}
           <Button onClick={()=>openProject(importResult.projectId)}>检查导入工程</Button></section>}
         <MaintenancePanel/>
@@ -356,6 +360,17 @@ export function HomePage() {
             <input type="radio" name="generation-mode" checked={generationMode === 'standard'} onChange={() => setGenerationMode('standard')} />
             <span><b>原有模式</b> <span className="wu-caption">沿用当前的完整画面与动作生成流程</span></span>
           </label>
+          {generationMode === 'standard' && (
+            <div className="hf-fld" style={{ marginTop: 8 }}>
+              <label htmlFor="create-resolution">导出分辨率</label>
+              <select id="create-resolution" className="wu-input" aria-label="导出分辨率" value={createResolution} onChange={(e) => setCreateResolution(e.target.value)}>
+                <option value="854x480">480p · 854×480（快速预览，生成最快）</option>
+                <option value="1280x720">720p · 1280×720（均衡）</option>
+                <option value="1920x1080">1080p · 1920×1080（成片交付，耗时最长）</option>
+              </select>
+              <p className="wu-caption">按本期需求选择；分辨率越高生成与导出耗时越长、文件越大。创建后在④画面预览或⑤生成导出页仍可随时更改。</p>
+            </div>
+          )}
         </fieldset>
 
         <fieldset className="hf-fieldset">

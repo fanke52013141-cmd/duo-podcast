@@ -73,20 +73,38 @@ async def bind_character(project_id: str, speaker: str, payload: dict, request: 
     character = _store(request).get(payload.get("characterId"))
     if project is None or character is None:
         raise HTTPException(404, "工程或角色不存在")
-    if project.generation_mode == "fast":
-        raise HTTPException(422, "快速模式人物由固定模板提供，请新建原有模式节目更换角色")
     snapshot = dict(character)
     image_path = snapshot.get("imagePath", "")
+    image_ref = None
     if image_path.startswith("/api/assets/images/"):
         file = _images_root(request) / Path(image_path).name
         if file.is_file():
             assets = request.app.state.artifacts
             aid = "IMG-CHAR-" + uuid.uuid4().hex
-            snapshot["imageAssetId"] = assets.register(aid, "image", str(file), assets._hash_file(str(file)))["artifactId"]
+            entry = assets.register(aid, "image", str(file), assets._hash_file(str(file)))
+            snapshot["imageAssetId"] = entry["artifactId"]
+            from ..domain.motion_pack import MotionMediaRef
+            image_ref = MotionMediaRef(artifact_id=entry["artifactId"], file_hash=entry["fileHash"])
     bindings = [b.model_dump(by_alias=True) for b in project.voice_bindings if b.character_id != speaker]
     if snapshot.get("localRefAudio"):
         bindings.append({"id": f"VB-{speaker}", "characterId": speaker, "providerProfileId": "comfyui-indextts", "localRefAudio": snapshot["localRefAudio"]})
-    saved = store.apply(project_id, {"character_bindings": {**project.character_bindings, speaker: snapshot}, "voice_bindings": bindings}, payload.get("expectedRevision", project.revision))
+    extra = {"character_bindings": {**project.character_bindings, speaker: snapshot}, "voice_bindings": bindings}
+    if project.generation_mode == "fast":
+        # P1-C（42 号方案）：派生新动作包替换角色参考图，原包与其他工程不受影响
+        if image_ref is None:
+            raise HTTPException(422, "该角色没有可用的参考图，无法更换快速模式人物")
+        from ..services.motion_swap import apply_image_swap
+        try:
+            result = apply_image_swap(
+                store, request.app.state.motion_pack_store, project, image_ref=image_ref, role=speaker,
+                character_meta={"characterId": character.get("id"), "name": character.get("name", "")},
+                expected_revision=payload.get("expectedRevision", project.revision), extra_patch=extra)
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
+        store.flush()
+        return {**result["project"].model_dump(by_alias=True),
+                "motionSwap": {k: result[k] for k in ("motionPack", "derivedFrom", "ready", "missing", "notice")}}
+    saved = store.apply(project_id, extra, payload.get("expectedRevision", project.revision))
     store.flush()
     return saved.model_dump(by_alias=True)
 
@@ -103,15 +121,10 @@ async def bind_character_voice(character_id: str, payload: dict, request: Reques
     return updated
 
 
-@router.post("/projects/{project_id}/visual/regions")
-async def update_regions(project_id: str, payload: dict, request: Request):
+def _validate_regions(regions) -> None:
+    """A/B 人物区域校验（归一化 0..1）；区域标注与带区域导入共用同一口径。"""
     import math
-    store = request.app.state.project_store
-    project = store.load(project_id)
-    if project is None:
-        raise HTTPException(404, "工程不存在")
-    regions = payload.get("regions", {})
-    if set(regions) != {"A", "B"}:
+    if not isinstance(regions, dict) or set(regions) != {"A", "B"}:
         raise HTTPException(422, "需要 A/B 两个人物区域")
     for region in regions.values():
         if not isinstance(region, dict) or set(region) != {"x", "y", "width", "height"} or any(type(n) not in (int, float) or not math.isfinite(n) for n in region.values()):
@@ -119,11 +132,27 @@ async def update_regions(project_id: str, payload: dict, request: Request):
         x, y, w, h = (region[k] for k in ("x", "y", "width", "height"))
         if min(x, y) < 0 or min(w, h) <= 0 or x+w > 1.000001 or y+h > 1.000001:
             raise HTTPException(422, "人物框必须位于画布内")
+
+
+@router.post("/projects/{project_id}/visual/regions")
+async def update_regions(project_id: str, payload: dict, request: Request):
+    store = request.app.state.project_store
+    project = store.load(project_id)
+    if project is None:
+        raise HTTPException(404, "工程不存在")
+    regions = payload.get("regions", {})
+    _validate_regions(regions)
+    # 显式近景虚线框（可选）：{}=恢复自动半身推导；提供时须 A/B 齐全且同口径校验。
+    closeups = payload.get("closeupRegions")
+    if closeups is not None and closeups != {}:
+        _validate_regions(closeups)
     variants = [v.model_copy(deep=True) for v in project.visual_variants]
     target = next((v for v in variants if v.id == payload.get("variantId")), None)
     if target is None:
         raise HTTPException(404, "画面版本不存在")
     target.person_regions = regions
+    if closeups is not None:
+        target.closeup_regions = closeups
     saved = store.apply(project_id, {"visual_variants": variants}, payload.get("expectedRevision", project.revision))
     store.flush()
     return saved.model_dump(by_alias=True)
@@ -185,11 +214,22 @@ def use_scene(project_id: str, payload: dict, request: Request):
         raise HTTPException(404, "工程或场景不存在")
     if payload.get("expectedRevision") != project.revision:
         raise HTTPException(409, "工程已变化，请刷新后选择场景")
-    if project.generation_mode == "fast":
-        raise HTTPException(422, "快速模板不能更换底图")
     assets = request.app.state.artifacts
     if not Path(entry["path"]).is_file() or assets._hash_file(entry["path"]) != entry["fileHash"]:
         raise HTTPException(409, "场景文件缺失或已改变，请重新上传")
+    if project.generation_mode == "fast":
+        # P1-C（42 号方案）：派生新动作包替换同框机位底图，原包与其他工程不受影响
+        from ..domain.motion_pack import MotionMediaRef
+        from ..services.motion_swap import apply_image_swap
+        image_ref = MotionMediaRef(artifact_id=entry["artifactId"], file_hash=entry["fileHash"])
+        try:
+            result = apply_image_swap(store, request.app.state.motion_pack_store, project,
+                                      image_ref=image_ref, expected_revision=project.revision)
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
+        store.flush()
+        return {"motionSwap": {k: result[k] for k in ("motionPack", "derivedFrom", "ready", "missing")},
+                "notice": result["notice"]}
     variants = apply_visual_variant(store, project, {"aspect": project.aspect, "mode": "twoShot", "artifactId": entry["artifactId"],
                                                    "path": entry["path"], "fileHash": entry["fileHash"], "provider": "scene-library"})
     current = store.load(project_id)
@@ -306,6 +346,22 @@ async def upload_master_image(project_id: str, request: Request) -> dict:
     artifacts = request.app.state.artifacts
     entry = artifacts.register(artifact_id, "image", saved["path"], saved["fileHash"],
                                params_snapshot={"source": "upload"})
+    if project.generation_mode == "fast":
+        # P1-C（42 号方案）：快速模式上传底图 → 派生新动作包替换同框机位底图
+        if mode != "twoShot":
+            raise HTTPException(422, "快速模式过肩机位底图请在动作包管理页更换")
+        from ..domain.motion_pack import MotionMediaRef
+        from ..services.motion_swap import apply_image_swap
+        image_ref = MotionMediaRef(artifact_id=entry["artifactId"], file_hash=entry["fileHash"])
+        try:
+            result = apply_image_swap(store, request.app.state.motion_pack_store, project,
+                                      image_ref=image_ref, expected_revision=project.revision)
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
+        store.flush()
+        return {"webPath": saved["webPath"],
+                "motionSwap": {k: result[k] for k in ("motionPack", "derivedFrom", "ready", "missing")},
+                "notice": result["notice"]}
     variants = apply_visual_variant(store, project, {
         "aspect": aspect,
         "mode": mode,
@@ -316,3 +372,76 @@ async def upload_master_image(project_id: str, request: Request) -> dict:
         "provider": "upload",
     })
     return {"variantId": variants[0].id, "webPath": saved["webPath"]}
+
+
+@router.post("/projects/{project_id}/visual/import-variant")
+async def import_variant(project_id: str, request: Request) -> dict:
+    """批 2（42 号方案）：图片 + 区域 JSON 一次性导入为视觉变体。
+
+    与 upload-master 同一落点（apply_visual_variant，provider=upload），
+    额外支持随上传直接给定 A/B 人物区域（归一化坐标），省去二次标注。
+    meta 为 JSON 字符串：{mode, aspect, personRegions, subjectSpeaker,
+    foregroundSpeaker, cameraGroupId, cameraAssetId, provenance}。
+    """
+    import json as _json
+    store = request.app.state.project_store
+    project = store.load(project_id)
+    if project is None:
+        raise HTTPException(404, "project not found")
+    form = await request.form()
+    meta = {}
+    if form.get("meta"):
+        try:
+            meta = _json.loads(str(form.get("meta")))
+            if not isinstance(meta, dict):
+                raise ValueError
+        except ValueError:
+            raise HTTPException(422, "UPLOAD_SCHEMA: meta 不是合法 JSON 对象")
+    payload = meta.get("payload") if isinstance(meta.get("payload"), dict) else meta
+    mode = str(payload.get("mode") or "twoShot")
+    if mode not in {"twoShot", "overShoulder"}:
+        raise HTTPException(422, "未知机位模式")
+    camera_fields = {}
+    if mode == "overShoulder":
+        subject, foreground = payload.get("subjectSpeaker"), payload.get("foregroundSpeaker")
+        if subject not in {"A", "B"} or foreground not in {"A", "B"} or subject == foreground:
+            raise HTTPException(422, "请指定不同的主体与前景角色")
+        camera_fields = {k: str(payload.get(k) or "") for k in ("cameraGroupId", "cameraAssetId", "subjectSpeaker", "foregroundSpeaker")}
+        if not camera_fields["cameraGroupId"] or not camera_fields["cameraAssetId"]:
+            raise HTTPException(422, "请指定机位组和机位标识")
+    regions = payload.get("personRegions")
+    if regions is not None:
+        _validate_regions(regions)
+    upload = form.get("file")
+    if upload is None or not hasattr(upload, "read"):
+        raise HTTPException(422, "缺少上传文件字段 file")
+    data = await upload.read(10 * 1024 * 1024 + 1)
+    if len(data) > 10 * 1024 * 1024:
+        raise HTTPException(422, "图片超过 10MB 限制")
+    saved = save_uploaded_image(request, data, getattr(upload, "filename", ""))
+    aspect = str(payload.get("aspect") or project.aspect)
+    if aspect not in ("landscape", "portrait"):
+        aspect = project.aspect
+    provenance = {"source": "external-upload"}
+    if isinstance(payload.get("provenance"), dict):
+        provenance.update({k: str(v)[:200] for k, v in payload["provenance"].items()})
+    artifact_id = f"IMG-up-{saved['fileHash'][:12]}"
+    artifacts = request.app.state.artifacts
+    entry = artifacts.register(artifact_id, "image", saved["path"], saved["fileHash"],
+                               params_snapshot={"source": "upload", "provenance": provenance})
+    variants = apply_visual_variant(store, project, {
+        "aspect": aspect, "mode": mode, **camera_fields,
+        "artifactId": artifact_id, "path": saved["path"],
+        "fileHash": entry.get("fileHash", saved["fileHash"]), "provider": "upload",
+    })
+    variant_id = variants[0].id
+    if regions is not None and mode == "twoShot":
+        current = store.load(project_id)
+        updated_variants = [v.model_dump(by_alias=True) for v in current.visual_variants]
+        target = next(v for v in updated_variants if v["id"] == variant_id)
+        target["personRegions"] = regions
+        store.apply(project_id, {"visual_variants": updated_variants}, current.revision)
+    store.flush()
+    return {"variantId": variant_id, "webPath": saved["webPath"],
+            "regionsApplied": regions is not None and mode == "twoShot",
+            "status": "pending-selection"}

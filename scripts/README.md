@@ -1,5 +1,20 @@
 # DuoCast 本机运行与维护
 
+## 无显卡开发
+
+依赖和前端构建就绪后，可使用独立存储运行模拟环境：
+
+```powershell
+./scripts/start.ps1 -Mode mock -CheckOnly -Port 18127
+./scripts/start.ps1 -Mode mock -Port 18127 -StorageRoot .review/my-cpu-workspace
+```
+
+预检只检查依赖、构建和本机端口，不安装软件或加载模型。端口被占用或执行环境禁止监听会明确报错。mock不调用真实生成，但可试听工程已有WAV、加载真实波形或审看已有视频。完整开发/验收清单见 [39记录](../39-无显卡开发交付与验证.md)。
+
+测试素材生成器：`apps/server/.venv/Scripts/python.exe scripts/acceptance/seed_cpu_workspace.py --storage .review/new-cpu-fixtures`，必须使用新建或空目录。生成的是测试音和FFmpeg图案，不是模型作品。
+
+动作分支的工程备份会携带固定动作包快照与引用媒体；导入到新工程和新动作包，原检查/人工采用不继承。请在动作库重新检查、审看并明确采用新版本；旧格式缺动作包快照时导入摘要会提示补齐。模型、密钥和外置引擎依旧不打包。
+
 ## 启动服务
 
 服务与 GPU 引擎使用独立 Python 环境。下面命令在仓库根的 PowerShell 执行；需要 Python 3.12、Node 和 FFmpeg/ffprobe 在 PATH 中。
@@ -92,3 +107,15 @@ Set-Location apps/server
 ```
 
 这组测试不替代真实 GPU 推理与窗口视觉验收。测试记录和待验收范围见仓库根 `35-三批优化落地与验证.md`。
+
+浏览器自动回归（需Python服务依赖、FFmpeg及已构建前端）：
+
+```powershell
+Set-Location apps/web
+pnpm install --frozen-lockfile
+pnpm exec playwright install chromium
+pnpm build
+pnpm test:e2e
+```
+
+每轮自动创建隔离演示数据、启动18327本地服务并在结束时清理进程。已有服务占用端口时拒绝运行；可用 `DUOCAST_E2E_PORT` 换端口。报告和失败trace保存至 `.review/browser-regression/<run>/`。12项覆盖编辑保存/恢复/冲突、备份媒体校验、真实波形、逐帧同步与键盘交互，详见根目录 `40-代码审查与浏览器自动回归.md`。

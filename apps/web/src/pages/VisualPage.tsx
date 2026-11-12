@@ -8,7 +8,7 @@ import { ProjectMotionBinding, useMotionReadiness } from '../components/MotionPa
    ========================================================================== */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  usePatchProject, useConfirm, useJobs, useProject, useSampleGenerate, useUploadMasterImage, useVisualGenerate,
+  usePatchProject, useConfirm, useJobs, useProject, useRevokeApproval, useSampleGenerate, useUploadMasterImage, useImportVariant, useVisualGenerate,
 } from '../lib/api';
 import { SPEAKERS, type Job, type ScriptRevision, type VisualVariant } from '../lib/types';
 import { Alert, Badge, Button, Choice, Icon } from '../components/wu';
@@ -63,7 +63,13 @@ export function VisualPage({ projectId }: { projectId: string }) {
   const gen = useVisualGenerate();
   const genSample = useSampleGenerate();
   const uploadMaster = useUploadMasterImage();
+  const importVariant = useImportVariant();
+  // 批 2（42 号方案）：图片 + 区域 JSON 一次性导入
+  const [importImage, setImportImage] = useState<File | null>(null);
+  const [importRegions, setImportRegions] = useState<Record<string, unknown> | null>(null);
+  const [importRegionsName, setImportRegionsName] = useState('');
   const confirm = useConfirm();
+  const revokeApproval = useRevokeApproval();
   const patchProject = usePatchProject();
   const setView = useProjectStore((s) => s.setView);
 
@@ -91,6 +97,17 @@ export function VisualPage({ projectId }: { projectId: string }) {
   const [visualMode, setVisualMode] = useState<VisualMode>(() => localStorage.getItem(`duocast-visual-mode-${projectId}`) === 'overShoulder' ? 'overShoulder' : 'twoShot');
   useEffect(() => { localStorage.setItem(`duocast-visual-mode-${projectId}`, visualMode); }, [projectId, visualMode]);
   const [lockedCameras, setLockedCameras] = useState<Record<'A' | 'B', boolean>>({ A: false, B: false });
+  // P2（42 号方案）：机位锁定从工程读取并持久化，刷新不丢
+  useEffect(() => {
+    if (proj?.cameraLocks) setLockedCameras({ A: !!proj.cameraLocks.A, B: !!proj.cameraLocks.B });
+  }, [proj?.cameraLocks]);
+  const toggleCameraLock = (camera: 'A' | 'B') => {
+    const next = { ...lockedCameras, [camera]: !lockedCameras[camera] };
+    setLockedCameras(next);
+    if (proj) patchProject.mutate({ projectId, expectedRevision: proj.revision, patch: { cameraLocks: next } }, {
+      onError: (e) => setError((e as Error).message),
+    });
+  };
   const [otsNotice, setOtsNotice] = useState<string | null>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
   const masterFileRef = useRef<HTMLInputElement | null>(null);
@@ -272,6 +289,22 @@ export function VisualPage({ projectId }: { projectId: string }) {
       ? '待配音确认后自动选取'
       : '样片区间尚未就绪，请检查当前配音版本和服务连接';
 
+  // P2（42 号方案）：无 A→B→A 区间时给出「改一条说话人即可」的具体建议
+  const abaSuggestion = useMemo(() => {
+    if (sampleRange || !revision) return null;
+    const ts = revision.turns;
+    const target: ('A' | 'B')[] = ['A', 'B', 'A'];
+    for (let i = 0; i + 2 < ts.length; i += 1) {
+      const cur = [ts[i].speaker, ts[i + 1].speaker, ts[i + 2].speaker];
+      const diffs = target.map((t, k) => (cur[k] !== t ? k : -1)).filter((k) => k >= 0);
+      if (diffs.length === 1) {
+        const k = diffs[0];
+        return { turnId: ts[i + k].id, to: target[k] };
+      }
+    }
+    return null;
+  }, [sampleRange, revision]);
+
   const goZone = (k: 'compose' | 'shot' | 'sample') => {
     setTab(k);
     zoneRefs.current[k]?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -296,8 +329,8 @@ export function VisualPage({ projectId }: { projectId: string }) {
               <>
                 <div style={{ display: 'flex', gap: 8 }}>
                   <Button
-                  variant="secondary" size="sm" icon="upload" busy={uploadMaster.isPending} disabled={isFast}
-                  title="上传本地底图（PNG/JPEG ≤10MB），登记为主图变体"
+                  variant="secondary" size="sm" icon="upload" busy={uploadMaster.isPending}
+                  title={isFast ? '快速模式：上传底图将派生新动作包，需重新准备后渲染' : '上传本地底图（PNG/JPEG ≤10MB），登记为主图变体'}
                   onClick={() => masterFileRef.current?.click()}
                   >上传</Button>
                   <input
@@ -307,13 +340,48 @@ export function VisualPage({ projectId }: { projectId: string }) {
                     e.target.value = '';
                     if (!f || !proj) return;
                     uploadMaster.mutate({ projectId, file: f, aspect }, {
-                      onSuccess: ({ variantId }) => setSelectedId(variantId),
+                      onSuccess: (r) => {
+                        if (r.motionSwap) setOtsNotice(r.notice ?? '已派生新动作包，请重新准备动作素材并人工采用后再渲染。');
+                        else if (r.variantId) setSelectedId(r.variantId);
+                      },
                       onError: (e) => setError((e as Error).message),
                     });
                   }}
                   />
                 </div>
                 <p className="wu-caption" style={{ marginTop: 8 }}>候选底图需人工检查身份与遮挡。</p>
+                <details className="hf-adv" style={{ marginTop: 8 }}>
+                  <summary>导入图片 + 区域 JSON（外部工具产物）</summary>
+                  <div className="hf-adv-body" style={{ display: 'grid', gap: 8 }}>
+                    <input type="file" accept="image/png,image/jpeg" aria-label="导入底图文件"
+                      onChange={(e) => { setImportImage(e.target.files?.[0] ?? null); }} />
+                    <input type="file" accept=".json,application/json" aria-label="人物区域 JSON（可选）"
+                      onChange={(e) => {
+                        const f = e.target.files?.[0];
+                        e.target.value = '';
+                        if (!f) { setImportRegions(null); setImportRegionsName(''); return; }
+                        void f.text().then((text) => {
+                          try {
+                            const parsed = JSON.parse(text) as { personRegions?: Record<string, unknown> };
+                            const regions = parsed.personRegions ?? parsed;
+                            setImportRegions(regions as Record<string, unknown>);
+                            setImportRegionsName(f.name);
+                          } catch { setError('区域 JSON 解析失败：请提供 {A:{x,y,width,height},B:{…}} 或含 personRegions 的对象'); }
+                        });
+                      }} />
+                    <span className="wu-caption">{importRegionsName ? `区域：${importRegionsName}` : '区域 JSON 可选（归一化坐标 0–1），不填则默认 A 左 B 右'}</span>
+                    <Button variant="secondary" size="sm" icon="upload"
+                      disabled={!importImage || importVariant.isPending || isFast}
+                      busy={importVariant.isPending}
+                      onClick={() => {
+                        if (!importImage || !proj) return;
+                        importVariant.mutate({ projectId, file: importImage, meta: { mode: 'twoShot', aspect, ...(importRegions ? { personRegions: importRegions } : {}) } }, {
+                          onSuccess: ({ variantId }) => { setSelectedId(variantId); setImportImage(null); setImportRegions(null); setImportRegionsName(''); },
+                          onError: (e) => setError((e as Error).message),
+                        });
+                      }}>导入为变体</Button>
+                  </div>
+                </details>
               </>
             ) : (
               <>
@@ -430,6 +498,16 @@ export function VisualPage({ projectId }: { projectId: string }) {
           ))}
         </span>
         <Button variant="secondary" size="sm" disabled={!canAccept} title="接受样片绑定本次输入版本、工作流与规格" onClick={handleAccept}>接受样片</Button>
+        {sampleApproved && (
+          <Button variant="ghost" size="sm" busy={revokeApproval.isPending}
+            title="主动撤销样片确认，回到待确认（保留审计记录）"
+            onClick={() => {
+              if (!proj) return;
+              revokeApproval.mutate({ projectId, kind: 'sample', expectedRevision: proj.revision, reason: '用户主动撤销样片确认' }, {
+                onError: (e) => setError((e as Error).message),
+              });
+            }}>撤销确认</Button>
+        )}
         <span className="wu-caption">{acceptHint}</span>
       </StageHead>
 
@@ -438,8 +516,8 @@ export function VisualPage({ projectId }: { projectId: string }) {
         {hasMotion&&<p>工程使用固定动作包 {proj?.motionPack?.version}，无需生成旧主图变体。完成配音后直接生成下方样片。</p>}
         {proj && <RenderSettings project={proj}/>}
         {error && <Alert tone="danger" onClose={dismissError}>{error}</Alert>}
-        {isFast && <Alert tone="info">快速模式：模板已验证，可改对白、配音与镜头裁切；更换人物或场景请新建原有模式节目。</Alert>}
-        {otsNotice && visualMode === 'overShoulder' && <Alert tone="info">{otsNotice}</Alert>}
+        {isFast && <Alert tone="info">快速模式使用已验证的双人演播室模板，可调整对白、配音和镜头裁切。{proj?.motionPack ? '更换人物/底图会派生新动作包，需重新准备并人工采用后再渲染。' : '更换人物或场景需先绑定动作包。'}</Alert>}
+        {otsNotice && <Alert tone="info" onClose={() => setOtsNotice(null)}>{otsNotice}</Alert>}
         {!voiceApproved && (
           <Alert tone="warning">
             配音尚未确认；样片确认建议在配音锁定后进行。
@@ -508,10 +586,10 @@ export function VisualPage({ projectId }: { projectId: string }) {
                     </select>
                   </span>
                   <span className="item">角色 A
-                    <Button disabled={isFast} onClick={()=>setView('assets')}>{proj?.characterBindings?.A?.name??SPEAKERS.A.name} · 去绑定</Button>
+                    <Button onClick={()=>setView('assets')}>{proj?.characterBindings?.A?.name??SPEAKERS.A.name} · 去绑定</Button>
                   </span>
                   <span className="item">角色 B
-                    <Button disabled={isFast} onClick={()=>setView('assets')}>{proj?.characterBindings?.B?.name??SPEAKERS.B.name} · 去绑定</Button>
+                    <Button onClick={()=>setView('assets')}>{proj?.characterBindings?.B?.name??SPEAKERS.B.name} · 去绑定</Button>
                   </span>
                   <span className="hf-spacer" />
                   
@@ -548,7 +626,7 @@ export function VisualPage({ projectId }: { projectId: string }) {
                             {ready ? '重做' : '生成'}
                           </Button>
                           <Button variant="secondary" size="sm" icon="upload" disabled={locked} aria-label={`${camera.id}机位上传`} onClick={() => handleCameraAction(camera.id, '上传')}>上传</Button>
-                          <Button variant={locked ? 'brand' : 'ghost'} size="sm" icon={locked ? 'check' : 'edit'} onClick={() => setLockedCameras((current) => ({ ...current, [camera.id]: !current[camera.id] }))}>
+                          <Button variant={locked ? 'brand' : 'ghost'} size="sm" icon={locked ? 'check' : 'edit'} onClick={() => toggleCameraLock(camera.id)}>
                             {locked ? '已锁定' : '锁定'}
                           </Button>
                         </div>
@@ -609,6 +687,14 @@ export function VisualPage({ projectId }: { projectId: string }) {
               {sampleDone && <span className="wu-caption">请检查口型、倾听反应与身份后接受。</span>}
               {(genSample.isPending || sampleJob) && <Badge tone="info">生成中…</Badge>}
             </div>
+            {!sampleRange && voiceApproved && (
+              <p className="wu-caption" style={{ marginTop: 6 }}>
+                {abaSuggestion
+                  ? <>建议：把话轮 <b className="hf-mono">{abaSuggestion.turnId}</b> 的说话人改为 <b>{abaSuggestion.to}</b>，即可组成 A→B→A 区间。</>
+                  : '需至少 3 条话轮且双方交替发言（A→B→A）。'}
+                {' '}<a className="hf-link" onClick={() => setView('script')}>前往阶段②调整</a>
+              </p>
+            )}
             {/* 演示样片无画面：明确告知「接受」前并不存在可人工检查的片段（12 报告 P0 的诚实口径） */}
             {sampleDone && sampleSimulated && (
               <p className="wu-caption" style={{ marginTop: 6 }}>

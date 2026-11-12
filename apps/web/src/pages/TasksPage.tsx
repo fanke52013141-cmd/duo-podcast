@@ -4,7 +4,7 @@
    检查器：所选任务 / 五阶段进度 / 连接与一致性 / 输入快照（取消语义并入卡片「取消」按钮 title）
    ========================================================================== */
 import { useMemo, useState } from 'react';
-import { sendJson, useJobPause, useJobResume, useJobCancel, useJobAbandon, useJobs } from '../lib/api';
+import { useJobPause, useJobResume, useJobCancel, useJobAbandon, useJobRetry, useJobs } from '../lib/api';
 import { JOB_LABEL, type Job, type JobStatus } from '../lib/types';
 import { Alert, Badge, Button } from '../components/wu';
 import { AppShell } from '../components/AppShell';
@@ -12,6 +12,7 @@ import { formatElapsed } from '../lib/format';
 import { useProjectStore } from '../stores';
 import { errorGuide } from '../lib/workflowTools';
 import { MotionWorkflowDiagnostics } from '../components/MotionWorkflowDiagnostics';
+import { ExternalTaskRecovery } from '../components/ExternalTaskRecovery';
 
 const RUNNING: JobStatus[] = ['running', 'pause_requested', 'paused', 'recovering', 'waiting_confirmation', 'cancel_requested', 'unknown'];
 const QUEUED: JobStatus[] = ['queued'];
@@ -49,6 +50,15 @@ function canPauseJob(j: Job): boolean {
 
 function canCancelJob(j: Job): boolean {
   return ['queued', 'running', 'pause_requested', 'paused', 'waiting_confirmation'].includes(j.status);
+}
+
+/** P0-B（42 号方案）：原地重试资格——与后端护栏同口径。
+ *  motion.prepare 走「继续查询原外部任务」；UNKNOWN 渲染必须先核对，不盲目重提交。 */
+function canRetryJob(j: Job): boolean {
+  if (!['failed', 'cancelled', 'unknown'].includes(j.status)) return false;
+  if (j.kind === 'motion.prepare') return false;
+  if (j.status === 'unknown' && (j.kind === 'renders' || j.kind === 'sample.generate')) return false;
+  return true;
 }
 
 function fmtTime(iso: string): string {
@@ -99,6 +109,7 @@ export function TasksPage() {
   const resume = useJobResume();
   const cancel = useJobCancel();
   const abandon = useJobAbandon();
+  const retry = useJobRetry();
   const setView = useProjectStore((s) => s.setView);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [refreshedAt, setRefreshedAt] = useState(() => Date.now());
@@ -187,7 +198,7 @@ export function TasksPage() {
           )}
 
           <div className="hf-task-ops">
-            {j.kind==='motion.prepare'&&j.ownerType==='motionPack'&&j.providerTaskId&&['failed','unknown'].includes(j.status)&&<Button size="sm" onClick={e=>{e.stopPropagation();void sendJson(`/motion-packs/${encodeURIComponent(j.ownerId!)}/prepare/${encodeURIComponent(j.id)}/resume`,'POST').then(()=>jobs.refetch()).catch(err=>setOpError(err.message));}}>继续查询原外部任务（不重采样）</Button>}
+            {(j.kind==='motion.prepare'||j.providerTaskId&&['failed','unknown','recovering'].includes(j.status))&&<ExternalTaskRecovery key={j.id} job={j} onRefresh={()=>void jobs.refetch()}/>}
             {RUNNING.includes(j.status) && (
               <Button variant="secondary" size="sm" disabled={!canPauseJob(j)} onClick={(e) => { e.stopPropagation(); handlePause(j); }}>
                 {j.status === 'paused' ? '继续'
@@ -214,6 +225,16 @@ export function TasksPage() {
                 无法恢复 · 放弃记账
               </Button>
             )}
+            {canRetryJob(j) && (
+              <Button variant="secondary" size="sm" busy={retry.isPending}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setOpError(null);
+                  retry.mutate(j.id, { onError: (err) => setOpError(`重试失败：${(err as Error).message}`) });
+                }}>
+                重试（保留已完成部分）
+              </Button>
+            )}
           </div>
         </div>
       </div>
@@ -235,12 +256,12 @@ export function TasksPage() {
               <div className="hf-ins-rows">
                 <div className="hf-fld"><label>类型</label><span>{kindLabel(selected.kind)} · <span className="hf-mono">{selected.kind}</span></span></div>
                 <div className="hf-fld"><label>队列</label><span><Badge tone="muted">{selected.queueClass}</Badge></span></div>
-                <div className="hf-fld"><label>提交</label><span>{fmtTime(selected.createdAt)} · 第 {selected.attempt + 1} 次尝试</span></div>
+                <div className="hf-fld"><label>提交</label><span>{fmtTime(selected.createdAt)} · 第 {selected.attempt + 1} 次尝试{selected.retriedFrom ? ` · 重试自 ${selected.retriedFrom}` : ''}</span></div>
                 {selected.finishedAt && <div className="hf-fld"><label>完成</label><span>{fmtTime(selected.finishedAt)}</span></div>}
                 <div className="hf-fld"><label>状态</label><span><Badge tone={selected.status === 'succeeded' ? 'success' : selected.status === 'failed' ? 'danger' : 'info'}>{JOB_LABEL[selected.status]}</Badge></span></div>
                 <div className="hf-fld"><label>工程</label><span className="hf-mono">{selected.projectId}</span></div>
                 <p role="status">当前进度：{selected.stage}</p>
-                {selected.error && <Alert tone="danger">{selected.error}<ol>{errorGuide(selected.error,selected.kind).steps.map(step=><li key={step}>{step}</li>)}</ol><Button onClick={()=>{const target=errorGuide(selected.error!,selected.kind).target;if(target==='services'||target==='home')setView(target);else useProjectStore.getState().openProject(selected.projectId,target);}}>前往处理</Button><p><a href="/api/diagnostics/package" download>下载脱敏诊断包</a></p></Alert>}
+                {selected.error && <Alert tone="danger">{selected.error}<ol>{errorGuide(selected.error,selected.kind).steps.map(step=><li key={step}>{step}</li>)}</ol><div className="wu-row" style={{gap:8}}>{canRetryJob(selected)&&<Button variant="secondary" busy={retry.isPending} onClick={()=>{setOpError(null);retry.mutate(selected.id,{onError:(err)=>setOpError(`重试失败：${(err as Error).message}`)});}}>重试（保留已完成部分）</Button>}<Button onClick={()=>{const target=errorGuide(selected.error!,selected.kind).target;if(target==='services'||target==='home')setView(target);else useProjectStore.getState().openProject(selected.projectId,target);}}>前往处理</Button></div><p><a href="/api/diagnostics/package" download>下载脱敏诊断包</a></p></Alert>}
               </div>
             ) : (
               <p className="wu-caption">暂无任务。完成任务提交后，此处显示状态机、阶段进度与冻结的输入快照。</p>

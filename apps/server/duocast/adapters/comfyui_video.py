@@ -17,7 +17,7 @@ import zlib
 
 import httpx
 from ..services.listening_plan import listening_plan, listening_prompt, reference_workflow
-from ..services.video_plans import camera_plan, clipped_camera_plan, crop_region, adaptive_prompt
+from ..services.video_plans import camera_plan, clipped_camera_plan, closeup_box, crop_region, adaptive_prompt
 from ..services.generation_profiles import configure_generation_profile, listener_layer_filter, validate_video_stream, PROFILES
 
 # Persisted fingerprint of the accepted v4 generator. Only its unchanged legacy
@@ -31,15 +31,54 @@ class ComfyUIVideoProvider:
                     "resolutions": ["854x480", "1280x720", "1920x1080"],
                     "fps": [25, 30], "progress": True, "cancel": False}
 
-    def __init__(self, *, base_url: str, input_dir: Path, artifact_store):
+    def __init__(self, *, base_url: str, input_dir: Path, artifact_store,
+                 attention: str = "sdpa", blocks_to_swap: int = 38, prefetch_blocks: int = 0,
+                 text_cfg: float = 2.0, audio_cfg: float = 1.0, compile_model: bool = False,
+                 lora: str | None = None, lora_strength: float = 0.8):
         self.base_url = base_url.rstrip("/")
         self.input_dir = input_dir
         self.artifacts = artifact_store
+        # 44 号加速调优：默认值=现网行为；边界校验在装配入口（环境变量来源）。
+        if attention not in {"sdpa", "sageattn", "sageattn_3", "flash_attn_2", "flash_attn_3", "comfy"}:
+            raise ValueError(f"不支持的注意力后端: {attention}")
+        if not 0 <= blocks_to_swap <= 48 or not 0 <= prefetch_blocks <= 40:
+            raise ValueError("blocks_to_swap 须 0–48，prefetch_blocks 须 0–40")
+        if not 0 <= text_cfg <= 30 or not 0 <= audio_cfg <= 30:
+            raise ValueError("cfg 须 0–30")
+        self.attention = attention
+        self.blocks_to_swap = blocks_to_swap
+        self.prefetch_blocks = prefetch_blocks
+        self.text_cfg = text_cfg
+        self.audio_cfg = audio_cfg
+        self.compile_model = compile_model
+        self.lora = lora
+        self.lora_strength = lora_strength
         self._lock = asyncio.Lock()
         def normalized(code):
             constants = tuple(normalized(c) if isinstance(c, CodeType) else c for c in code.co_consts)
             return code.replace(co_firstlineno=0, co_linetable=b"", co_consts=constants)
         self.motion_implementation_hash = hashlib.sha256(marshal.dumps((normalized(type(self)._automatic_reference.__code__), normalized(listening_prompt.__code__), normalized(reference_workflow.__code__), normalized(type(self)._shot.__code__), normalized(type(self)._prepare_motion_reference.__code__), normalized(type(self)._compose_listener.__code__), normalized(adaptive_prompt.__code__), normalized(configure_generation_profile.__code__), normalized(listener_layer_filter.__code__)))).hexdigest()
+
+    def acceleration_fingerprint(self) -> dict:
+        """加速参数指纹：纳入 motion_digest，切配置不会误用旧配置生成的片段。"""
+        return {"attention": self.attention, "blocksToSwap": self.blocks_to_swap,
+                "prefetchBlocks": self.prefetch_blocks, "textCfg": self.text_cfg,
+                "audioCfg": self.audio_cfg, "compile": self.compile_model,
+                "lora": self.lora, "loraStrength": self.lora_strength}
+
+    def _apply_acceleration(self, wf: dict) -> dict:
+        """把加速参数写入工作流（纯函数式修改，CPU 可测）。节点 177 为现成 compile 设置节点。"""
+        wf["122"]["inputs"]["attention_mode"] = self.attention
+        wf["134"]["inputs"]["blocks_to_swap"] = self.blocks_to_swap
+        wf["134"]["inputs"]["prefetch_blocks"] = self.prefetch_blocks
+        wf["138"]["inputs"]["strength"] = self.lora_strength
+        if self.lora:
+            wf["138"]["inputs"]["lora"] = self.lora
+        wf["198"]["inputs"]["audio_cfg_scale"] = self.audio_cfg
+        wf["199"]["inputs"]["cfg"] = self.text_cfg
+        if self.compile_model:
+            wf["122"]["inputs"]["compile_args"] = ["177", 0]
+        return wf
 
     def _asset(self, asset_id):
         entry = self.artifacts.by_id(asset_id)
@@ -115,7 +154,8 @@ class ComfyUIVideoProvider:
             "audio": self.artifacts._hash_file(str(master)), "image": self.artifacts._hash_file(str(image)),
             "timeline": timeline, "speakers": speakers, "regions": visual["personRegions"],
             "workflow": workflow_template, "performance": performance,
-            "strategy": "listening-v4-cfg2" if performance_mode == "legacy" else "listening-adaptive-v1",
+            "strategy": f"listening-v4-cfg{self.text_cfg:g}" if performance_mode == "legacy" else "listening-adaptive-v1",
+            "acceleration": self.acceleration_fingerprint(),
             "implementation": LEGACY_IMPLEMENTATION if performance_mode == "legacy" else self.motion_implementation_hash,
             "seed": req.get("seed", 1),
             **({"listeningPlan": dialogue_plan, "dialogueSource": req.get("reuseMotionArtifactId")} if dialogue_plan else {}),
@@ -268,7 +308,7 @@ class ComfyUIVideoProvider:
             a, b, active = shot["start"], shot["end"], shot["camera"]
             crop = ""
             if active in ("A", "B"):
-                box = crop_region(visual["personRegions"][active])
+                box = closeup_box(visual, active)
                 crop = f"crop=iw*{box['width']}:ih*{box['height']}:iw*{box['x']}:ih*{box['y']},"
             part = folder / f"edit_{n:04d}.mp4"
             first_frame = round((a-start)*fps)
@@ -450,7 +490,7 @@ class ComfyUIVideoProvider:
         wf["199"]["inputs"]["seed"] = int(seed)
         if performance_mode == "adaptive":
             wf["135"]["inputs"]["positive_prompt"] = adaptive_prompt(performance or [], regions, start, end)
-        wf["199"]["inputs"]["cfg"] = 2.0
+        self._apply_acceleration(wf)
         wf["250"]["inputs"]["image"] = f"{digest}_A.png"
         wf["252"]["inputs"]["image"] = f"{digest}_B.png"
         for node, kind in (("218", "a"), ("241", "b"), ("242", "mix")):

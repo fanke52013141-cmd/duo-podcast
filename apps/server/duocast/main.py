@@ -93,8 +93,12 @@ def _job_runner(manager: JobManager, store: ProjectStore, artifacts: ArtifactSto
             revision = build_script_revision(project, text_provider, result)
             apply_script_revision(store, job.project_id, revision,
                                   job.input_snapshot.get("expectedProjectRevision"))
+            # P0-A（41 号报告）：生成期间输入被改动时新版本只追加不切当前草稿，
+            # 必须显式回报 applied，杜绝「任务成功但结果没生效」的假成功（对齐③的口径）。
+            saved = store.load(job.project_id)
+            applied = bool(saved and saved.current_draft_revision == revision.id)
             # mock 无真实媒体产物：artifactIds 留空，版本指针走 meta（11 报告 P2-4）
-            return {"artifactIds": [], "meta": {"revisionId": revision.id}}
+            return {"artifactIds": [], "meta": {"revisionId": revision.id, "applied": applied}}
         if job.kind == "script.rewrite":
             # 候选改写：不落盘，返回差异供用户审阅（01 §4.2 接受后才替换）
             project = store.load(job.project_id)
@@ -255,6 +259,10 @@ async def lifespan(app: FastAPI):
         "text_model": cfg.text_model, "text_base_url": runtime_config.get("text_base_url", "https://toapis.com"),
         "image_base_url": runtime_config.get("image_base_url", "https://toapis.com"),
         "comfyui_url": cfg.comfyui_url, "video_url": cfg.video_url,
+        "video_acceleration": {"attention": cfg.video_attention, "blocks_to_swap": cfg.video_blocks_to_swap,
+                               "prefetch_blocks": cfg.video_prefetch_blocks, "text_cfg": cfg.video_text_cfg,
+                               "audio_cfg": cfg.video_audio_cfg, "compile": cfg.video_compile,
+                               "lora": cfg.video_lora, "lora_strength": cfg.video_lora_strength},
         "credential_env": runtime_config.get("credential_env", "DUOCAST_TOAPIS_KEY"),
         "credentialPresent": bool(cfg.toapis_key), "budget_yuan": runtime_config.get("budget_yuan", 2),
     }
@@ -291,7 +299,11 @@ async def lifespan(app: FastAPI):
     else:
         local_tts = MockTTSProvider()
     video = (ComfyUIVideoProvider(base_url=cfg.video_url, input_dir=settings.video_input,
-                                artifact_store=artifacts)
+                                artifact_store=artifacts,
+                                attention=cfg.video_attention, blocks_to_swap=cfg.video_blocks_to_swap,
+                                prefetch_blocks=cfg.video_prefetch_blocks, text_cfg=cfg.video_text_cfg,
+                                audio_cfg=cfg.video_audio_cfg, compile_model=cfg.video_compile,
+                                lora=cfg.video_lora or None, lora_strength=cfg.video_lora_strength)
              if cfg.video_provider == "comfyui" else MockVideoProvider())
     from .services.fast_catalog import catalog
     if (engine_root() or any(t.get("ready") for t in catalog())) and not video.capabilities.get("simulated", True):
@@ -384,6 +396,7 @@ from .api import expert_previews as expert_previews_api
 from .api import expert_assembly as expert_assembly_api
 from .api import events as events_api
 from .api import export as export_api
+from .api import ingest as ingest_api
 from .api import jobs as jobs_api
 from .api import machine as machine_api
 from .api import projects as projects_api
@@ -396,6 +409,7 @@ from .api import voice as voice_api
 from .api import motion_media as motion_media_api
 from .api import motion_packs as motion_packs_api
 from .api import motion_preparation as motion_preparation_api
+from .api import motion_swap as motion_swap_api
 from .api import motion_coordinates as motion_coordinates_api
 from .api import motion_diagnostics as motion_diagnostics_api
 
@@ -403,6 +417,7 @@ app.include_router(projects_api.router)
 app.include_router(motion_media_api.router)
 app.include_router(motion_packs_api.router)
 app.include_router(motion_preparation_api.router)
+app.include_router(motion_swap_api.router)
 app.include_router(motion_coordinates_api.router)
 app.include_router(motion_diagnostics_api.router)
 app.include_router(providers_api.router)
@@ -418,6 +433,7 @@ app.include_router(voice_api.router)
 app.include_router(visual_api.router)
 app.include_router(render_api.router)
 app.include_router(export_api.router)
+app.include_router(ingest_api.router)
 app.include_router(jobs_api.router)
 app.include_router(events_api.router)
 app.include_router(artifacts_api.router)
