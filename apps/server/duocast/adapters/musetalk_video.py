@@ -108,7 +108,7 @@ class MuseTalkVideoProvider:
 
     async def render(self, req, progress=None):
         from ..domain.project import Project
-        from ..services.video_plans import camera_plan, clipped_camera_plan, crop_region
+        from ..services.video_plans import camera_plan, clipped_camera_plan, closeup_box, crop_region
         project = Project.model_validate(req['projectSnapshot'])
         frozen = req.get('fastRuntime')
         if project.motion_pack is not None:
@@ -175,8 +175,9 @@ class MuseTalkVideoProvider:
             worker_req['cameraEditPlan'] = cameras
         else:
             cameras = camera_plan(req['projectSnapshot'],req.get('cameraMode', project.camera_mode))
+            visual_data = visual.model_dump(by_alias=True)
             worker_req['cameraPlan'] = [{**shot, 'start':shot['start']-start/rate, 'end':shot['end']-start/rate,
-                'crop':crop_region(visual.person_regions[shot['camera']]) if shot['camera'] in ('A','B') else None}
+                'crop':closeup_box(visual_data, shot['camera']) if shot['camera'] in ('A','B') else None}
                 for shot in clipped_camera_plan(cameras,start/rate,end/rate)]
         request_file = folder/'request.json'
         request_file.write_text(json.dumps(worker_req),encoding='utf-8')

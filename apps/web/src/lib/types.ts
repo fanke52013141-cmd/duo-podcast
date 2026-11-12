@@ -136,6 +136,8 @@ export interface VisualVariant {
   aspect: Aspect;
   modelInputTransform: { scale: number; offsetX: number; offsetY: number; crop?: unknown; pad: string };
   personRegions: Record<string, unknown>;
+  /** 显式近景虚线框（归一化 0..1）；空/缺省=自动半身推导。设置后切近景完全按框裁切。 */
+  closeupRegions?: Record<string, { x: number; y: number; width: number; height: number }>;
   imageApiConfigRef: string | null;
   mode?: 'twoShot' | 'overShoulder';
   cameraGroups?: DialogueCameraGroup[];

@@ -92,6 +92,9 @@ class VisualVariant(BaseModel):
         "A": Rect(x=0.0, y=0.0, width=0.5, height=1.0).model_dump(by_alias=True),
         "B": Rect(x=0.5, y=0.0, width=0.5, height=1.0).model_dump(by_alias=True),
     })
+    # 显式近景裁切框（虚线框）：{A:{x,y,width,height}, B:{…}}，归一化 0..1。
+    # 空=自动推导（人物框上部 55% 半身）；设置后切近景完全按框裁切。
+    closeup_regions: dict = Field(default_factory=dict)
     image_api_config_ref: Optional[str] = None
     # 旧工程未提供该字段时仍是同框模式，继续使用 master_image/person_regions。
     mode: VisualMode = "twoShot"

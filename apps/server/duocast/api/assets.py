@@ -142,11 +142,17 @@ async def update_regions(project_id: str, payload: dict, request: Request):
         raise HTTPException(404, "工程不存在")
     regions = payload.get("regions", {})
     _validate_regions(regions)
+    # 显式近景虚线框（可选）：{}=恢复自动半身推导；提供时须 A/B 齐全且同口径校验。
+    closeups = payload.get("closeupRegions")
+    if closeups is not None and closeups != {}:
+        _validate_regions(closeups)
     variants = [v.model_copy(deep=True) for v in project.visual_variants]
     target = next((v for v in variants if v.id == payload.get("variantId")), None)
     if target is None:
         raise HTTPException(404, "画面版本不存在")
     target.person_regions = regions
+    if closeups is not None:
+        target.closeup_regions = closeups
     saved = store.apply(project_id, {"visual_variants": variants}, payload.get("expectedRevision", project.revision))
     store.flush()
     return saved.model_dump(by_alias=True)

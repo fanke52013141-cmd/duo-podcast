@@ -26,6 +26,14 @@ ALLOWED_PATCH_FIELDS = {"title", "aspect", "scriptRevisions", "currentDraftRevis
                         "approvals", "voiceBindings", "pronunciationDict", "selectedVisualVariantId", "cameraMode", "performanceMode", "shotCameraOverrides", "cameraLocks", "creationDraft", "characterBindings", "renderSpec", "motionPack", "shotStyle"}
 # 三个默认确认点必须绑定当前草稿（11 报告 P1-6；stage_svc 的推导口径与此一致）
 CONFIRM_KINDS = {"script", "voice", "sample"}
+
+
+def _validate_render_spec(spec: object) -> None:
+    """创建与 PATCH 共用的生成规格校验（分辨率/帧率/快速清晰度）。"""
+    if not isinstance(spec, dict) or set(spec) - {"resolution", "fps", "fastQuality"}:
+        raise HTTPException(422, "生成规格字段无效")
+    if spec.get("resolution", "854x480") not in {"854x480", "1280x720", "1920x1080"} or type(spec.get("fps", 25)) is not int or spec.get("fps", 25) not in {25, 30} or spec.get("fastQuality", "original") not in {"original", "clear", "crisp"}:
+        raise HTTPException(422, "生成规格不支持")
 # 工程 id 白名单：字母/数字/下划线/连字符/空格/中文，不含路径分隔符与点号（P1-4 路径穿越）
 PROJECT_ID_RE = re.compile(r"^[A-Za-z0-9_\-\u4e00-\u9fff][A-Za-z0-9 _\-\u4e00-\u9fff]{0,62}$")
 
@@ -140,6 +148,10 @@ async def create_project(request: Request, payload: dict) -> dict:
             patch["voiceBindings"] = bindings
         if patch:
             proj = store.apply(proj.id, patch, expected_revision=proj.revision)
+    # 创建时即可选定导出分辨率（标准模式按需求出片；④/⑤页仍可随时改）。
+    if payload.get("renderSpec") is not None:
+        _validate_render_spec(payload["renderSpec"])
+        proj = store.apply(proj.id, {"render_spec": payload["renderSpec"]}, expected_revision=proj.revision)
     if motion_pin:
         proj = store.apply(proj.id, {"motion_pack": motion_pin.model_dump(), "shot_style": shot_style,
             "generation_mode": generation_mode}, expected_revision=proj.revision)
@@ -217,11 +229,7 @@ async def patch_project(project_id: str, payload: dict, request: Request) -> dic
     if unknown:
         raise HTTPException(422, f"字段不允许修改: {sorted(unknown)}")
     if "renderSpec" in patch:
-        spec = patch["renderSpec"]
-        if not isinstance(spec, dict) or set(spec)-{"resolution", "fps", "fastQuality"}:
-            raise HTTPException(422, "生成规格字段无效")
-        if spec.get("resolution", "854x480") not in {"854x480", "1280x720", "1920x1080"} or type(spec.get("fps", 25)) is not int or spec.get("fps", 25) not in {25, 30} or spec.get("fastQuality", "original") not in {"original", "clear", "crisp"}:
-            raise HTTPException(422, "生成规格不支持")
+        _validate_render_spec(patch["renderSpec"])
     if "cameraLocks" in patch:
         locks = patch["cameraLocks"]
         if not isinstance(locks, dict) or set(locks) - {"A", "B"} or any(type(v) is not bool for v in locks.values()):

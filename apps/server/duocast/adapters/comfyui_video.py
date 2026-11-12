@@ -17,7 +17,7 @@ import zlib
 
 import httpx
 from ..services.listening_plan import listening_plan, listening_prompt, reference_workflow
-from ..services.video_plans import camera_plan, clipped_camera_plan, crop_region, adaptive_prompt
+from ..services.video_plans import camera_plan, clipped_camera_plan, closeup_box, crop_region, adaptive_prompt
 from ..services.generation_profiles import configure_generation_profile, listener_layer_filter, validate_video_stream, PROFILES
 
 # Persisted fingerprint of the accepted v4 generator. Only its unchanged legacy
@@ -268,7 +268,7 @@ class ComfyUIVideoProvider:
             a, b, active = shot["start"], shot["end"], shot["camera"]
             crop = ""
             if active in ("A", "B"):
-                box = crop_region(visual["personRegions"][active])
+                box = closeup_box(visual, active)
                 crop = f"crop=iw*{box['width']}:ih*{box['height']}:iw*{box['x']}:ih*{box['y']},"
             part = folder / f"edit_{n:04d}.mp4"
             first_frame = round((a-start)*fps)
