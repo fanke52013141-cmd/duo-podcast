@@ -51,6 +51,7 @@
 - **SageAttention 2.1.1→2.2.0.post3 已采纳**：woct0rdho wheel（cu128torch2.8.0，SHA256 校验），装引擎 venv，2.1.1 备份 `InfiniteTalk_Runtime\sageattention_backup_2.1.1\`。EP9930 同种子 A/B：**23.5min vs 24.5min（快 4%）**，显存 +0.5GB，质量等价或更好（t=20 的 2.1.1 马赛克伪影在 2.2 消失）。**运维坑：缓存指纹不含 sage 包版本，升级包后须手动作废对应 video_motion 缓存目录再重渲染**。
 - **SeedVR2-3B FP8 导出超分（可选引擎）**：`DUOCAST_EXPORT_SR=1` + `DUOCAST_EXPORT_SR_ENGINE=seedvr2` + `DUOCAST_SEEDVR2_PYTHON=<引擎venv python>`；默认引擎仍 realesrgan 零变化。三方 A/B（同 5s 片段）：女脸 Laplacian 235 vs Real-ESRGAN 166，视觉核验皮肤毛孔/发丝/齿缝自然、无磨皮塑料感、无过锐白边、时序最稳；**代价 6.5min/5s → 2 分钟整片约 2.5h，定位精品定稿档**。16GB 必须 VAE 分块+DiT/VAE 互卸载（命令已内置）。依赖在 `tools/seedvr2/` + `tools/seedvr2_models/`（gitignore）。
 - **代码落点**：`services/video_sr.py` 双引擎（sr_engine/find_seedvr2/seedvr2_command 纯函数 + _super_resolve_seedvr2）；`tests/test_video_sr.py` 39 项。**验证：后端全量 1159 passed / 20 skipped；模块级真实端到端 PASS（397s，1080p+音轨）**。详见 [44 号文档第十节](44-标准模式加速调优交接.md)。
+- **转正与清理（同日，用户拍板）**：SageAttention 2.2 + SeedVR2 成为正式默认方案——超分默认启用（`DUOCAST_EXPORT_SR=0` 关闭回退 ffmpeg 放大；2 分钟整片导出约多花 2.5h，用户已知晓）；Real-ESRGAN 代码路径与 tools/realesrgan 已移除（回收站可恢复），旧 sage2.1.1 分段缓存备份已清；保留引擎 venv `sageattention_backup_2.1.1/` 作 sage 回退。start.ps1 + 用户环境变量固化，服务已重启验证。`video_sr.py` 精简为 SeedVR2 单引擎，`test_video_sr.py` 30 项，后端全量 **1150 passed / 20 skipped**。见 44 号 10.3。
 
 ## 已实现能力
 
