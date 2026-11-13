@@ -84,3 +84,11 @@ scripts/fast-mode/runtime/
 scripts/fast-mode/venv/
 scripts/fast-mode/models/
 scripts/fast-mode/vendor/
+
+# ===== AI 超分外部工具（Real-ESRGAN 二进制+模型，体积大，本地依赖不入库）=====
+tools/
+
+# ===== 验收/演示产物（对比图+样片视频，体积大；结论见 44/46/47 号文档）=====
+outputs/
+标准模式加速验收/
+.qoder-input-images/

@@ -94,9 +94,9 @@ class ComfyUIVideoProvider:
         return Path(entry["path"])
 
     @staticmethod
-    async def _command(*args):
+    async def _command(*args, cwd=None):
         process = await asyncio.create_subprocess_exec(
-            *map(str, args), stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+            *map(str, args), stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE, cwd=cwd)
         out, err = await process.communicate()
         if process.returncode:
             raise RuntimeError(err.decode("utf-8", "replace")[-3000:])
@@ -311,6 +311,14 @@ class ComfyUIVideoProvider:
         else:
             await self._command("ffmpeg", "-v", "error", "-y", "-ss", start-motion_start,
                 "-i", raw_base, "-t", end-start, "-an", "-c:v", "libx264", "-crf", 19, base)
+        # AI 超分（可选，DUOCAST_EXPORT_SR）：导出分辨率高于原生时，用 Real-ESRGAN 替代 ffmpeg 放大。
+        # 默认关闭，行为与原先完全一致；开启时先按原生分辨率合成，再超分到导出分辨率。
+        from ..services import video_sr
+        native_probe = json.loads(await self._command("ffprobe", "-v", "error", "-select_streams", "v:0",
+            "-show_entries", "stream=width,height", "-of", "json", str(base)))
+        native_w, native_h = native_probe["streams"][0]["width"], native_probe["streams"][0]["height"]
+        sr_active = video_sr.sr_enabled() and video_sr.needs_upscale(native_w, native_h, width, height)
+        edit_w, edit_h = (native_w, native_h) if sr_active else (width, height)
         # Cut among the genuine moving two-shot and speaker close-ups.
         edited = []
         for n, shot in enumerate(clipped_camera_plan(episode_camera_plan, start, end)):
@@ -325,7 +333,7 @@ class ComfyUIVideoProvider:
             if last_frame <= first_frame:
                 continue
             await self._command("ffmpeg", "-v", "error", "-y", "-reinit_filter", 0, "-i", base,
-                "-frames:v", last_frame-first_frame, "-an", "-vf", f"fps={fps},trim=start_frame={first_frame}:end_frame={last_frame},setpts=PTS-STARTPTS," + crop + f"scale={width}:{height}:force_original_aspect_ratio=increase,crop={width}:{height},setsar=1",
+                "-frames:v", last_frame-first_frame, "-an", "-vf", f"fps={fps},trim=start_frame={first_frame}:end_frame={last_frame},setpts=PTS-STARTPTS," + crop + f"scale={edit_w}:{edit_h}:force_original_aspect_ratio=increase,crop={edit_w}:{edit_h},setsar=1",
                 "-r", fps, "-c:v", "libx264", "-preset", "fast", "-crf", 19, "-pix_fmt", "yuv420p", part)
             edited.append(part)
         concat.write_text("\n".join("file '" + p.as_posix().replace("'", "'\\''") + "'" for p in edited), encoding="utf-8")
@@ -333,6 +341,10 @@ class ComfyUIVideoProvider:
         await self._command("ffmpeg", "-v", "error", "-y", "-f", "concat", "-safe", 0,
             "-i", concat, "-ss", start, "-i", pcm, "-t", end-start,
             "-map", "0:v:0", "-map", "1:a:0", "-c:v", "copy", "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", final)
+        if sr_active:
+            sr_out = folder / "final_sr.mp4"
+            await video_sr.super_resolve_video(final, sr_out, width, height, fps, self._command, workdir=folder / "sr")
+            shutil.move(str(sr_out), str(final))
         probe = json.loads(await self._command("ffprobe", "-v", "error", "-show_streams", "-show_format", "-of", "json", final))
         if not any(s["codec_type"] == "audio" for s in probe["streams"]) or abs(float(probe["format"]["duration"]) - (end-start)) > 0.2:
             raise RuntimeError("成片音轨或时长校验失败，未登记输出")
