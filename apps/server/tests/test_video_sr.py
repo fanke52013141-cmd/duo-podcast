@@ -1,7 +1,8 @@
-"""AI 视频超分（video_sr）CPU 回归。
+"""AI 视频超分（video_sr / SeedVR2）CPU 回归。
 
-默认关闭=现网导出行为零变化；验证开关解析、Real-ESRGAN 二进制定位、超分判定纯函数、
-缺失依赖时的明确报错。真实超分画质/耗时留 GPU 按 44 号文档实测（Real-ESRGAN 为本地外部依赖）。
+2026-11-13 起 SeedVR2 为正式方案（默认启用，Real-ESRGAN 路径已移除）：
+验证开关解析（默认开/显式关）、依赖定位、命令构造纯函数、超分判定、
+缺失依赖明确报错、音轨回贴不二次编码。真实画质/耗时留 GPU 按 44 号文档第十节实测。
 """
 from __future__ import annotations
 
@@ -13,53 +14,23 @@ import pytest
 from duocast.services import video_sr
 
 
-# ---------- 开关：默认关，解析 ----------
+# ---------- 开关：默认开，显式关 ----------
 
-def test_sr_disabled_by_default(monkeypatch):
+def test_sr_enabled_by_default(monkeypatch):
     monkeypatch.delenv("DUOCAST_EXPORT_SR", raising=False)
-    assert video_sr.sr_enabled() is False
+    assert video_sr.sr_enabled() is True
 
 
-@pytest.mark.parametrize("val", ["1", "true", "on", "realesrgan", "TRUE", "On"])
+@pytest.mark.parametrize("val", ["1", "true", "on", "TRUE", "On", ""])
 def test_sr_enabled_values(monkeypatch, val):
     monkeypatch.setenv("DUOCAST_EXPORT_SR", val)
     assert video_sr.sr_enabled() is True
 
 
-@pytest.mark.parametrize("val", ["0", "false", "off", "", "no", "xyz"])
+@pytest.mark.parametrize("val", ["0", "false", "off", "no", "OFF", "False"])
 def test_sr_disabled_values(monkeypatch, val):
     monkeypatch.setenv("DUOCAST_EXPORT_SR", val)
     assert video_sr.sr_enabled() is False
-
-
-# ---------- Real-ESRGAN 定位 ----------
-
-def test_find_realesrgan_env_override(tmp_path, monkeypatch):
-    fake = tmp_path / "realesrgan-ncnn-vulkan.exe"
-    fake.write_bytes(b"x")
-    monkeypatch.setenv("DUOCAST_REALESRGAN_BIN", str(fake))
-    assert video_sr.find_realesrgan() == fake
-
-
-def test_find_realesrgan_env_missing(tmp_path, monkeypatch):
-    monkeypatch.setenv("DUOCAST_REALESRGAN_BIN", str(tmp_path / "nope.exe"))
-    assert video_sr.find_realesrgan() is None
-
-
-def test_find_realesrgan_default_location(tmp_path, monkeypatch):
-    monkeypatch.delenv("DUOCAST_REALESRGAN_BIN", raising=False)
-    monkeypatch.setattr(video_sr, "_REPO_ROOT", tmp_path)
-    assert video_sr.find_realesrgan() is None  # 未放置二进制
-    bin_dir = tmp_path / "tools" / "realesrgan"
-    bin_dir.mkdir(parents=True)
-    fake = bin_dir / "realesrgan-ncnn-vulkan.exe"
-    fake.write_bytes(b"x")
-    assert video_sr.find_realesrgan() == fake
-
-
-def test_sr_model_dir(tmp_path):
-    binary = tmp_path / "realesrgan-ncnn-vulkan.exe"
-    assert video_sr.sr_model_dir(binary) == tmp_path / "models"
 
 
 # ---------- 超分判定纯函数 ----------
@@ -73,48 +44,6 @@ def test_sr_model_dir(tmp_path):
 ])
 def test_needs_upscale(src, target, expected):
     assert video_sr.needs_upscale(src[0], src[1], target[0], target[1]) is expected
-
-
-# ---------- 缺失依赖明确报错（不静默降级） ----------
-
-def test_super_resolve_missing_binary_raises(tmp_path, monkeypatch):
-    monkeypatch.setattr(video_sr, "find_realesrgan", lambda: None)
-
-    async def run(*a, **k):
-        return ""
-
-    with pytest.raises(RuntimeError, match="Real-ESRGAN"):
-        asyncio.run(video_sr.super_resolve_video(tmp_path / "in.mp4", tmp_path / "out.mp4", 1920, 1080, 25, run))
-
-
-def test_super_resolve_missing_model_raises(tmp_path, monkeypatch):
-    binary = tmp_path / "realesrgan-ncnn-vulkan.exe"
-    binary.write_bytes(b"x")
-    monkeypatch.setattr(video_sr, "find_realesrgan", lambda: binary)
-
-    async def run(*a, **k):
-        return ""
-
-    with pytest.raises(RuntimeError, match="模型缺失"):
-        asyncio.run(video_sr.super_resolve_video(tmp_path / "in.mp4", tmp_path / "out.mp4", 1920, 1080, 25, run))
-
-
-# ---------- SeedVR2 引擎选择 ----------
-
-def test_sr_engine_default_realesrgan(monkeypatch):
-    monkeypatch.delenv("DUOCAST_EXPORT_SR_ENGINE", raising=False)
-    assert video_sr.sr_engine() == "realesrgan"
-
-
-def test_sr_engine_seedvr2(monkeypatch):
-    monkeypatch.setenv("DUOCAST_EXPORT_SR_ENGINE", "seedvr2")
-    assert video_sr.sr_engine() == "seedvr2"
-
-
-def test_sr_engine_invalid_raises(monkeypatch):
-    monkeypatch.setenv("DUOCAST_EXPORT_SR_ENGINE", "topaz")
-    with pytest.raises(ValueError, match="realesrgan 或 seedvr2"):
-        video_sr.sr_engine()
 
 
 # ---------- SeedVR2 依赖定位 ----------
@@ -164,7 +93,7 @@ def test_find_seedvr2_env_overrides(tmp_path, monkeypatch):
     assert cfg["cli"] == alt_cli and cfg["model_dir"] == alt_mdl
 
 
-# ---------- SeedVR2 命令构造（纯函数） ----------
+# ---------- 命令构造（纯函数） ----------
 
 @pytest.mark.parametrize("target,short", [((1920, 1080), 1080), ((1280, 720), 720), ((1080, 1920), 1080)])
 def test_seedvr2_short_side(target, short):
@@ -192,36 +121,21 @@ def test_seedvr2_command_attention_override(tmp_path, monkeypatch):
     assert "--resolution 720" in " ".join(cmd)
 
 
-# ---------- SeedVR2 分发与缺失报错 ----------
+# ---------- 缺失依赖明确报错（不静默降级） ----------
 
-def test_super_resolve_dispatch_seedvr2(tmp_path, monkeypatch):
-    monkeypatch.setenv("DUOCAST_EXPORT_SR_ENGINE", "seedvr2")
-    called = {}
-
-    async def fake_seedvr2(src, dst, w, h, run, workdir=None):
-        called["seedvr2"] = (w, h)
-
-    monkeypatch.setattr(video_sr, "_super_resolve_seedvr2", fake_seedvr2)
-
-    async def run(*a, **k):
-        return ""
-
-    asyncio.run(video_sr.super_resolve_video(tmp_path / "in.mp4", tmp_path / "out.mp4", 1920, 1080, 25, run))
-    assert called["seedvr2"] == (1920, 1080)
-
-
-def test_seedvr2_missing_deps_raises(tmp_path, monkeypatch):
+def test_super_resolve_missing_deps_raises(tmp_path, monkeypatch):
     monkeypatch.setattr(video_sr, "find_seedvr2", lambda: None)
 
     async def run(*a, **k):
         return ""
 
-    with pytest.raises(RuntimeError, match="seedvr2 但依赖缺失"):
-        asyncio.run(video_sr._super_resolve_seedvr2(tmp_path / "in.mp4", tmp_path / "out.mp4", 1920, 1080, run))
+    with pytest.raises(RuntimeError, match="SeedVR2 依赖缺失"):
+        asyncio.run(video_sr.super_resolve_video(tmp_path / "in.mp4", tmp_path / "out.mp4", 1920, 1080, 25, run))
 
+
+# ---------- 产出回贴：视频 copy + 原音轨 ----------
 
 def test_seedvr2_mux_copy_and_audio(tmp_path, monkeypatch):
-    """CLI 产出后：视频 copy（不二次编码）+ 回贴原音轨。"""
     py, cli, mdl = _seedvr2_tree(tmp_path)
     monkeypatch.setenv("DUOCAST_SEEDVR2_PYTHON", str(py))
     monkeypatch.setattr(video_sr, "_REPO_ROOT", tmp_path)
@@ -236,8 +150,21 @@ def test_seedvr2_mux_copy_and_audio(tmp_path, monkeypatch):
             (out / "in.mp4").write_bytes(b"sr")
         return ""
 
-    asyncio.run(video_sr._super_resolve_seedvr2(src, tmp_path / "out.mp4", 1920, 1080, run,
-                                                workdir=tmp_path / "work"))
+    asyncio.run(video_sr.super_resolve_video(src, tmp_path / "out.mp4", 1920, 1080, 25, run,
+                                             workdir=tmp_path / "work"))
     assert len(calls) == 2
     mux = calls[1]
     assert "-c:v copy" in " ".join(mux) and "-map 1:a:0" in " ".join(mux)
+
+
+def test_seedvr2_no_output_raises(tmp_path, monkeypatch):
+    py, cli, mdl = _seedvr2_tree(tmp_path)
+    monkeypatch.setenv("DUOCAST_SEEDVR2_PYTHON", str(py))
+    monkeypatch.setattr(video_sr, "_REPO_ROOT", tmp_path)
+
+    async def run(*a, **k):
+        return ""
+
+    with pytest.raises(RuntimeError, match="未产出超分视频"):
+        asyncio.run(video_sr.super_resolve_video(tmp_path / "in.mp4", tmp_path / "out.mp4",
+                                                 1920, 1080, 25, run, workdir=tmp_path / "work"))

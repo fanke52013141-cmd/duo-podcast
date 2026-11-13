@@ -95,7 +95,7 @@ def test_invalid_listening_variant_rejected(seed):
     with pytest.raises(HTTPException): validate_render_options(project(), {"listeningSeed": seed})
 
 
-def test_multiple_segments_render_and_repeat_without_model_sampling(tmp_path):
+def test_multiple_segments_render_and_repeat_without_model_sampling(tmp_path, monkeypatch):
     """Real ffmpeg compositing/export; only expensive I2V sampling is substituted."""
     import asyncio
     import shutil
@@ -103,6 +103,8 @@ def test_multiple_segments_render_and_repeat_without_model_sampling(tmp_path):
     import wave
     from duocast.storage.artifacts import ArtifactStore
     from duocast.adapters.comfyui_video import ComfyUIVideoProvider
+    # 导出超分默认启用（SeedVR2，外部 GPU 依赖）；本测试只验合成/导出，显式关闭保持封闭。
+    monkeypatch.setenv("DUOCAST_EXPORT_SR", "0")
     if not shutil.which("ffmpeg"): pytest.skip("ffmpeg unavailable")
     store=ArtifactStore(tmp_path/"artifacts")
     native=store.root/"video_motion"/"source";native.mkdir(parents=True)
