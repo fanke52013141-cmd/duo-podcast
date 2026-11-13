@@ -38,10 +38,9 @@ if (-not $env:DUOCAST_VIDEO_AUDIO_CFG) { $env:DUOCAST_VIDEO_AUDIO_CFG = '1.0' }
 # clean=同框每段重锚定干净底图，打断参考帧链式累积退化；仅作用同框路径，过肩不受影响。
 # 回退：设 DUOCAST_ANCHOR_MODE=chain 重启即恢复旧行为。见 47 号文档。
 if (-not $env:DUOCAST_ANCHOR_MODE) { $env:DUOCAST_ANCHOR_MODE = 'clean' }
-# 导出 AI 超分正式方案（2026-11-13 起 SeedVR2-3B FP8 默认启用，Real-ESRGAN 已移除）。
-# 实测单帧质感/时序稳定性优于 Real-ESRGAN；成本约 6.5min/5s → 2 分钟整片约 2.5h。见 44 号文档第十节。
-# 回退：设 DUOCAST_EXPORT_SR=0 重启即回 ffmpeg 放大。DUOCAST_SEEDVR2_PYTHON 须指向含 torch/sageattention 的引擎 venv。
-if (-not $env:DUOCAST_EXPORT_SR) { $env:DUOCAST_EXPORT_SR = '1' }
+# 导出 AI 超分（SeedVR2-3B FP8）：默认关闭——本机约 2.5h/2分钟片，渲染页"AI 超分"选项可按次开启，
+# 也可设 DUOCAST_EXPORT_SR=1 全局默认开。实测画质见 44 号文档第十节。
+# DUOCAST_SEEDVR2_PYTHON 须指向含 torch/sageattention 的引擎 venv（开启超分时使用）。
 if (-not $env:DUOCAST_SEEDVR2_PYTHON) { $env:DUOCAST_SEEDVR2_PYTHON = 'D:\PPT_Studio_Assets\InfiniteTalk_TTS\InfiniteTalk_Runtime\venv\Scripts\python.exe' }
 $env:DUOCAST_VIDEO_INPUT = Join-Path $engineHome 'input'
 $env:DUOCAST_TTS_PROVIDER = 'comfyui'

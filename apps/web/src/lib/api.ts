@@ -635,6 +635,7 @@ export const useImportOutput = () => {
 
 export interface RenderGenInput {
   fastQuality?: 'original' | 'clear' | 'crisp';
+  exportSr?: boolean;
   generationProfile?: 'accepted' | 'matched' | 'reference' | 'listener' | 'dialogue';
   listeningSeed?: number;
   motionReferenceArtifactId?: string;
@@ -669,6 +670,7 @@ export const useRenderGenerate = () => {
         redoFromSec: input.redoFromSec,
         candidate: input.candidate,
         fastQuality: input.fastQuality,
+        exportSr: input.exportSr,
         fps: input.fps,
       }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['jobs'] }),

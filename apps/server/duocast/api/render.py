@@ -68,6 +68,7 @@ async def generate(project_id: str, payload: dict, request: Request) -> dict:
         "fps": payload.get("fps", 30),
         "fastQuality": payload.get("fastQuality", "original"),
         "faceRestore": payload.get("faceRestore"),
+        "exportSr": payload.get("exportSr"),
         "projectId": project_id,
     }
     if project.motion_pack is not None and project.generation_mode == 'fast':

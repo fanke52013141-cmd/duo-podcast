@@ -311,13 +311,13 @@ class ComfyUIVideoProvider:
         else:
             await self._command("ffmpeg", "-v", "error", "-y", "-ss", start-motion_start,
                 "-i", raw_base, "-t", end-start, "-an", "-c:v", "libx264", "-crf", 19, base)
-        # AI 超分（SeedVR2，默认启用，DUOCAST_EXPORT_SR=0 关闭）：导出分辨率高于原生时替代 ffmpeg 放大。
-        # 先按原生分辨率合成，再超分到导出分辨率；关闭时行为与原先完全一致。
+        # AI 超分（SeedVR2，默认关）：渲染页 exportSr 选项优先，其次 DUOCAST_EXPORT_SR 环境变量。
+        # 导出分辨率高于原生时替代 ffmpeg 放大；先按原生分辨率合成，再超分到导出分辨率。
         from ..services import video_sr
         native_probe = json.loads(await self._command("ffprobe", "-v", "error", "-select_streams", "v:0",
             "-show_entries", "stream=width,height", "-of", "json", str(base)))
         native_w, native_h = native_probe["streams"][0]["width"], native_probe["streams"][0]["height"]
-        sr_active = video_sr.sr_enabled() and video_sr.needs_upscale(native_w, native_h, width, height)
+        sr_active = video_sr.sr_enabled(req.get("exportSr")) and video_sr.needs_upscale(native_w, native_h, width, height)
         edit_w, edit_h = (native_w, native_h) if sr_active else (width, height)
         # Cut among the genuine moving two-shot and speaker close-ups.
         edited = []

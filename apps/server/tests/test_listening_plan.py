@@ -103,7 +103,7 @@ def test_multiple_segments_render_and_repeat_without_model_sampling(tmp_path, mo
     import wave
     from duocast.storage.artifacts import ArtifactStore
     from duocast.adapters.comfyui_video import ComfyUIVideoProvider
-    # 导出超分默认启用（SeedVR2，外部 GPU 依赖）；本测试只验合成/导出，显式关闭保持封闭。
+    # 导出超分（SeedVR2，外部 GPU 依赖）默认关；显式关闭防环境变量开启，保持测试封闭。
     monkeypatch.setenv("DUOCAST_EXPORT_SR", "0")
     if not shutil.which("ffmpeg"): pytest.skip("ffmpeg unavailable")
     store=ArtifactStore(tmp_path/"artifacts")

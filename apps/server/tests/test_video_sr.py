@@ -1,8 +1,9 @@
 """AI 视频超分（video_sr / SeedVR2）CPU 回归。
 
-2026-11-13 起 SeedVR2 为正式方案（默认启用，Real-ESRGAN 路径已移除）：
-验证开关解析（默认开/显式关）、依赖定位、命令构造纯函数、超分判定、
-缺失依赖明确报错、音轨回贴不二次编码。真实画质/耗时留 GPU 按 44 号文档第十节实测。
+SeedVR2 为唯一超分引擎（Real-ESRGAN 已移除）；默认关闭，渲染页 exportSr 选项按次开启，
+DUOCAST_EXPORT_SR=1 可全局默认开。验证开关解析（默认关/请求级覆盖/环境变量）、依赖定位、
+命令构造纯函数、超分判定、缺失依赖明确报错、音轨回贴不二次编码。
+真实画质/耗时留 GPU 按 44 号文档第十节实测。
 """
 from __future__ import annotations
 
@@ -14,23 +15,31 @@ import pytest
 from duocast.services import video_sr
 
 
-# ---------- 开关：默认开，显式关 ----------
+# ---------- 开关：默认关，请求级覆盖优先，其次环境变量 ----------
 
-def test_sr_enabled_by_default(monkeypatch):
+def test_sr_disabled_by_default(monkeypatch):
     monkeypatch.delenv("DUOCAST_EXPORT_SR", raising=False)
-    assert video_sr.sr_enabled() is True
+    assert video_sr.sr_enabled() is False
 
 
-@pytest.mark.parametrize("val", ["1", "true", "on", "TRUE", "On", ""])
-def test_sr_enabled_values(monkeypatch, val):
+@pytest.mark.parametrize("val", ["1", "true", "on", "TRUE", "On"])
+def test_sr_env_enabled_values(monkeypatch, val):
     monkeypatch.setenv("DUOCAST_EXPORT_SR", val)
     assert video_sr.sr_enabled() is True
 
 
-@pytest.mark.parametrize("val", ["0", "false", "off", "no", "OFF", "False"])
-def test_sr_disabled_values(monkeypatch, val):
+@pytest.mark.parametrize("val", ["0", "false", "off", "no", "OFF", ""])
+def test_sr_env_disabled_values(monkeypatch, val):
     monkeypatch.setenv("DUOCAST_EXPORT_SR", val)
     assert video_sr.sr_enabled() is False
+
+
+def test_sr_request_override_wins(monkeypatch):
+    monkeypatch.setenv("DUOCAST_EXPORT_SR", "0")
+    assert video_sr.sr_enabled(True) is True
+    monkeypatch.setenv("DUOCAST_EXPORT_SR", "1")
+    assert video_sr.sr_enabled(False) is False
+    assert video_sr.sr_enabled(None) is True  # 未传则回退环境变量
 
 
 # ---------- 超分判定纯函数 ----------

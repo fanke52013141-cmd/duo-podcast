@@ -1,13 +1,14 @@
-"""AI 视频超分（SeedVR2-3B FP8）——标准模式导出增强，默认启用。
+"""AI 视频超分（SeedVR2-3B FP8）——标准模式导出增强，默认关闭、渲染页可选开启。
 
 背景：标准模式原生生成 480p，导出 720p/1080p 若用 ffmpeg lanczos 放大只拉伸不增细节。
 本模块用 SeedVR2 一步扩散超分（numz/ComfyUI-SeedVR2_VideoUpscaler 独立 CLI），
 单帧质感与时序稳定性实测优于 Real-ESRGAN（无磨皮塑料感、无过锐白边、无颗粒沸腾，
 见 44 号文档第十节）。细节为模型重建而非真实恢复——观看净提升，非 forensic 级还原。
 
-开关（默认开；2026-11-13 起 SeedVR2 为正式方案，Real-ESRGAN 路径已移除）：
-  DUOCAST_EXPORT_SR=0            关闭导出超分，回退 ffmpeg 放大
-  DUOCAST_SEEDVR2_PYTHON=<path>  必填，含 torch/sageattention 的解释器（引擎 venv）
+开关（默认关；本机超分约 2.5h/2分钟片，用户可选外部工具超分，故不默认启用）：
+  渲染请求 exportSr=true/false   单次渲染级开关（渲染页"AI 超分"选项），优先于环境变量
+  DUOCAST_EXPORT_SR=1            环境变量级默认开启（未传 exportSr 时生效）
+  DUOCAST_SEEDVR2_PYTHON=<path>  启用时必填，含 torch/sageattention 的解释器（引擎 venv）
   DUOCAST_SEEDVR2_CLI=<path>     可选，默认 tools/seedvr2/inference_cli.py
   DUOCAST_SEEDVR2_MODEL_DIR=<path> 可选，默认 tools/seedvr2_models/
   DUOCAST_SEEDVR2_ATTENTION      可选，默认 sageattn_2（不可用时 CLI 自动回退 sdpa）
@@ -25,10 +26,12 @@ from pathlib import Path
 _REPO_ROOT = Path(__file__).resolve().parents[4]
 
 
-def sr_enabled() -> bool:
-    """默认启用；显式设 0/false/off/no 关闭（回退 ffmpeg 放大）。"""
-    val = os.environ.get("DUOCAST_EXPORT_SR", "1").strip().lower() or "1"
-    return val not in {"0", "false", "off", "no"}
+def sr_enabled(override: bool | None = None) -> bool:
+    """默认关闭；请求级 override（渲染页选项）优先，其次环境变量 DUOCAST_EXPORT_SR。"""
+    if override is not None:
+        return bool(override)
+    val = os.environ.get("DUOCAST_EXPORT_SR", "0").strip().lower() or "0"
+    return val in {"1", "true", "on"}
 
 
 def needs_upscale(src_w: int, src_h: int, target_w: int, target_h: int) -> bool:

@@ -102,6 +102,7 @@ export function RenderPage({ projectId }: { projectId: string }) {
   const [resolutionId, setResolutionId] = useState('480p');
   const [fps, setFps] = useState(25);
   const [fastQuality, setFastQuality] = useState<'original' | 'clear' | 'crisp'>('original');
+  const [exportSr, setExportSr] = useState(false);
   useEffect(()=>{
     if (proj?.renderSpec) {
       setResolutionId(RESOLUTION_OPTIONS.find(r=>r.value===proj.renderSpec?.resolution)?.id??'480p');
@@ -153,6 +154,7 @@ export function RenderPage({ projectId }: { projectId: string }) {
       performanceMode: proj.performanceMode ?? 'legacy',
       generationProfile: 'accepted',
       fastQuality: isFast ? fastQuality : undefined,
+      exportSr: isFast ? undefined : exportSr,
       candidate: true,
       reuseMotionArtifactId: !isOverShoulder && standardSource ? proj.outputManifest?.artifactIds[0] : undefined,
       redoFromSec: localRedo ? redoFromSec : undefined,
@@ -239,6 +241,14 @@ export function RenderPage({ projectId }: { projectId: string }) {
               </select>
             </div>}
             {isFast && <p className="wu-caption" title="动作素材的原生分辨率决定细节上限，特写放大会损失细节。增强会增大文件，较强锐化可能产生边缘光晕；不会恢复原本缺失的细节。">放大损失细节，增强增大文件。</p>}
+            {!isFast && <div className="hf-fld">
+              <label htmlFor="export-sr">AI 超分</label>
+              <select id="export-sr" className="wu-input" aria-label="AI 超分" value={exportSr ? 'on' : 'off'} onChange={e => setExportSr(e.target.value === 'on')}>
+                <option value="off">关闭 · 普通放大（默认，可导出后用外部工具超分）</option>
+                <option value="on">开启 · SeedVR2 本机超分（画质更好，约 2.5 小时/2 分钟片）</option>
+              </select>
+            </div>}
+            {!isFast && exportSr && <p className="wu-caption">仅导出分辨率高于 480p 时生效；本机超分较慢，赶时间建议关闭后拿外部工具处理。</p>}
             <div className="hf-fld">
               <label>编码</label>
               <input className="wu-input" aria-label="编码" value={`${CODEC} · 当前固定编码`} readOnly />
