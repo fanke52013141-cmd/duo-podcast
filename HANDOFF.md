@@ -45,6 +45,13 @@
 - **长片背景退化：发现→修复→复测闭环**：2 分钟整期（chain 修复前）曾背景逐段累积崩坏+身份漂移（Laplacian 首尾 +186%、色度碎点 47.8→206.5、色偏 22.6/255），根因是 47 号"上一段末帧当参考图"参考帧链接误差累积，与加速无关。**47 号修复（`4fa1ecd`，`DUOCAST_ANCHOR_MODE=clean` 每段重锚定干净底图）入库后已用 EP9931 clean 重跑复测（J89F205F5C7，98.7min）：quality_harness PASS（背景偏离趋势比 1.00）、Laplacian 首尾 +5.3%、色偏 2.9/255、身份锁定、口型帧级对齐——加速+背景修复叠加后长片质量达标。** 注意 `DUOCAST_ANCHOR_MODE` 代码默认 chain，须显式设 clean（start.ps1 已默认设 clean）；已纳入缓存指纹。本次加速 A/B 未改参考帧逻辑（守住与 47 号任务边界）。
 - **验证**：后端 **1120 passed / 20 skipped**；前端 34 项 + tsc + 构建全绿。
 
+## 2026-11-13 批 · 社区对标升级：SageAttention 2.2 + SeedVR2 超分（44号第十节）
+
+- **社区调研结论**：InfiniteTalk 仍是开源长片/双人首选；AptAvatar（淘天 2 步 720p，论文 60×）/SoulX-FlashTalk/LiveAvatar 纸面更强但被显存墙挡住（80GB 起步或无消费级验证），列为观察项。本轮落地两个 16GB 可跑的确定收益项。
+- **SageAttention 2.1.1→2.2.0.post3 已采纳**：woct0rdho wheel（cu128torch2.8.0，SHA256 校验），装引擎 venv，2.1.1 备份 `InfiniteTalk_Runtime\sageattention_backup_2.1.1\`。EP9930 同种子 A/B：**23.5min vs 24.5min（快 4%）**，显存 +0.5GB，质量等价或更好（t=20 的 2.1.1 马赛克伪影在 2.2 消失）。**运维坑：缓存指纹不含 sage 包版本，升级包后须手动作废对应 video_motion 缓存目录再重渲染**。
+- **SeedVR2-3B FP8 导出超分（可选引擎）**：`DUOCAST_EXPORT_SR=1` + `DUOCAST_EXPORT_SR_ENGINE=seedvr2` + `DUOCAST_SEEDVR2_PYTHON=<引擎venv python>`；默认引擎仍 realesrgan 零变化。三方 A/B（同 5s 片段）：女脸 Laplacian 235 vs Real-ESRGAN 166，视觉核验皮肤毛孔/发丝/齿缝自然、无磨皮塑料感、无过锐白边、时序最稳；**代价 6.5min/5s → 2 分钟整片约 2.5h，定位精品定稿档**。16GB 必须 VAE 分块+DiT/VAE 互卸载（命令已内置）。依赖在 `tools/seedvr2/` + `tools/seedvr2_models/`（gitignore）。
+- **代码落点**：`services/video_sr.py` 双引擎（sr_engine/find_seedvr2/seedvr2_command 纯函数 + _super_resolve_seedvr2）；`tests/test_video_sr.py` 39 项。**验证：后端全量 1159 passed / 20 skipped；模块级真实端到端 PASS（397s，1080p+音轨）**。详见 [44 号文档第十节](44-标准模式加速调优交接.md)。
+
 ## 已实现能力
 
 五阶段制作、工程版本存储、任务队列、确认点、SSE、真实提供方适配、快速模式、交付检查与备份维护均已有代码。九月“全部提供方都是mock”的历史描述不代表当前实现。
