@@ -12,6 +12,7 @@ import {
 } from '../lib/api';
 import { SPEAKERS, type Job, type ScriptRevision, type VisualVariant } from '../lib/types';
 import { Alert, Badge, Button, Choice, Icon } from '../components/wu';
+import { InfoTip } from '../components/InfoTip';
 import { AppShell, FootBar, StageHead, TimelineBar } from '../components/AppShell';
 import { formatTimecode } from '../lib/format';
 import { useError } from '../lib/useError';
@@ -349,7 +350,7 @@ export function VisualPage({ projectId }: { projectId: string }) {
                   }}
                   />
                 </div>
-                <p className="wu-caption" style={{ marginTop: 8 }}>候选底图需人工检查身份与遮挡。</p>
+                <p className="wu-caption" style={{ marginTop: 8 }}>候选底图 <InfoTip text="候选底图需人工检查身份与遮挡。" /></p>
                 <details className="hf-adv" style={{ marginTop: 8 }}>
                   <summary>导入图片 + 区域 JSON（外部工具产物）</summary>
                   <div className="hf-adv-body" style={{ display: 'grid', gap: 8 }}>
@@ -425,8 +426,8 @@ export function VisualPage({ projectId }: { projectId: string }) {
             )}
             <p className="wu-caption" style={{ lineHeight: 1.6 }}>
               {visualMode === 'twoShot'
-                ? <>修改构图后需重新生成人物区域与样片。</>
-                : <>更换机位素材会使对应视频片段失效。</>}
+                ? <>构图变更须知 <InfoTip text="修改构图后需重新生成人物区域与样片。" /></>
+                : <>机位变更须知 <InfoTip text="更换机位素材会使对应视频片段失效。" /></>}
             </p>
           </div>
 
@@ -516,7 +517,7 @@ export function VisualPage({ projectId }: { projectId: string }) {
         {hasMotion&&<p>工程使用固定动作包 {proj?.motionPack?.version}，无需生成旧主图变体。完成配音后直接生成下方样片。</p>}
         {proj && <RenderSettings project={proj}/>}
         {error && <Alert tone="danger" onClose={dismissError}>{error}</Alert>}
-        {isFast && <Alert tone="info">快速模式使用已验证的双人演播室模板，可调整对白、配音和镜头裁切。{proj?.motionPack ? '更换人物/底图会派生新动作包，需重新准备并人工采用后再渲染。' : '更换人物或场景需先绑定动作包。'}</Alert>}
+        {isFast && <p className="wu-caption">快速模式 · 双人演播室模板 <InfoTip text={`快速模式使用已验证的双人演播室模板，可调整对白、配音和镜头裁切。${proj?.motionPack ? '更换人物/底图会派生新动作包，需重新准备并人工采用后再渲染。' : '更换人物或场景需先绑定动作包。'}`} /></p>}
         {otsNotice && <Alert tone="info" onClose={() => setOtsNotice(null)}>{otsNotice}</Alert>}
         {!voiceApproved && (
           <Alert tone="warning">

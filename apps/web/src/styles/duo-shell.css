@@ -530,3 +530,78 @@ input:focus-visible,textarea:focus-visible,select:focus-visible,[tabindex]:focus
 /* ---- 渲染页摘要 KV 微精修（值更醒目，键更轻） ---- */
 .hf-kv { border:1px solid var(--wu-semantic-border); }
 .hf-kv .v { font-size:var(--wu-global-body); }
+
+/* ============================================================================
+   全页面审计修复层（2026-11-14）
+   依据：10 页截图逐页视觉审计（间距/颜色/遮挡/下拉框/冗余说明）。
+   原则：只改展示与节奏，不改控件语义与禁用条件（45号 §九红线）。
+   ========================================================================== */
+
+/* ---- ⓘ 悬浮说明气泡 ---- */
+.hf-infotip { position:relative; display:inline-flex; align-items:center; justify-content:center; width:16px; height:16px; border-radius:50%; border:1px solid currentColor; color:var(--wu-semantic-caption); font-size:10px; font-style:normal; line-height:1; cursor:help; flex:none; vertical-align:middle; user-select:none; }
+.hf-infotip:hover,.hf-infotip:focus-visible { color:var(--wu-semantic-info); border-color:var(--wu-semantic-info); }
+.hf-infotip::after { content:attr(data-tip); position:absolute; left:50%; bottom:calc(100% + 8px); transform:translateX(-50%); width:max-content; max-width:320px; white-space:normal; text-align:left; background:var(--wu-global-dark); color:var(--wu-global-white); font-size:var(--wu-global-caption-size); font-weight:400; line-height:1.6; padding:8px 10px; border-radius:var(--wu-global-radius-sm); box-shadow:var(--wu-global-shadow); opacity:0; visibility:hidden; transition:opacity var(--wu-global-duration) var(--wu-global-ease); z-index:60; pointer-events:none; }
+.hf-infotip:hover::after,.hf-infotip:focus-visible::after { opacity:1; visibility:visible; }
+/* 靠右边缘时气泡改向左展开，避免溢出视口 */
+.hf-inspector .hf-infotip::after,.hf-fld .hf-infotip::after { left:auto; right:-8px; transform:none; }
+
+/* ---- 下拉框统一：自定义箭头 + 一致高度/边框/圆角（覆盖原生样式） ---- */
+.wu select,.wu-input:is(select),.motion-library select,.hf-stage-head select,.hf-toolbar select { appearance:none; -webkit-appearance:none; background-image:url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5 6 6.5 11 1.5' fill='none' stroke='%235F6670' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"); background-repeat:no-repeat; background-position:right 10px center; background-size:12px 8px; padding-right:30px; min-height:var(--wu-global-control-md); height:var(--wu-global-control-md); border:1px solid var(--wu-semantic-control-border); border-radius:var(--wu-component-field-radius); background-color:var(--wu-semantic-raised); color:var(--wu-semantic-text); font:inherit; font-size:var(--wu-global-note); cursor:pointer; }
+.wu select:hover,.motion-library select:hover { border-color:var(--wu-semantic-secondary); }
+.wu select:focus,.motion-library select:focus { border-color:var(--wu-semantic-focus); outline:none; }
+.wu select:disabled,.motion-library select:disabled { background-color:var(--wu-semantic-muted); cursor:not-allowed; opacity:.65; }
+/* 工具栏内联下拉与按钮同高对齐 */
+.hf-stage-head select,.hf-toolbar select { width:auto; }
+
+/* ---- 输入框与下拉框同高（同列底部对齐） ---- */
+.wu input.wu-input:not([type=checkbox]):not([type=radio]):not([type=file]):not([type=range]),.motion-library input:not([type=file]):not([type=checkbox]):not([type=radio]) { height:var(--wu-global-control-md); }
+.motion-library textarea { min-height:72px; max-height:240px; }
+
+/* ---- 文件选择按钮全局美化（原生灰按钮 → 设计语言） ---- */
+.wu input[type="file"] { font-size:var(--wu-global-caption-size); color:var(--wu-semantic-secondary); }
+.wu input[type="file"]::file-selector-button { border:1px solid var(--wu-semantic-control-border); background:var(--wu-semantic-raised); color:var(--wu-semantic-text); border-radius:var(--wu-global-radius-sm); padding:5px 12px; margin-right:10px; cursor:pointer; font:inherit; font-size:var(--wu-global-caption-size); font-weight:600; transition:background var(--wu-global-duration) var(--wu-global-ease),border-color var(--wu-global-duration) var(--wu-global-ease); }
+.wu input[type="file"]::file-selector-button:hover { background:var(--wu-semantic-muted); border-color:var(--wu-semantic-secondary); }
+
+/* ---- 提示条堆叠节奏（消除"色块墙"：连续 alert 统一 10px 间距） ---- */
+.wu-alert + .wu-alert { margin-top:10px; }
+.hf-body > .wu-alert { margin-bottom:10px; }
+.hf-body > .wu-alert + section,.hf-body > .wu-alert + .hf-card { margin-top:14px; }
+
+/* ---- 摘要 KV 等高对齐 + 长值换行不撑破 ---- */
+.hf-summary-grid { align-items:stretch; }
+.hf-kv { display:flex; flex-direction:column; }
+.hf-kv .v { overflow-wrap:anywhere; }
+
+/* ---- 状态徽章对比度强化（警告态用足语义色） ---- */
+.wu-badge[data-tone="warning"] { color:var(--wu-semantic-warning); font-weight:600; }
+.wu-badge[data-tone="muted"] { color:var(--wu-semantic-secondary); }
+
+/* ---- 动作资产页表单节奏：标签贴近所属控件，组间留白统一 ---- */
+.motion-library label { margin:12px 0 0; }
+.motion-library label > input,.motion-library label > select,.motion-library label > textarea { margin-top:4px; }
+.motion-library .wu-row { margin-top:12px; }
+.motion-library fieldset > .wu-btn:last-child,.motion-library section > .wu-btn:last-child { margin-top:14px; }
+
+/* ---- 任务详情行距节奏 ---- */
+.hf-ph-row { padding:7px 0; }
+.hf-ins-sec h4 { margin-bottom:10px; }
+
+/* ---- 卡片标题截断安全边距 ---- */
+.hf-pcard-h h3 { padding-right:4px; }
+
+/* ---- 动作绑定卡（渲染页 ProjectMotionBinding）：裸 fieldset 归位为卡片内表单 ---- */
+.hf-motion-bind { margin:0 0 14px; }
+.hf-motion-bind fieldset { border:0; padding:0; margin:0; min-width:0; }
+.hf-motion-bind legend { font-weight:600; font-size:var(--wu-global-body); padding:0 0 8px; display:flex; align-items:center; gap:7px; }
+.hf-motion-bind legend::before { content:""; width:3px; height:12px; border-radius:2px; background:var(--wu-semantic-brand); flex:none; }
+.hf-motion-bind label { display:block; margin:10px 0 0; font-size:var(--wu-global-note); color:var(--wu-semantic-secondary); }
+.hf-motion-bind label > select { display:block; width:100%; margin-top:4px; }
+.hf-motion-bind > .wu-btn { margin-top:14px; }
+.hf-motion-bind p { margin:8px 0 0; font-size:var(--wu-global-note); color:var(--wu-semantic-secondary); }
+.hf-motion-bind details { margin:8px 0 0; }
+.hf-motion-bind summary { cursor:pointer; font-size:var(--wu-global-note); font-weight:600; }
+.hf-motion-bind ul { margin:6px 0; padding-left:20px; font-size:var(--wu-global-caption-size); color:var(--wu-semantic-secondary); line-height:1.7; }
+
+/* ---- 服务卡片：状态徽章与按钮垂直居中对齐 ---- */
+.hf-block > .wu-badge { vertical-align:middle; }
+.hf-block > .wu-badge + .wu-btn { margin-left:8px; vertical-align:middle; }

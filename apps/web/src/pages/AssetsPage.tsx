@@ -13,6 +13,7 @@ import {
 } from '../lib/api';
 import type { ArtifactEntry, Character, Project, VoiceBinding } from '../lib/types';
 import { Badge, Button, Icon, Input, Modal, type IconName, type Tone } from '../components/wu';
+import { InfoTip } from '../components/InfoTip';
 import { AppShell } from '../components/AppShell';
 import { useProjectStore } from '../stores';
 
@@ -161,7 +162,7 @@ export function AssetsPage({ project }: { project: Project | null }) {
                     onChange={(e) => { void handlePickAudio(selectedCharacter.id, e.target.files?.[0]); e.target.value = ''; }}
                   />
                 </div>
-                <p className="wu-caption">上传后再次绑定本期以采用新声音。</p>
+                <p className="wu-caption">新声音采用方式 <InfoTip text="上传后再次绑定本期以采用新声音。" /></p>
                 {newError && <p role="status" className="wu-caption">{newError}</p>}
               </>
             ) : selectedArtifact ? (
@@ -181,7 +182,7 @@ export function AssetsPage({ project }: { project: Project | null }) {
 
           {selectedCharacter && (
             <div className="hf-ins-sec">
-              <h4>语音绑定 <span className="wu-caption" style={{ fontWeight: 400 }}>独立并存，不保证声音完全相同</span></h4>
+              <h4>语音绑定 <InfoTip text="各引擎绑定独立并存，不保证声音完全相同。切换引擎只重做受影响角色的音频。" /></h4>
               <div className="hf-bindrow">
                 <b>本地参考音</b>
                 <span>{selectedBindings[0]?.localRefAudio ? '已绑定 · 本地引用' : '未绑定'}</span>
@@ -190,7 +191,7 @@ export function AssetsPage({ project }: { project: Project | null }) {
                 <b>MiniMax</b>
                 <span className="hf-mono">{selectedBindings[0]?.minimaxVoiceId ?? 'voice_id 未配置'}</span>
               </div>
-              <p className="wu-caption" style={{ marginTop: 8 }}>切换引擎只重做受影响角色的音频。</p>
+              <p className="wu-caption">切换引擎 <InfoTip text="切换引擎只重做受影响角色的音频。" /></p>
             </div>
           )}
 
@@ -217,10 +218,7 @@ export function AssetsPage({ project }: { project: Project | null }) {
           </div>
 
           <div className="hf-ins-sec">
-            <h4>工程引用</h4>
-            <p className="wu-caption" style={{ lineHeight: 1.7 }}>
-              资产库更新不追溯改变历史工程；双人素材优先清晰正脸、少遮挡。
-            </p>
+            <h4>工程引用 <InfoTip text="资产库更新不追溯改变历史工程；双人素材优先清晰正脸、少遮挡。" /></h4>
           </div>
         </aside>
       }

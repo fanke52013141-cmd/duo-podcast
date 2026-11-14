@@ -10,6 +10,7 @@ import {
 } from '../lib/api';
 import type { AudioTimeline, Job, Project, ScriptRevision, SynthesisUnit, Turn, VoiceBinding } from '../lib/types';
 import { Alert, Badge, Button, Choice, Icon } from '../components/wu';
+import { InfoTip } from '../components/InfoTip';
 import { AppShell, FootBar, StageHead, TimelineBar } from '../components/AppShell';
 import { formatSamples } from '../lib/format';
 import { useError } from '../lib/useError';
@@ -394,7 +395,7 @@ export function VoicePage({ projectId }: { projectId: string }) {
               <span className="hf-mono" style={{ color: 'var(--wu-semantic-text)' }}>{gapValue}ms</span>
             </div>
             <p className="wu-caption" style={{ lineHeight: 1.6 }}>
-              应用后复用已采用声音重建时间轴，需重新确认。
+              间隔应用须知 <InfoTip text="应用后复用已采用声音重建时间轴，需重新确认。" />
             </p>
             <div style={{ display: 'flex', gap: 8 }}>
               {/* 分体按钮：下拉「采用建议值」只写入滑杆供预览（原「建议对话间隔」行为），

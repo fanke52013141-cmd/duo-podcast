@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useMachine, useSaveMachine, useTestProvider } from '../lib/api';
 import { Alert, Badge, Button, Field, Input } from '../components/wu';
+import { InfoTip } from '../components/InfoTip';
 import { AppShell } from '../components/AppShell';
 import { useProjectStore } from '../stores';
 import { sendJson } from '../lib/api';
@@ -25,9 +26,8 @@ export function ServicesPage() {
   const change=(key:string,value:string|number)=>{setValidation(null);setConfig(s=>({...s,[key]:value}));};
   const validate=async()=>{setValidating(true);try{const result=await sendJson<{valid:boolean;errors:string[];warnings:string[]}>('/machine/validate-config','POST',{runtimeConfig:config});setValidation(result);return result.valid;}catch(e){setMessage((e as Error).message);return false;}finally{setValidating(false);}};
   return <AppShell project={null} onNavigate={setView} footer={null}>
-    <div className="hf-h"><h2>服务设置</h2><Button variant="secondary" onClick={()=>setView('home')}>返回工程列表</Button></div>
+    <div className="hf-h"><h2>服务设置 <InfoTip text="保存后重启生效；检测使用当前已生效配置，不产生付费内容。" /></h2><Button variant="secondary" onClick={()=>setView('home')}>返回工程列表</Button></div>
     <div className="hf-body2">
-      <Alert tone="info">保存后重启生效；检测使用当前已生效配置，不产生付费内容。</Alert>
       {message && <Alert tone={save.isError?'danger':'info'}>{message}</Alert>}
       {machine.error && <Alert tone="danger">{machine.error.message}</Alert>}
       <div className="hf-s7">
@@ -37,7 +37,7 @@ export function ServicesPage() {
             <Field label="提供方"><select className="wu-input" aria-label={c.label+'提供方'} value={config[c.key+'_provider']} onChange={e=>change(c.key+'_provider',e.target.value)}><option value="mock">演示 · 不产真实媒体</option><option value={c.real}>{c.real} · 真实服务</option></select></Field>
             {(c.key==='text'||c.key==='image') && <Field label="服务根地址"><Input aria-label={c.label+'服务根地址'} value={config[c.key+'_base_url']} onChange={e=>change(c.key+'_base_url',e.target.value)}/></Field>}
             {c.key==='text' && <Field label="模型"><Input aria-label="文本模型" value={config.text_model} onChange={e=>change('text_model',e.target.value)}/></Field>}
-            {c.key==='image' && <p className="wu-caption" title="图片适配器使用 gpt-image-2-vip 文生图；人物参考编辑尚未开放，可上传已审看的双人底图。">文生图可用；人物参考编辑未开放，可上传双人底图。</p>}
+            {c.key==='image' && <p className="wu-caption">图片能力 <InfoTip text="图片适配器使用 gpt-image-2-vip 文生图；人物参考编辑尚未开放，可上传已审看的双人底图。" /></p>}
             {(c.key==='tts'||c.key==='video') && <Field label="引擎地址"><Input aria-label={c.label+'引擎地址'} value={config[c.key==='tts'?'comfyui_url':'video_url']} onChange={e=>change(c.key==='tts'?'comfyui_url':'video_url',e.target.value)}/></Field>}
             <Badge tone="muted">{machine.data?.capabilities[c.key==='text'?'textApi':c.key==='image'?'imageApi':c.key as 'tts'|'video']?.mode==='mock'?'演示可运行':'已装配 · 待检测及样片验证'}</Badge>
             <Button variant="secondary" busy={test.isPending} onClick={()=>test.mutate(c.key,{onSuccess:r=>setResults(s=>({...s,[c.key]:(r.simulated?'演示自检：':'')+(r.message??r.error??'检测完成')+(r.checkedAt?' · '+new Date(r.checkedAt).toLocaleTimeString(): '')})),onError:e=>setResults(s=>({...s,[c.key]:e.message}))})}>检测当前配置</Button>
@@ -45,9 +45,9 @@ export function ServicesPage() {
           </section>)}
           <section className="hf-block"><h3 className="hf-block-t">凭据与预算</h3>
             <Field label="凭据环境变量名称"><Input aria-label="凭据环境变量名称" value={config.credential_env} onChange={e=>change('credential_env',e.target.value)}/></Field>
-            <p className="wu-caption" title="仅保存变量名称，密钥在系统环境中配置；备份不包含密钥。">当前进程{machine.data?.activeConfig?.credentialPresent?'已读取凭据':'未读取凭据'}。</p>
+            <p className="wu-caption">当前进程{machine.data?.activeConfig?.credentialPresent?'已读取凭据':'未读取凭据'} <InfoTip text="仅保存变量名称，密钥在系统环境中配置；备份不包含密钥。" /></p>
             <Field label="每期预算提醒（元）"><Input type="number" min="0" aria-label="每期预算提醒" value={config.budget_yuan} onChange={e=>change('budget_yuan',Number(e.target.value))}/></Field>
-            <p className="wu-caption">预算仅记录，不做硬额度。</p>
+            <p className="wu-caption">预算仅记录 <InfoTip text="预算仅记录，不做硬额度。" /></p>
             {validation&&<Alert tone={validation.valid?'info':'danger'}>{validation.valid?'本机配置格式校验通过；未测试网络或推理。':'配置尚不能使用：'}<ul>{[...validation.errors,...validation.warnings].map(t=><li key={t}>{t}</li>)}</ul></Alert>}
             <Button variant="secondary" busy={validating} disabled={save.isPending} onClick={()=>void validate()}>保存前校验</Button>
             <Button busy={save.isPending||validating} onClick={async()=>{if(await validate())save.mutate({runtimeConfig:config},{onSuccess:()=>setMessage('配置已保存。请重启服务后检测新配置；当前任务继续使用冻结输入。'),onError:e=>setMessage(e.message)});}}>保存配置（重启生效）</Button>

@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { ApiError, sendJson, useJobs } from '../lib/api';
 import { AppShell } from '../components/AppShell';
 import { Button } from '../components/wu';
+import { InfoTip } from '../components/InfoTip';
 import { useProjectStore } from '../stores';
 import { registerNavigationGuard } from '../lib/navigation';
 import { MotionComparisonPlayer } from '../components/MotionComparisonPlayer';
@@ -49,7 +50,7 @@ export function MotionPacksPage(){
     const change=(patch:Partial<MotionCamera>)=>setDraft(d=>({...d,cameras:d.cameras.map((item,i)=>i===index?{...item,...patch}:item)}));
     return <fieldset key={c.id}><legend>机位 {c.id}<span className="hf-pill" data-tone={c.mode==='overShoulder'?'b':'info'}>{c.mode==='twoShot'?'双人同框':`过肩 · 主体${c.subjectSpeaker??'A'}`}</span>{c.masterImage?<span className="hf-pill" data-tone="ok">底图已传</span>:<span className="hf-pill" data-tone="warn">待传底图</span>}</legend><label>镜头<select value={c.mode} onChange={e=>change(e.target.value==='twoShot'?{mode:'twoShot',subjectSpeaker:null,foregroundSpeaker:null}:{mode:'overShoulder',subjectSpeaker:'A',foregroundSpeaker:'B'})}><option value="twoShot">双人同框</option><option value="overShoulder">过肩镜头</option></select></label>{c.mode==='overShoulder'&&<label>正面主体<select value={c.subjectSpeaker??'A'} onChange={e=>{const subject=e.target.value as 'A'|'B';change({subjectSpeaker:subject,foregroundSpeaker:subject==='A'?'B':'A'});}}><option>A</option><option>B</option></select>前景角色：{c.foregroundSpeaker}</label>}{imageInput('上传机位底图',c.masterImage,ref=>change({masterImage:ref}))}<Button disabled={draft.clips.some(item=>item.cameraId===c.id)} onClick={()=>setDraft(d=>({...d,cameras:d.cameras.filter(item=>item.id!==c.id)}))}>移除未使用机位</Button></fieldset>;
   };
-  return <AppShell project={null} onNavigate={setView}><div className="hf-body motion-library"><h2>动作资产</h2><p className="wu-caption" title="先绑定角色和机位，再上传动作片段。检查只提供证据；五官、物体结构和动作自然度需逐片人工审看。">先绑定角色与机位，再上传片段；检查只提供证据，需逐片人工审看。</p>
+  return <AppShell project={null} onNavigate={setView}><div className="hf-body motion-library"><h2>动作资产 <InfoTip text="先绑定角色和机位，再上传动作片段。检查只提供证据；五官、物体结构和动作自然度需逐片人工审看。" /></h2>
     <div className="wu-row"><label>资产包<select value={pack?.id??''} disabled={busy} onChange={e=>{const id=e.target.value;if(id&&(!dirty||window.confirm('丢弃未保存草稿并切换？')))void action(async()=>{accept(await loadMotionPack(id));setClipId('');setReason('');setCheckedRegions(null);});}}><option value="">新草稿</option>{packs.data?.map(p=><option key={p.id} value={p.id}>{p.name} · r{p.revision}</option>)}</select></label><Button disabled={busy} onClick={()=>{if(!dirty||window.confirm('丢弃未保存草稿并新建？')){setPack(null);setDraft(emptyMotionDraft());setClipId('');setReady(null);setReason('');}}}>新建资产包</Button><Button disabled={busy} onClick={()=>void packs.refetch()}>刷新列表</Button></div>
     <div className="wu-row">
       <Button disabled={busy} onClick={()=>{const url=URL.createObjectURL(new Blob([JSON.stringify({sourcePackId:pack?.id,sourceVersion:pack?.version,draft,clipId,boxes},null,2)],{type:'application/json'}));const link=document.createElement('a');link.href=url;link.download=`${pack?.id??'new'}-motion-draft.json`;link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}}>下载动作草稿副本</Button>

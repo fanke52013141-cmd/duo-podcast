@@ -11,6 +11,7 @@ import {
 } from '../lib/api';
 import { STAGE_META, type SourceKind } from '../lib/types';
 import { Alert, Badge, Button, Choice, Field, Icon, Input, SegControl, Tabs, Textarea } from '../components/wu';
+import { InfoTip } from '../components/InfoTip';
 import { AppShell, StageHead } from '../components/AppShell';
 import { useError } from '../lib/useError';
 import { useProjectStore } from '../stores';
@@ -354,7 +355,7 @@ export function CreateEpisodePage({ projectId }: { projectId: string }) {
               <Choice
                 checked={durationMode === 'auto'}
                 onChange={() => {if(!recoverable)setDurationMode('auto');}}
-                label={<span>根据内容，最多 5 分钟</span>}
+                label={<span>智能时长 <InfoTip text="根据内容自动决定时长，最多 5 分钟；超出不会自动截断尾句。" /></span>}
               />
               <div className="wu-row" style={{ gap: 8 }}>
                 <Choice checked={durationMode === 'approx'} onChange={() => {if(!recoverable)setDurationMode('approx');}} label="大约" />
@@ -372,7 +373,7 @@ export function CreateEpisodePage({ projectId }: { projectId: string }) {
             <div className="wu-row">
               <Choice checked={aspect === 'landscape'} onChange={() => handleAspect('landscape')} label="横屏 16:9" />
               {proj?.generationMode !== 'fast' && caps.data?.video.mode === 'mock' && <Choice checked={aspect === 'portrait'} onChange={() => handleAspect('portrait')} label="竖屏（仅演示）" />}
-              {caps.data?.video.mode === 'live' && <span className="wu-caption">当前真实引擎仅支持横屏</span>}
+              {caps.data?.video.mode === 'live' && <InfoTip text="当前真实引擎仅支持横屏；竖屏仅在演示模式可用。" />}
             </div>
           </Field>
           {aspect === 'portrait' && (

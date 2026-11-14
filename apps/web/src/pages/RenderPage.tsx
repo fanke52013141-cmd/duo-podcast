@@ -12,6 +12,7 @@ import {
 } from '../lib/api';
 import type { AudioTimeline, Job, Project, SynthesisUnit } from '../lib/types';
 import { Alert, Badge, Button, Icon } from '../components/wu';
+import { InfoTip } from '../components/InfoTip';
 import { AppShell, FootBar, StageHead, TimelineBar } from '../components/AppShell';
 import { formatTimecode } from '../lib/format';
 import { useError } from '../lib/useError';
@@ -233,14 +234,13 @@ export function RenderPage({ projectId }: { projectId: string }) {
               </select>
             </div>
             {isFast && <div className="hf-fld">
-              <label htmlFor="fast-quality">画面清晰度</label>
+              <label htmlFor="fast-quality">画面清晰度 <InfoTip text="动作素材的原生分辨率决定细节上限，特写放大会损失细节。增强会增大文件，较强锐化可能产生边缘光晕；不会恢复原本缺失的细节。" /></label>
               <select id="fast-quality" className="wu-input" value={fastQuality} onChange={e => {setFastQuality(e.target.value as 'original' | 'clear' | 'crisp');saveSpec({fastQuality:e.target.value as 'original' | 'clear' | 'crisp'});}}>
                 <option value="original">原始 · 不增强</option>
                 <option value="clear">清晰 · 轻度锐化与低压缩（推荐）</option>
                 <option value="crisp">更清晰 · 较强锐化与低压缩</option>
               </select>
             </div>}
-            {isFast && <p className="wu-caption" title="动作素材的原生分辨率决定细节上限，特写放大会损失细节。增强会增大文件，较强锐化可能产生边缘光晕；不会恢复原本缺失的细节。">放大损失细节，增强增大文件。</p>}
             {!isFast && <div className="hf-fld">
               <label htmlFor="export-sr">AI 超分</label>
               <select id="export-sr" className="wu-input" aria-label="AI 超分" value={exportSr ? 'on' : 'off'} onChange={e => setExportSr(e.target.value === 'on')}>
@@ -253,18 +253,14 @@ export function RenderPage({ projectId }: { projectId: string }) {
               <label>编码</label>
               <input className="wu-input" aria-label="编码" value={`${CODEC} · 当前固定编码`} readOnly />
             </div>
-            <p className="wu-caption">补帧 / 烧录字幕：当前引擎未开放</p>
+            <p className="wu-caption">补帧 / 烧录字幕 <InfoTip text="当前引擎未开放补帧与烧录字幕。" /></p>
           </div>
 
           <div className="hf-ins-sec">
-            <h4>后处理顺序</h4>
-            <p className="wu-caption" style={{ lineHeight: 1.8 }} title="导出失败只重跑相应后处理或编码，不重新生成全部口型视频。">
-              基础视频 → 镜头裁切 → 合并配音 → 编码 → 画面与声音校验
-            </p>
+            <h4>后处理顺序 <InfoTip text="基础视频 → 镜头裁切 → 合并配音 → 编码 → 画面与声音校验。导出失败只重跑相应后处理或编码，不重新生成全部口型视频。" /></h4>
           </div>
           {!isOverShoulder && proj?.cameraMode !== 'twoShot' && <div className="hf-ins-sec">
-            <h4>话轮机位</h4>
-            <p className="wu-caption">自动模式按整期对话编排；短接话合并到相邻镜头。</p>
+            <h4>话轮机位 <InfoTip text="自动模式按整期对话编排；短接话合并到相邻镜头。" /></h4>
             {proj?.scriptRevisions.find(r => r.id === timeline?.revisionId)?.turns.map(turn => <div className="hf-fld" key={turn.id}>
               <label>{turn.id} · {turn.speaker}</label>
               <select className="wu-input" aria-label={`${turn.id}机位`} value={proj.shotCameraOverrides?.[turn.id] ?? 'auto'} onChange={e => {
@@ -348,7 +344,7 @@ export function RenderPage({ projectId }: { projectId: string }) {
             已采用的成片 {outputVersion} 已过期：脚本、配音或画面在采用后发生了变化。
             <Button variant="secondary" size="sm" icon="refresh" disabled={!canRender} busy={rendering}
               onClick={() => handleRender()}>重新生成候选</Button>
-            <span className="wu-caption">旧成片仍可导出；交付当前版本前请重新生成并采用。</span>
+            <InfoTip text="旧成片仍可导出；交付当前版本前请重新生成并采用。" />
           </Alert>
         )}
         {error && <Alert tone="danger" onClose={dismissError}>{error}</Alert>}
@@ -432,7 +428,7 @@ export function RenderPage({ projectId }: { projectId: string }) {
         <div className="hf-s5">
           {/* 开始生成前确认（01 §7.1） */}
           <section className="hf-summary">
-            <div className="hf-summary-t">开始生成前确认 <span className="wu-caption">点击「{simulated ? '运行流程演示' : '生成候选成片'}」时冻结输入快照</span></div>
+            <div className="hf-summary-t">开始生成前确认 <InfoTip text={`点击「${simulated ? '运行流程演示' : '生成候选成片'}」时冻结输入快照。`} /></div>
             <div className="hf-summary-grid">
               <div className="hf-kv"><div className="k">{simulated ? '演示估算时长' : '实际时长'}</div><div className="v hf-mono">{timeline ? formatTimecode(totalSecs, { tenths: true }) : '—'}</div></div>
               <div className="hf-kv"><div className="k">画布</div><div className="v">{proj?.aspect === 'portrait' ? '竖屏 9:16' : '横屏 16:9'} · {resolution} 导出画布</div></div>

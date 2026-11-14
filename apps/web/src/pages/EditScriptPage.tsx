@@ -11,6 +11,7 @@ import {
 } from '../lib/api';
 import { type Job, type Project, type PronunciationEntry, type ScriptRevision, type Turn } from '../lib/types';
 import { Alert, Badge, Button, Choice, Empty, Icon, Input, Modal, Textarea } from '../components/wu';
+import { InfoTip } from '../components/InfoTip';
 import { AppShell, FootBar, StageHead } from '../components/AppShell';
 import { formatTimecode } from '../lib/format';
 import { useError } from '../lib/useError';
@@ -744,7 +745,7 @@ export function EditScriptPage({ projectId }: { projectId: string }) {
           </section>
           {scriptApproved && (
             <Alert tone="info">
-              已绑定脚本 {revision?.id}。编辑将创建新草稿，不覆盖已用版本。
+              已绑定脚本 {revision?.id} <InfoTip text="编辑将创建新草稿，不覆盖已用版本。" />
               <a className="hf-link" onClick={() => setView('voice')}>前往阶段③ 试听配音</a>
             </Alert>
           )}
