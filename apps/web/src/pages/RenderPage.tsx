@@ -248,7 +248,7 @@ export function RenderPage({ projectId }: { projectId: string }) {
                 <option value="on">开启 · SeedVR2 本机超分（画质更好，约 2.5 小时/2 分钟片）</option>
               </select>
             </div>}
-            {!isFast && exportSr && <p className="wu-caption">仅导出分辨率高于 480p 时生效；本机超分较慢，赶时间建议关闭后拿外部工具处理。</p>}
+            {!isFast && exportSr && <p className="hf-sr-hint">仅导出分辨率高于 480p 时生效；本机超分较慢（约 2.5 小时/2 分钟片），赶时间建议关闭后拿外部工具处理。</p>}
             <div className="hf-fld">
               <label>编码</label>
               <input className="wu-input" aria-label="编码" value={`${CODEC} · 当前固定编码`} readOnly />
@@ -368,20 +368,21 @@ export function RenderPage({ projectId }: { projectId: string }) {
           </Alert>
         )}
         {recentRender?.result?.simulated === false && recentRender.result.artifactIds?.[0] && (
-          <section>
-            <p>当前采用：{outputVersion}</p>
-            <video ref={baselineVideo} controls preload="metadata" style={{ width: '100%', maxHeight: 540 }}
+          <section className="hf-card">
+            <div className="hf-card-t">当前采用：{outputVersion}<span className="hf-pill" data-tone="ok">已采用</span></div>
+            <video ref={baselineVideo} className="hf-videoframe" controls preload="metadata"
               src={`/api/artifacts/${recentRender.result.artifactIds[0]}/file`} />
             <a className="wu-btn" data-variant="ghost" data-size="sm" href={`/api/artifacts/${recentRender.result.artifactIds[0]}/file`} download><Icon name="download" size={16} /><span className="wu-btn-label">下载完整视频</span></a>
           </section>
         )}
-        {candidate?.result?.artifactIds?.[0] && <section style={{ margin: '16px 0' }}>
-          <label htmlFor="candidate-version">比较候选</label>
+        {candidate?.result?.artifactIds?.[0] && <section className="hf-card">
+          <div className="hf-card-t">比较候选<span className="hf-pill" data-tone="warn">画面待人工验收</span></div>
+          <label htmlFor="candidate-version">选择候选版本</label>
           <select id="candidate-version" className="wu-input" value={candidate.id} onChange={e => setCandidateId(e.target.value)}>
             {candidates.map(j => <option key={j.id} value={j.id}>{j.id} · {candidateLabel(j)}</option>)}
           </select>
-          <p>待比较候选 · {candidateLabel(candidate)} · 画面待人工验收</p>
-          <video ref={candidateVideo} controls preload="metadata" style={{ width: '100%', maxHeight: 540 }} src={`/api/artifacts/${candidate.result.artifactIds[0]}/file`} />
+          <p>待比较候选 · {candidateLabel(candidate)}</p>
+          <video ref={candidateVideo} className="hf-videoframe" controls preload="metadata" src={`/api/artifacts/${candidate.result.artifactIds[0]}/file`} />
           <a className="wu-btn" data-variant="ghost" data-size="sm" href={`/api/artifacts/${candidate.result.artifactIds[0]}/file`} download={`candidate-${candidate.id}.mp4`}><Icon name="download" size={16} /><span className="wu-btn-label">下载候选视频</span></a>
           {candidateMeta?.generationStats?.wallSeconds != null && <p>快速模式：画面处理耗时 {candidateMeta.generationStats.wallSeconds.toFixed(1)} 秒</p>}
           {candidateMeta?.generationStats && candidateMeta.generationStats.wallSeconds == null && <p>实际处理：新生成 {candidateMeta.generationStats.generated} 段 · 合成 {candidateMeta.generationStats.composited ?? 0} 段 · 缓存 {candidateMeta.generationStats.cached} 段 · 保留 {candidateMeta.generationStats.retained} 段</p>}
@@ -413,8 +414,9 @@ export function RenderPage({ projectId }: { projectId: string }) {
             <Button disabled={adopt.isPending} onClick={() => adopt.mutate({ projectId, jobId: candidate.id }, { onError: e => setError((e as Error).message) })}>采用候选</Button>
           </div>
         </section>}
-        {!!versions.length && <section style={{ margin: '16px 0', display: 'flex', gap: 12, alignItems: 'center' }}>
-          <label htmlFor="output-version">采用版本</label>
+        {!!versions.length && <section className="hf-card" style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+          <div className="hf-card-t" style={{ marginBottom: 0 }}>采用版本</div>
+          <label htmlFor="output-version" className="wu-caption">当前版本</label>
           <select id="output-version" className="wu-input" value={outputVersion ?? ''} disabled={selectOutput.isPending} onChange={e => selectOutput.mutate({ projectId, version: e.target.value }, { onError: e => setError((e as Error).message) })}>
             {versions.map(v => <option key={v.version} value={v.version}>{v.version}</option>)}
           </select>

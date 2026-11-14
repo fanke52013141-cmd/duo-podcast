@@ -456,3 +456,77 @@ input:focus-visible,textarea:focus-visible,select:focus-visible,[tabindex]:focus
   .hf-fld { grid-template-columns:1fr; }
   .wu-dialog { max-width:calc(100vw - 24px); }
 }
+
+/* ============================================================================
+   Stitch V3 展示增强（2026-11-13）
+   来源：Stitch 设计稿 S4-visual（既有）+ S9-motionPacks（ccfb8c49…）+ S5-render 规格。
+   原则：纯展示层——只加类与视觉，不改任何控件、禁用条件与文案（45号 §九红线）。
+   全部取值来自 --wu-* 令牌与既有 --hf-speaker-b 例外。
+   ========================================================================== */
+
+/* ---- 状态胶囊（检查报告/候选/角色/机位状态统一语言） ---- */
+.hf-pill { display:inline-flex; align-items:center; gap:5px; padding:2px 10px; border-radius:var(--wu-global-pill); font-size:var(--wu-global-caption-size); font-weight:600; line-height:18px; white-space:nowrap; background:var(--wu-semantic-muted); color:var(--wu-semantic-secondary); }
+.hf-pill::before { content:""; width:6px; height:6px; border-radius:50%; background:currentColor; opacity:.85; flex:none; }
+.hf-pill[data-tone="ok"] { background:var(--wu-semantic-success-bg); color:var(--wu-semantic-success); }
+.hf-pill[data-tone="warn"] { background:var(--wu-semantic-warning-bg); color:var(--wu-semantic-warning); }
+.hf-pill[data-tone="bad"] { background:var(--wu-semantic-danger-bg); color:var(--wu-semantic-danger); }
+.hf-pill[data-tone="info"] { background:var(--wu-semantic-info-bg); color:var(--wu-semantic-info); }
+.hf-pill[data-tone="brand"] { background:color-mix(in srgb,var(--wu-semantic-brand) 14%,var(--wu-semantic-surface)); color:color-mix(in srgb,var(--wu-semantic-brand) 80%,var(--wu-global-ink)); }
+.hf-pill[data-tone="b"] { background:var(--hf-speaker-b-bg); color:var(--hf-speaker-b); }
+
+/* ---- 角色色点（A 橙 / B 紫红，与时间轨和区域框同色系） ---- */
+.hf-roledot { width:10px; height:10px; border-radius:50%; display:inline-block; flex:none; background:var(--wu-semantic-brand); }
+.hf-roledot[data-role="B"] { background:var(--hf-speaker-b); }
+
+/* ---- 指标卡（完整性检查/就绪状态的大数字展示） ---- */
+.hf-metrics { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:10px; margin:10px 0; }
+.hf-metric { display:flex; align-items:center; justify-content:space-between; gap:10px; background:var(--wu-semantic-muted); border:1px solid var(--wu-semantic-border); border-radius:var(--wu-global-radius-md); padding:12px 14px; }
+.hf-metric .k { font-size:var(--wu-global-caption-size); color:var(--wu-semantic-caption); }
+.hf-metric .v { font-size:18px; font-weight:700; color:var(--wu-semantic-text); margin-top:2px; }
+.hf-metric .ic { width:30px; height:30px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:15px; font-weight:700; flex:none; background:var(--wu-semantic-success-bg); color:var(--wu-semantic-success); }
+.hf-metric[data-tone="warn"] .ic { background:var(--wu-semantic-warning-bg); color:var(--wu-semantic-warning); }
+.hf-metric[data-tone="bad"] .ic { background:var(--wu-semantic-danger-bg); color:var(--wu-semantic-danger); }
+
+/* ---- 视频画面框（深色底 + 圆角 + 细边框，统一播放器观感） ---- */
+.hf-videoframe { width:100%; max-height:540px; background:var(--wu-global-dark); border-radius:var(--wu-global-radius-md); border:1px solid var(--wu-semantic-border); display:block; }
+
+/* ---- 卡片化区块（渲染页候选/采用区） ---- */
+.hf-card { background:var(--wu-semantic-surface); border:1px solid var(--wu-semantic-border); border-radius:var(--wu-global-radius-lg); padding:16px; margin:16px 0; box-shadow:0 1px 3px color-mix(in srgb,var(--wu-global-ink) 5%,transparent); }
+.hf-card-t { display:flex; align-items:center; gap:8px; flex-wrap:wrap; font-size:var(--wu-global-body); font-weight:600; color:var(--wu-semantic-text); margin-bottom:10px; }
+.hf-card-t::before { content:""; width:3px; height:14px; border-radius:2px; background:var(--wu-semantic-brand); flex:none; }
+
+/* ---- 琥珀色提示盒（AI 超分耗时等成本提示） ---- */
+.hf-sr-hint { display:flex; gap:8px; align-items:flex-start; background:var(--wu-semantic-warning-bg); border:1px solid color-mix(in srgb,var(--wu-semantic-warning) 25%,transparent); color:var(--wu-semantic-warning); border-radius:var(--wu-global-radius-sm); padding:8px 10px; font-size:var(--wu-global-caption-size); line-height:1.6; margin:6px 0; }
+.hf-sr-hint::before { content:"ⓘ"; font-weight:700; flex:none; }
+
+/* ---- 机位/角色参考图缩略卡 ---- */
+.hf-imgtile { display:block; width:100%; max-width:220px; aspect-ratio:16/10; object-fit:cover; border-radius:var(--wu-global-radius-sm); border:1px solid var(--wu-semantic-border); background:var(--wu-semantic-muted); margin:6px 0; }
+
+/* ---- 动作资产页整体精修（fieldset/section 卡片化，控件语义不变） ---- */
+.motion-library > h2 { display:flex; align-items:center; gap:8px; font-size:18px; font-weight:700; margin:4px 0 6px; }
+.motion-library > h2::before { content:""; width:4px; height:16px; border-radius:2px; background:var(--wu-semantic-brand); flex:none; }
+.motion-library fieldset,.motion-library section { box-shadow:0 1px 3px color-mix(in srgb,var(--wu-global-ink) 5%,transparent); transition:border-color var(--wu-global-duration) var(--wu-global-ease); }
+.motion-library fieldset:hover,.motion-library section:hover { border-color:var(--wu-semantic-control-border); }
+.motion-library legend { display:inline-flex; align-items:center; gap:7px; }
+.motion-library legend::before { content:""; width:3px; height:12px; border-radius:2px; background:var(--wu-semantic-brand); flex:none; }
+.motion-library h2 { display:flex; align-items:center; gap:8px; font-size:15px; font-weight:700; margin:18px 0 8px; }
+.motion-library h2::before { content:""; width:3px; height:13px; border-radius:2px; background:var(--wu-semantic-brand); flex:none; }
+.motion-library h3 { font-size:var(--wu-global-body); font-weight:600; margin:12px 0 6px; }
+.motion-library input[type="file"] { font-size:var(--wu-global-caption-size); color:var(--wu-semantic-secondary); margin-top:4px; }
+.motion-library input[type="file"]::file-selector-button { border:1px solid var(--wu-semantic-control-border); background:var(--wu-semantic-raised); color:var(--wu-semantic-text); border-radius:var(--wu-global-radius-sm); padding:4px 10px; margin-right:8px; cursor:pointer; font:inherit; font-size:var(--wu-global-caption-size); transition:background var(--wu-global-duration) var(--wu-global-ease); }
+.motion-library input[type="file"]::file-selector-button:hover { background:var(--wu-semantic-muted); }
+.motion-library video { border-radius:var(--wu-global-radius-md); border:1px solid var(--wu-semantic-border); background:var(--wu-global-dark); }
+.motion-library ul { margin:8px 0; padding-left:20px; line-height:1.8; font-size:var(--wu-global-note); color:var(--wu-semantic-secondary); }
+.motion-library details { margin:10px 0; border:1px solid var(--wu-semantic-border); border-radius:var(--wu-global-radius-sm); padding:8px 12px; background:var(--wu-semantic-raised); }
+.motion-library details summary { cursor:pointer; font-size:var(--wu-global-note); font-weight:600; color:var(--wu-semantic-text); }
+.motion-library pre { background:var(--wu-semantic-muted); border-radius:var(--wu-global-radius-sm); padding:10px; font-size:var(--wu-global-caption-size); max-height:320px; overflow:auto; }
+
+/* ---- 应用内滚动条（暖色体系，替代浏览器默认） ---- */
+.hf-body::-webkit-scrollbar,.hf-inspector::-webkit-scrollbar,.hf-rail::-webkit-scrollbar,.motion-library pre::-webkit-scrollbar,.hf-home::-webkit-scrollbar { width:10px; height:10px; }
+.hf-body::-webkit-scrollbar-track,.hf-inspector::-webkit-scrollbar-track,.hf-rail::-webkit-scrollbar-track,.motion-library pre::-webkit-scrollbar-track,.hf-home::-webkit-scrollbar-track { background:transparent; }
+.hf-body::-webkit-scrollbar-thumb,.hf-inspector::-webkit-scrollbar-thumb,.hf-rail::-webkit-scrollbar-thumb,.motion-library pre::-webkit-scrollbar-thumb,.hf-home::-webkit-scrollbar-thumb { background:color-mix(in srgb,var(--wu-global-ink) 18%,var(--wu-semantic-canvas)); border-radius:5px; border:2px solid var(--wu-semantic-canvas); }
+.hf-body::-webkit-scrollbar-thumb:hover,.hf-inspector::-webkit-scrollbar-thumb:hover,.hf-rail::-webkit-scrollbar-thumb:hover { background:color-mix(in srgb,var(--wu-semantic-brand) 55%,var(--wu-semantic-canvas)); }
+
+/* ---- 渲染页摘要 KV 微精修（值更醒目，键更轻） ---- */
+.hf-kv { border:1px solid var(--wu-semantic-border); }
+.hf-kv .v { font-size:var(--wu-global-body); }
