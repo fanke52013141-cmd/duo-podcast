@@ -7,7 +7,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   nextRevisionId, upsertDraftTurns, useBranchScript, useConfirm, useGenerateScript, useJobs, useMachine, useMergeScript,
-  usePatchProject, useProject, useRevokeApproval, useSaveDraft, useSaveMachine, useScriptDiff, useScriptRewrite,
+  usePatchProject, useProject, useRevokeApproval, useSaveDraft, useSaveMachine, useScriptDiff, useScriptRewrite, sendJson,
 } from '../lib/api';
 import { type Job, type Project, type PronunciationEntry, type ScriptRevision, type Turn } from '../lib/types';
 import { Alert, Badge, Button, Choice, Empty, Icon, Input, Modal, Textarea } from '../components/wu';
@@ -142,7 +142,7 @@ export function EditScriptPage({ projectId }: { projectId: string }) {
   const switchVersion=useRef(createSingleFlight());
   const restoreOnce=useRef(createSingleFlight());
   const [switching,setSwitching]=useState(false);
-  const [candidate, setCandidate] = useState<{ turnIds: string[]; turns: Turn[]; jobId: string } | null>(null);
+  const [candidate, setCandidate] = useState<{ turnIds: string[]; turns: Turn[]; jobId: string; baseRevisionId: string; baseRevisionHash: string; turnHashes: Record<string, string> } | null>(null);
   const [dictOpen, setDictOpen] = useState(false);
   // F5 分支：从任一版本派生新草稿
   const [branchOpen, setBranchOpen] = useState(false);
@@ -207,8 +207,14 @@ export function EditScriptPage({ projectId }: { projectId: string }) {
       if (prev !== 'succeeded' && x.status === 'succeeded' && x.result?.candidate && !candidate) {
         const cand = x.result.candidate as { turns: Turn[]; changedTurnIds: string[] };
         const ct = cand.turns ?? [];
-        if (ct.length) {
-          setCandidate({ turnIds: cand.changedTurnIds, turns: ct, jobId: x.id });
+        const snapshot = x.inputSnapshot ?? {};
+        if (ct.length && typeof snapshot.baseRevisionHash === 'string') {
+          setCandidate({
+            turnIds: cand.changedTurnIds, turns: ct, jobId: x.id,
+            baseRevisionId: String(snapshot.revisionId ?? ''),
+            baseRevisionHash: snapshot.baseRevisionHash,
+            turnHashes: (snapshot.turnHashes as Record<string, string> | undefined) ?? {},
+          });
         }
       }
     });
@@ -383,8 +389,10 @@ export function EditScriptPage({ projectId }: { projectId: string }) {
     // 改写基于 revisionId 冻结输入，先把挂起编辑保存掉，避免改写结果落后于所见。
     flushDraft().then((ok) => {
       if (!ok) return;
+      const latest = qc.getQueryData<Project>(['project', projectId]);
+      if (!latest?.currentDraftRevision) return;
       rewrite.mutate({
-        projectId, clientToken: crypto.randomUUID(), revisionId: revision.id,
+        projectId, clientToken: crypto.randomUUID(), revisionId: latest.currentDraftRevision,
         turnIds: selected, mode,
       }, {
         onError: (e) => setError((e as Error).message),
@@ -392,11 +400,25 @@ export function EditScriptPage({ projectId }: { projectId: string }) {
     });
   };
 
-  const acceptCandidate = () => {
+  const acceptCandidate = async () => {
     if (!candidate) return;
-    const byId = new Map(candidate.turns.map((t) => [t.id, t]));
-    applyTurns((prev) => prev.map((t) => byId.get(t.id) ?? t));
-    setCandidate(null);
+    setError(null);
+    const saved = await flushDraft();
+    if (!saved) return;
+    const latest = qc.getQueryData<Project>(['project', projectId]);
+    if (!latest) return;
+    try {
+      const updated = await sendJson<Project>(
+        `/projects/${encodeURIComponent(projectId)}/script/rewrite/${encodeURIComponent(candidate.jobId)}/accept`,
+        'POST', { expectedRevision: latest.revision },
+      );
+      qc.setQueryData(['project', projectId], updated);
+      await qc.invalidateQueries({ queryKey: ['projects'] });
+      setCandidate(null);
+      setViewRevId(null);
+    } catch (e) {
+      setError(`候选未接受：${(e as Error).message}。当前编辑已保留，请重新生成候选或人工合并。`);
+    }
   };
 
   const handleConfirm = () => {
@@ -467,8 +489,10 @@ export function EditScriptPage({ projectId }: { projectId: string }) {
     if (!revision) return;
     flushDraft().then((ok) => {
       if (!ok) { setError('保存未完成，已取消建分支：请检查上方保存状态后重试。'); return; }
+      const latest = qc.getQueryData<Project>(['project', projectId]);
+      if (!latest?.currentDraftRevision) return;
       branchScript.mutate(
-        { projectId, fromRevisionId: revision.id, label: branchLabel.trim() },
+        { projectId, fromRevisionId: latest.currentDraftRevision, label: branchLabel.trim() },
         {
           onSuccess: () => { setBranchOpen(false); setBranchLabel(''); setViewRevId(null); },
           onError: (e) => setError(`建分支失败：${(e as Error).message}`),

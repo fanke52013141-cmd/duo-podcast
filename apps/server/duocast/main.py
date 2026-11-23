@@ -7,11 +7,15 @@
 from __future__ import annotations
 
 import asyncio
+import ipaddress
+import secrets
 from contextlib import asynccontextmanager
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -25,7 +29,7 @@ from .adapters.toapis_text import ToAPIsTextProvider
 from .core.config import PROJECT_ROOT, settings
 from .core.eventbus import EventBus
 from .core.logging import log, setup_logging
-from .jobs.manager import JobManager
+from .jobs.manager import JobInputConflict, JobManager, JobPersistenceError
 from .jobs.control import ControlledProvider
 from .jobs.recovery import recover_on_startup
 from .domain.project import Project, ScriptRevision
@@ -42,6 +46,108 @@ from .storage.templates import TemplateStore
 from .storage.motion_packs import MotionPackStore
 
 setup_logging()
+
+
+def _is_loopback_host(host: str) -> bool:
+    value = str(host or "").strip().lower()
+    if value == "localhost":
+        return True
+    try:
+        address = ipaddress.ip_address(value.strip("[]"))
+    except ValueError:
+        return False
+    if isinstance(address, ipaddress.IPv6Address) and address.ipv4_mapped:
+        address = address.ipv4_mapped
+    return address.is_loopback
+
+
+def _require_secure_listen() -> None:
+    token = str(settings.api_token or "").strip()
+    if not token and not _is_loopback_host(settings.host):
+        raise RuntimeError(
+            "DUOCAST_HOST 为非回环地址时必须设置 DUOCAST_API_TOKEN；"
+            "通配监听地址另请用 DUOCAST_TRUSTED_HOSTS 指定实际访问主机名/IP"
+        )
+
+
+def _trusted_hosts() -> list[str]:
+    hosts = {"localhost", "127.0.0.1", "::1", "testserver"}
+    configured = str(settings.host or "").strip().lower()
+    if configured and configured not in {"0.0.0.0", "::", "*"}:
+        hosts.add(configured.strip("[]"))
+    for item in str(settings.trusted_hosts or "").split(","):
+        host = item.strip().lower()
+        if host and host != "*":
+            hosts.add(host.strip("[]"))
+    return sorted(hosts)
+
+
+def _valid_bearer(request: Request, token: str) -> bool:
+    scheme, separator, credential = request.headers.get("authorization", "").partition(" ")
+    return bool(
+        token
+        and separator
+        and scheme.lower() == "bearer"
+        and credential
+        and secrets.compare_digest(credential.encode("utf-8"), token.encode("utf-8"))
+    )
+
+
+def _same_origin_browser(request: Request) -> bool:
+    """Allow the bundled same-origin web UI without putting a token in frontend code.
+
+    TrustedHost runs outside this middleware. Cross-origin browser requests still need
+    a Bearer token; non-browser API clients can always use the token explicitly.
+    """
+    origin = request.headers.get("origin")
+    if not origin:
+        return request.headers.get("sec-fetch-site", "").lower() == "same-origin"
+    try:
+        parsed = urlsplit(origin)
+        request_port = request.url.port or (443 if request.url.scheme == "https" else 80)
+        origin_port = parsed.port or (443 if parsed.scheme == "https" else 80)
+        return bool(
+            parsed.scheme
+            and parsed.hostname
+            and not parsed.username
+            and not parsed.password
+            and not parsed.query
+            and not parsed.fragment
+            and parsed.path in {"", "/"}
+            and parsed.scheme.lower() == request.url.scheme.lower()
+            and parsed.hostname.lower() == request.url.hostname.lower()
+            and origin_port == request_port
+        )
+    except ValueError:
+        return False
+
+
+class APIBearerMiddleware:
+    """Global API gate; Ingest keeps its stricter endpoint-level Bearer contract."""
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope.get("type") != "http":
+            await self.app(scope, receive, send)
+            return
+        request = Request(scope, receive=receive)
+        path = request.url.path
+        if not path.startswith("/api/") or path == "/api/health" or path.startswith("/api/ingest/"):
+            await self.app(scope, receive, send)
+            return
+        runtime = getattr(request.app.state, "runtime_settings", None)
+        token = str(getattr(runtime, "api_token", "") or "").strip()
+        if not token or _valid_bearer(request, token) or _same_origin_browser(request):
+            await self.app(scope, receive, send)
+            return
+        response = JSONResponse(
+            status_code=401,
+            content={"detail": "需要有效的 Bearer token（DUOCAST_API_TOKEN）"},
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+        await response(scope, receive, send)
 
 
 def _job_runner(manager: JobManager, store: ProjectStore, artifacts: ArtifactStore,
@@ -245,6 +351,7 @@ def _job_runner(manager: JobManager, store: ProjectStore, artifacts: ArtifactSto
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    _require_secure_listen()
     # ---- 存储层装配 ----
     project_store = ProjectStore(settings.storage_root / "projects", debounce_ms=settings.project_debounce_ms)
     artifacts = ArtifactStore(settings.storage_root / "artifacts")
@@ -377,6 +484,17 @@ async def invalid_project_input(request: Request, exc: InvalidProjectInput) -> J
     return JSONResponse(status_code=422, content={"detail": str(exc)})
 
 
+@app.exception_handler(JobInputConflict)
+async def job_input_conflict(request: Request, exc: JobInputConflict) -> JSONResponse:
+    return JSONResponse(status_code=409, content={"detail": str(exc)})
+
+
+@app.exception_handler(JobPersistenceError)
+async def job_persistence_error(request: Request, exc: JobPersistenceError) -> JSONResponse:
+    return JSONResponse(status_code=503, content={"detail": "任务清单暂时无法写入，请检查磁盘空间和权限后重试"})
+
+
+app.add_middleware(APIBearerMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -386,6 +504,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+# Outermost: reject DNS-rebinding Host headers before CORS or authentication.
+app.add_middleware(TrustedHostMiddleware, allowed_hosts=_trusted_hosts())
 
 from .api import artifacts as artifacts_api
 from .api import assets as assets_api

@@ -39,6 +39,20 @@ def classify_retryable(error: str) -> bool:
     return any(hint in lowered for hint in _RETRYABLE_HINTS)
 
 
+class JobInputConflict(ValueError):
+    """The same idempotency token was reused with a different request."""
+
+
+class JobPersistenceError(RuntimeError):
+    """A job manifest could not be durably written."""
+
+
+def _input_hash(snapshot: dict[str, Any]) -> str:
+    import hashlib
+    return hashlib.sha256(json.dumps(snapshot, ensure_ascii=False, sort_keys=True,
+                                     separators=(",", ":")).encode("utf-8")).hexdigest()
+
+
 class _PriorityQueue:
     """类内 (priority, created_at, 入队序) 最小堆。取代 asyncio.Queue 的纯 FIFO，
     支持「样片/脚本先于整期渲染」的排队策略；取出后状态非 queued 的副本由 worker 丢弃。"""
@@ -147,7 +161,9 @@ class JobManager:
 
     def submit(self, kind: str, project_id: str, queue_class: str, client_token: str,
                input_snapshot: dict[str, Any], attempt: int = 0,
-               owner_type: str = "project", owner_id: str = "") -> Job:
+               owner_type: str = "project", owner_id: str = "",
+               completed_calls: dict[str, dict[str, Any]] | None = None,
+               retried_from: str | None = None) -> Job:
         if owner_type not in {"project", "motionPack"}:
             raise ValueError("Unknown job owner type")
         if owner_type == "motionPack":
@@ -159,7 +175,11 @@ class JobManager:
             owner_id = project_id
         # 幂等（01 §12.1：相同请求连续点击只创建一项任务）
         existing = self._find_by_token(client_token, project_id, kind, owner_type, owner_id)
+        request_hash = _input_hash(input_snapshot)
         if existing is not None:
+            existing_hash = existing.input_hash or _input_hash(existing.input_snapshot)
+            if existing_hash != request_hash:
+                raise JobInputConflict("IDEMPOTENCY_INPUT_MISMATCH: 同一 clientToken 对应了不同输入")
             return existing
         queue_class = self._resolve_class(queue_class)
         job = Job(
@@ -171,18 +191,26 @@ class JobManager:
             queue_class=queue_class,
             client_token=client_token,
             input_snapshot=deepcopy(input_snapshot),
+            input_hash=request_hash,
             attempt=attempt,
+            completed_calls=deepcopy(completed_calls or {}),
+            retried_from=retried_from,
             priority=KIND_PRIORITY.get(kind, 0),
             created_at=datetime.now(timezone.utc).isoformat(timespec="milliseconds"),
         )
-        self._jobs[job.id] = job
+        # Persist intent before publishing memory/events/queue. A failed write
+        # must not leave an idempotency ghost that can never execute.
         self._persist(job)
+        self._jobs[job.id] = job
         self.bus.publish("job.queued", jobId=job.id, kind=job.kind, **self._owner_fields(job))
         self._queues[queue_class].put(job)
         return job
 
     def get(self, job_id: str) -> Optional[Job]:
         return self._jobs.get(job_id)
+
+    def find_by_token(self, client_token: str, project_id: str, kind: str) -> Optional[Job]:
+        return self._find_by_token(client_token, project_id, kind, "project", project_id)
 
     def list(self, project_id: str | None = None, *, owner_type: str | None = None,
              owner_id: str | None = None) -> list[Job]:
@@ -249,17 +277,23 @@ class JobManager:
             log("jobs", "illegal transition rejected", jobId=job.id,
                 current=job.status.value, target=target.value)
             return False
-        job.status = target
+        # Shallow copy preserves mutable provider ledgers held by
+        # ControlledProvider while status/timestamps are persisted atomically.
+        updated = job.model_copy(deep=False)
+        updated.status = target
         if target == JobStatus.RUNNING:
-            job.started_at = datetime.now(timezone.utc).isoformat(timespec="milliseconds")
+            updated.started_at = datetime.now(timezone.utc).isoformat(timespec="milliseconds")
         # 终态记录完成时刻；非终态（如恢复重跑回 RUNNING）视为进行中，清空旧值。
         if target in self._TERMINAL_STATUSES:
-            job.finished_at = datetime.now(timezone.utc).isoformat(timespec="milliseconds")
+            updated.finished_at = datetime.now(timezone.utc).isoformat(timespec="milliseconds")
         else:
-            job.finished_at = None
+            updated.finished_at = None
         for k, v in extra.items():
-            setattr(job, k, v)
-        self._persist(job)
+            setattr(updated, k, v)
+        # Persist the candidate state first; keep the live object unchanged when
+        # storage fails so workers and idempotency lookups never see a ghost state.
+        self._persist(updated)
+        job.__dict__.update(updated.__dict__)
         self.bus.publish("job.stage", jobId=job.id, stage=job.stage, status=job.status.value,
                          **self._owner_fields(job))
         if target == JobStatus.SUCCEEDED:
@@ -272,8 +306,9 @@ class JobManager:
 
     def set_stage(self, job: Job, stage: str, message: str | None = None) -> None:
         self.checkpoint(job)
-        job.stage = stage
-        self._persist(job)
+        updated = job.model_copy(deep=False, update={"stage": stage})
+        self._persist(updated)
+        job.__dict__.update(updated.__dict__)
         self.bus.publish("job.stage", jobId=job.id, stage=stage, message=message,
                          **self._owner_fields(job))
 
@@ -284,6 +319,7 @@ class JobManager:
     def pause(self, job_id: str) -> Job:
         job = self._require(job_id)
         if job.status == JobStatus.QUEUED:
+            self._queues[self._resolve_class(job.queue_class)].discard(job.id)
             self.transition(job, JobStatus.PAUSED)
         elif job.status == JobStatus.RUNNING:
             self.transition(job, JobStatus.PAUSE_REQUESTED)
@@ -309,14 +345,8 @@ class JobManager:
                         error=job.error or "已放弃：外部任务状态无法核实", retryable=False)
         return job
 
-    def retry(self, job_id: str) -> Job:
-        """P0-B（42 号方案）：失败/取消/未知任务原地重试。
-
-        派生新任务并**继承原 inputSnapshot 与 completedCalls 账本**，已完成单元
-        经 ControlledProvider 缓存跳过，只补失败段；不修改原终态任务（审计保留）。
-        外部付费任务有专门护栏：motion.prepare 走 resume_external 只读续查；
-        renders/sample.generate 的 UNKNOWN 必须先核对原外部任务，禁止盲目重提交。
-        """
+    def retry(self, job_id: str, idempotency_key: str = "") -> Job:
+        """失败/取消/未知任务原地重试；同一重试意图幂等。"""
         job = self._require(job_id)
         if job.status not in (JobStatus.FAILED, JobStatus.CANCELLED, JobStatus.UNKNOWN):
             raise ValueError("仅失败、已取消或状态未知的任务可重试")
@@ -324,23 +354,20 @@ class JobManager:
             raise ValueError("动作准备任务请使用「继续查询原外部任务」，避免重复付费提交")
         if job.kind in ("renders", "sample.generate") and job.status == JobStatus.UNKNOWN:
             raise ValueError("外部执行状态未核实，请先核对原任务结果，再决定是否重试")
-        base_token = job.client_token or job.id
-        attempt_no = 1
-        while self._find_by_token(f"{base_token}-retry-{attempt_no}", job.project_id, job.kind,
-                                  job.owner_type, job.owner_id or job.project_id) is not None:
-            attempt_no += 1
-        new_job = self.submit(
+        retry_token = idempotency_key.strip() or f"retry-of-{job.id}"
+        existing = self._find_by_token(retry_token, job.project_id, job.kind,
+                                       job.owner_type, job.owner_id or job.project_id)
+        if existing is not None:
+            if existing.retried_from != job.id:
+                raise JobInputConflict("IDEMPOTENCY_INPUT_MISMATCH: 重试幂等键已被其他任务使用")
+            return existing
+        return self.submit(
             kind=job.kind, project_id=job.project_id, queue_class=job.queue_class,
-            client_token=f"{base_token}-retry-{attempt_no}",
+            client_token=retry_token,
             input_snapshot=job.input_snapshot, attempt=job.attempt + 1,
             owner_type=job.owner_type, owner_id=job.owner_id,
+            completed_calls=job.completed_calls, retried_from=job.id,
         )
-        # submit 与此处之间无 await，worker 不会抢先读取账本。
-        new_job.completed_calls = deepcopy(job.completed_calls)
-        new_job.retried_from = job.id
-        self._persist(new_job)
-        return new_job
-
     def queue_position(self, job: Job) -> int | None:
         """queued 任务的队内排位（1 起）；不在队中返回 None。"""
         if job.status != JobStatus.QUEUED:
@@ -353,6 +380,8 @@ class JobManager:
                           JobStatus.CANCEL_REQUESTED):
             return job  # 已在取消流程/终态：幂等返回，不重复转移（11 报告 P1-1）
         if job.status in (JobStatus.QUEUED, JobStatus.PAUSED, JobStatus.WAITING_CONFIRMATION):
+            if job.status == JobStatus.QUEUED:
+                self._queues[self._resolve_class(job.queue_class)].discard(job.id)
             self.transition(job, JobStatus.CANCELLED)
             return job
         if job.status in (JobStatus.UNKNOWN, JobStatus.RECOVERING):
@@ -397,35 +426,59 @@ class JobManager:
         while True:
             job = await queue.get()
             try:
-                # 取出瞬间工程可能已被删除：直接丢弃，不执行也不落盘。
-                if job.id in self._discarded:
-                    continue
-                if job.status != JobStatus.QUEUED:
-                    continue
-                self.transition(job, JobStatus.RUNNING)
-                async with self._gpu_lock if queue_class == "gpu" else _null_ctx():
-                    if self._runner is None:
-                        raise RuntimeError("JobManager.runner not set")
-                    self.set_stage(job, "infer")
-                    result = await self._runner(job)
-                    job.result = result
-                    if job.status == JobStatus.CANCEL_REQUESTED:
-                        self.transition(job, JobStatus.CANCELLED)
-                    elif job.status == JobStatus.PAUSE_REQUESTED:
-                        self.transition(job, JobStatus.PAUSED)
-                    else:
-                        self.transition(job, JobStatus.SUCCEEDED)
+                await self._process_job(queue_class, job)
+            except JobPersistenceError as exc:
+                # Storage failures must not permanently remove a worker. Requeue
+                # only jobs that never started; running jobs remain visible for
+                # startup recovery instead of being silently duplicated.
+                log("jobs", "job persistence failed", jobId=job.id, error=str(exc))
+                if job.status == JobStatus.QUEUED and job.id not in self._discarded:
+                    queue.put(job)
+                await asyncio.sleep(0.5)
             except JobInterrupted:
-                self.transition(job, JobStatus.PAUSED if job.status == JobStatus.PAUSE_REQUESTED else JobStatus.CANCELLED)
+                self._handle_interrupted(job)
             except asyncio.CancelledError:
-                # 停止本地等待并不证明外部推理停止。留给恢复流程核实。
+                # Stopping the local wait does not prove an external task stopped.
                 job.status = JobStatus.UNKNOWN
-                self._persist(job)
+                try:
+                    self._persist(job)
+                except JobPersistenceError:
+                    pass
                 raise
             except Exception as exc:  # noqa: BLE001
-                job.error = str(exc)
-                job.retryable = classify_retryable(job.error)
-                self.transition(job, JobStatus.FAILED)
+                self._handle_failure(job, exc)
+
+    async def _process_job(self, queue_class: str, job: Job) -> None:
+        # 取出瞬间工程可能已被删除：直接丢弃，不执行也不落盘。
+        if job.id in self._discarded:
+            return
+        if job.status != JobStatus.QUEUED:
+            return
+        self.transition(job, JobStatus.RUNNING)
+        async with self._gpu_lock if queue_class == "gpu" else _null_ctx():
+            if self._runner is None:
+                raise RuntimeError("JobManager.runner not set")
+            self.set_stage(job, "infer")
+            result = await self._runner(job)
+            job.result = result
+            if job.status == JobStatus.CANCEL_REQUESTED:
+                self.transition(job, JobStatus.CANCELLED)
+            elif job.status == JobStatus.PAUSE_REQUESTED:
+                self.transition(job, JobStatus.PAUSED)
+            else:
+                self.transition(job, JobStatus.SUCCEEDED)
+
+    def _handle_interrupted(self, job: Job) -> None:
+        self.transition(job, JobStatus.PAUSED if job.status == JobStatus.PAUSE_REQUESTED else JobStatus.CANCELLED)
+
+    def _handle_failure(self, job: Job, exc: Exception) -> None:
+        error = str(exc)
+        retryable = classify_retryable(error)
+        if job.status == JobStatus.CANCEL_REQUESTED:
+            self.transition(job, JobStatus.CANCELLED, error=error,
+                            cancel_reason=error, retryable=retryable)
+        else:
+            self.transition(job, JobStatus.FAILED, error=error, retryable=retryable)
 
     def _require(self, job_id: str) -> Job:
         job = self.get(job_id)
@@ -434,6 +487,12 @@ class JobManager:
         return job
 
     def _persist(self, job: Job) -> None:
+        try:
+            self._persist_to_disk(job)
+        except OSError as exc:
+            raise JobPersistenceError(f"job manifest persistence failed: {job.id}") from exc
+
+    def _persist_to_disk(self, job: Job) -> None:
         # 工程已删除、任务已移入回收站：worker 若还在跑，收尾不得把 job.json 写回来，
         # 否则被删工程的任务会「复活」（第五轮幽灵任务的第二层根因）。
         if job.id in self._discarded:

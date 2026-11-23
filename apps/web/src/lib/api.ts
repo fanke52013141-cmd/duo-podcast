@@ -2,6 +2,7 @@
    DuoCast 前端 · API 层（TanStack Query hooks + fetch 封装）
    契约权威：01 §12.1；PATCH 一律携带 expectedRevision（01 §12 冲突保护）
    ========================================================================== */
+import { useRef } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
   AudioTimeline,
@@ -22,8 +23,9 @@ export class ApiError extends Error {
   }
 }
 
-function is409(err: unknown): boolean {
-  return err instanceof ApiError && err.status === 409;
+function invalidateProject(qc: ReturnType<typeof useQueryClient>, projectId: string) {
+  void qc.invalidateQueries({ queryKey: ['project', projectId] });
+  void qc.invalidateQueries({ queryKey: ['projects'] });
 }
 
 /* 错误可读化（第五轮实测 A9）：把「409 {"detail":"..."}」原文翻译成
@@ -155,12 +157,24 @@ export interface PatchProjectInput {
 
 export const usePatchProject = () => {
   const qc = useQueryClient();
+  const queues = useRef(new Map<string, Promise<Project>>());
   return useMutation({
-    mutationFn: ({ projectId, patch, expectedRevision }: PatchProjectInput) =>
-      sendJson<Project>(`/projects/${projectId}`, 'PATCH', { ...patch, expectedRevision }),
+    mutationFn: ({ projectId, patch }: PatchProjectInput) => {
+      const run = async () => {
+        const cached = qc.getQueryData<Project>(['project', projectId]);
+        const latest = cached ?? await getJson<Project>(`/projects/${projectId}`);
+        return sendJson<Project>(`/projects/${projectId}`, 'PATCH', {
+          ...patch, expectedRevision: latest.revision,
+        });
+      };
+      const previous = queues.current.get(projectId) ?? Promise.resolve(null as Project | null);
+      const next = previous.catch(() => null).then(run);
+      queues.current.set(projectId, next);
+      return next;
+    },
     onSuccess: (proj) => {
       qc.setQueryData(['project', proj.id], proj);
-      qc.invalidateQueries({ queryKey: ['projects'] });
+      void qc.invalidateQueries({ queryKey: ['projects'] });
     },
   });
 };
@@ -289,24 +303,15 @@ export function upsertDraftTurns(proj: Project, turns: Turn[], baseRevId?: strin
   };
 }
 
-/** PATCH + 冲突重放（11 报告 P0-2）：409 时以服务端最新 revision 重放一次同一 patch；
- *  再次 409（真实的并发竞争或校验拒绝）向上抛给调用方展示。 */
-async function patchProjectWithReplay(projectId: string, patch: Record<string, unknown>, expectedRevision: number): Promise<Project> {
-  try {
-    return await sendJson<Project>(`/projects/${projectId}`, 'PATCH', { ...patch, expectedRevision });
-  } catch (err) {
-    if (!is409(err)) throw err;
-    const fresh = await getJson<Project>(`/projects/${projectId}`);
-    return await sendJson<Project>(`/projects/${projectId}`, 'PATCH', { ...patch, expectedRevision: fresh.revision });
-  }
-}
-
 export const useSaveDraft = () => {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ projectId, patch, expectedRevision }: { projectId: string; patch: Record<string, unknown>; expectedRevision: number }) =>
       sendJson<Project>(`/projects/${projectId}`, 'PATCH', {...patch,expectedRevision}),
-    onSuccess: (proj) => qc.setQueryData(['project', proj.id], proj),
+    onSuccess: (proj) => {
+      qc.setQueryData(['project', proj.id], proj);
+      void qc.invalidateQueries({ queryKey: ['projects'] });
+    },
   });
 };
 
@@ -323,26 +328,14 @@ export interface ConfirmInput {
 export const useConfirm = () => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ projectId, expectedRevision, kind, inputRevisionId, note, spec }: ConfirmInput) => {
-      const proj = qc.getQueryData<Project>(['project', projectId]);
-      const approval = {
-        kind,
-        inputRevisionId,
-        spec: spec ?? {},
-        decision: 'accepted' as const,
-        reasonTarget: null,
-        note: note ?? '',
-        at: new Date().toISOString(),
-      };
-      // approvals 为整字段替换语义：追加到现有确认记录后（01 §13.2 只追加不修改）；
-      // 冲突重放见 patchProjectWithReplay（11 报告 P0-2）。绑定校验在服务端（P1-6）。
-      return patchProjectWithReplay(projectId, {
-        approvals: [...(proj?.approvals ?? []), approval],
-      }, expectedRevision);
-    },
+    mutationFn: ({ projectId, expectedRevision, kind, inputRevisionId, note, spec }: ConfirmInput) =>
+      sendJson<Project>(`/projects/${projectId}/approvals`, 'POST', {
+        expectedRevision, kind, inputRevisionId, note: note ?? '', spec: spec ?? {},
+      }),
     onSuccess: (proj) => {
       qc.setQueryData(['project', proj.id], proj);
-      qc.invalidateQueries({ queryKey: ['jobs'] });
+      void qc.invalidateQueries({ queryKey: ['projects'] });
+      void qc.invalidateQueries({ queryKey: ['jobs'] });
     },
   });
 };
@@ -531,7 +524,10 @@ export const useUploadCharacterImage = () => {
   return useMutation({
     mutationFn: ({ characterId, file }: { characterId: string; file: File }) =>
       uploadFile<Character>(`/characters/${characterId}/image`, file),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['characters'] }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['characters'] });
+      void qc.invalidateQueries({ queryKey: ['artifacts'] });
+    },
   });
 };
 
@@ -558,7 +554,10 @@ export const useRevokeApproval = () => {
   return useMutation({
     mutationFn: ({ projectId, kind, reason, expectedRevision }: { projectId: string; kind: 'script' | 'voice' | 'sample'; reason?: string; expectedRevision?: number }) =>
       sendJson<Project>(`/projects/${projectId}/approvals/${kind}/revoke`, 'POST', { reason, expectedRevision }),
-    onSuccess: (_d, input) => qc.invalidateQueries({ queryKey: ['project', input.projectId] }),
+    onSuccess: (proj, input) => {
+      qc.setQueryData(['project', input.projectId], proj);
+      invalidateProject(qc, input.projectId);
+    },
   });
 };
 
@@ -567,7 +566,7 @@ export const useRestoreTimeline = () => {
   return useMutation({
     mutationFn: ({ projectId, historyIndex }: { projectId: string; historyIndex: number }) =>
       sendJson<{ audioTimeline: AudioTimeline }>(`/projects/${projectId}/voice/restore-timeline`, 'POST', { historyIndex }),
-    onSuccess: (_d, input) => qc.invalidateQueries({ queryKey: ['project', input.projectId] }),
+    onSuccess: (_d, input) => invalidateProject(qc, input.projectId),
   });
 };
 
@@ -582,7 +581,7 @@ export const useImportScript = () => {
   return useMutation({
     mutationFn: ({ projectId, envelope }: { projectId: string; envelope: Record<string, unknown> }) =>
       sendJson<ScriptImportResult>(`/projects/${projectId}/script/import`, 'POST', envelope),
-    onSuccess: (_d, input) => qc.invalidateQueries({ queryKey: ['project', input.projectId] }),
+    onSuccess: (_d, input) => invalidateProject(qc, input.projectId),
   });
 };
 
@@ -597,7 +596,10 @@ export const useImportUnitAudio = () => {
       uploadFile<UnitAudioImportResult>(`/projects/${projectId}/voice/units/${unitId}/import-audio`, file, {
         meta: JSON.stringify({ provenance: { source: 'external-upload', tool: '本机上传' } }),
       }),
-    onSuccess: (_d, input) => qc.invalidateQueries({ queryKey: ['project', input.projectId] }),
+    onSuccess: (_d, input) => {
+      invalidateProject(qc, input.projectId);
+      void qc.invalidateQueries({ queryKey: ['artifacts'] });
+    },
   });
 };
 
@@ -681,7 +683,10 @@ export const useRenderAdopt = () => {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (input: { projectId: string; jobId: string }) => sendJson<{ version: string }>(`/projects/${input.projectId}/render/adopt`, 'POST', { jobId: input.jobId }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['project'] }); qc.invalidateQueries({ queryKey: ['jobs'] }); },
+    onSuccess: (_d, input) => {
+      invalidateProject(qc, input.projectId);
+      void qc.invalidateQueries({ queryKey: ['jobs'] });
+    },
   });
 };
 
@@ -689,7 +694,7 @@ export const useOutputSelect = () => {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (input: { projectId: string; version: string }) => sendJson<{ version: string }>(`/projects/${input.projectId}/render/select-version`, 'POST', { version: input.version }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['project'] }),
+    onSuccess: (_d, input) => invalidateProject(qc, input.projectId),
   });
 };
 
@@ -730,8 +735,16 @@ export const useJobAbandon = () => {
 /* P0-B（42 号方案）：失败/取消/未知任务原地重试，后端继承已完成单元账本。 */
 export const useJobRetry = () => {
   const qc = useQueryClient();
+  const retryTokens = useRef(new Map<string, string>());
   return useMutation({
-    mutationFn: (jobId: string) => sendJson<Job>(`/jobs/${jobId}/retry`, 'POST', {}),
+    mutationFn: (jobId: string) => {
+      let token = retryTokens.current.get(jobId);
+      if (!token) {
+        token = crypto.randomUUID();
+        retryTokens.current.set(jobId, token);
+      }
+      return sendJson<Job>(`/jobs/${jobId}/retry`, 'POST', { idempotencyKey: token });
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['jobs'] }),
   });
 };

@@ -10,7 +10,8 @@ from fastapi import APIRouter, HTTPException, Request
 from ..domain.project import ScriptRevision
 from ..jobs.manager import JobManager
 from ..services.script_svc import (
-    apply_script_revision, diff_revisions, merge_revision, next_revision_id,
+    accept_rewrite_candidate, apply_script_revision, diff_revisions, merge_revision,
+    next_revision_id, script_revision_hash, turn_hash,
 )
 from ..services.voice_svc import find_revision
 
@@ -177,10 +178,14 @@ async def rewrite_script(project_id: str, payload: dict, request: Request) -> di
     except KeyError as exc:
         raise HTTPException(422, "没有可用脚本版本") from exc
     client_token = payload.get("clientToken") or f"rw-{uuid.uuid4().hex[:8]}"
+    selected_ids = payload.get("turnIds", [])
     snapshot = {
         "revisionId": revision.id,
+        "baseRevisionHash": script_revision_hash(revision),
+        "turnHashes": {turn.id: turn_hash(turn) for turn in revision.turns
+                       if turn.id in selected_ids},
         "scriptSnapshot": revision.model_dump(mode="json", by_alias=True),
-        "turnIds": payload.get("turnIds", []),
+        "turnIds": selected_ids,
         "mode": payload.get("mode", "rewrite"),
         "projectId": project_id,
     }
@@ -192,3 +197,23 @@ async def rewrite_script(project_id: str, payload: dict, request: Request) -> di
         input_snapshot=snapshot,
     )
     return {"jobId": job.id, "clientToken": client_token}
+
+
+@router.post("/rewrite/{job_id}/accept")
+async def accept_rewrite(project_id: str, job_id: str, payload: dict, request: Request) -> dict:
+    """Accept a rewrite candidate only when its source turns are unchanged."""
+    manager: JobManager = request.app.state.job_manager
+    job = manager.get(job_id)
+    if job is None:
+        raise HTTPException(404, "候选任务不存在")
+    try:
+        saved = accept_rewrite_candidate(
+            request.app.state.project_store, project_id, job,
+            payload.get("expectedRevision"),
+        )
+    except KeyError as exc:
+        raise HTTPException(404, "工程不存在") from exc
+    except ValueError as exc:
+        status = 409 if "CONFLICT" in str(exc) else 422
+        raise HTTPException(status, str(exc)) from exc
+    return saved.model_dump(mode="json", by_alias=True)

@@ -12,11 +12,54 @@ from ..jobs.manager import JobManager
 from ..domain.job import JobStatus
 from ..services.render_inputs import dependency_hash, validate_render_options, resolve_visual_id, resolve_camera_mode, validate_motion_source
 from .voice import _merged_pronunciation
+from .assets import _AUDIO_FORMAT_WHITELIST, _VIDEO_FORMAT_WHITELIST, _local_media_path, _run_media_command
 from ..services.render_svc import apply_output_version
 from ..services.listening_plan import listening_plan
 from ..services.generation_profiles import validate_motion_reference, validate_video_stream
 
 router = APIRouter(prefix="/api/projects/{project_id}/render", tags=["render"])
+
+
+async def _probe_video(path, *, timeout: float = 60, video_only: bool = False) -> dict:
+    """Probe one local video with network and playlist demuxers disabled."""
+    path = _local_media_path(path)
+    args = [
+        "-v", "error",
+        "-protocol_whitelist", "file",
+        "-format_whitelist", _VIDEO_FORMAT_WHITELIST,
+    ]
+    if video_only:
+        args.extend(["-select_streams", "v:0"])
+    args.extend(["-show_streams", "-show_format", "-of", "json", str(path)])
+    returncode, output, _ = await _run_media_command("ffprobe", args, timeout=timeout)
+    if returncode:
+        raise ValueError("无法读取上传视频")
+    try:
+        payload = json.loads(output)
+    except (ValueError, TypeError) as exc:
+        raise ValueError("无法解析视频信息") from exc
+    if not isinstance(payload, dict):
+        raise ValueError("无法解析视频信息")
+    return payload
+
+
+async def _remux_video(video_path, audio_path, target, duration: float, *, timeout: float = 600):
+    """Replace audio using two independently restricted local inputs."""
+    video_path = _local_media_path(video_path)
+    audio_path = _local_media_path(audio_path)
+    returncode, _, error = await _run_media_command("ffmpeg", [
+        "-v", "error", "-nostdin", "-y",
+        "-protocol_whitelist", "file",
+        "-format_whitelist", _VIDEO_FORMAT_WHITELIST,
+        "-i", str(video_path),
+        "-protocol_whitelist", "file",
+        "-format_whitelist", _AUDIO_FORMAT_WHITELIST,
+        "-i", str(audio_path),
+        "-map", "0:v:0", "-map", "1:a:0", "-c:v", "copy", "-c:a", "aac", "-b:a", "192k",
+        "-t", f"{duration:.3f}", "-movflags", "+faststart", "-f", "mp4", str(target),
+    ], timeout=timeout)
+    if returncode:
+        raise ValueError("音轨重混失败：" + error.decode("utf-8", "replace")[-300:])
 
 
 @router.post("/generate")
@@ -100,18 +143,11 @@ async def adopt(project_id: str, payload: dict, request: Request):
     validate_render_options(project, {}, _merged_pronunciation(request, project), real_video=False)
     meta = job.result.get("meta", {})
     if meta.get("path") and not job.result.get("simulated", False):
-        process = await asyncio.create_subprocess_exec("ffprobe", "-v", "error", "-select_streams", "v:0",
-            "-show_streams", "-of", "json", meta["path"], stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
         try:
-            output, _ = await asyncio.wait_for(process.communicate(), timeout=15)
-            if process.returncode:
-                raise ValueError("成片文件无法读取")
-            stream = json.loads(output)["streams"][0]
+            info = await _probe_video(meta["path"], timeout=15, video_only=True)
+            stream = info["streams"][0]
             validate_video_stream(stream, meta["durationSec"], meta["fps"])
-        except (ValueError, KeyError, IndexError, asyncio.TimeoutError):
-            if process.returncode is None:
-                process.kill()
-                await process.wait()
+        except (ValueError, KeyError, IndexError, TypeError, TimeoutError, OSError):
             raise HTTPException(409, "成片画面不完整或文件无法读取，不能采用该候选")
     if project.output_manifest and project.output_manifest.get("artifactIds") == job.result["artifactIds"]:
         return {"version": project.output_manifest["version"]}
@@ -150,6 +186,23 @@ async def import_output(project_id: str, request: Request) -> dict:
         except ValueError:
             raise HTTPException(422, "UPLOAD_SCHEMA: meta 不是合法 JSON 对象")
     payload = meta.get("payload") if isinstance(meta.get("payload"), dict) else meta
+    manager: JobManager = request.app.state.job_manager
+    client_token = str(payload.get("clientToken") or f"import-{uuid.uuid4().hex[:8]}")
+    current_dependency = dependency_hash(project)
+    existing = manager.find_by_token(client_token, project_id, "renders")
+    if existing is not None:
+        if existing.input_snapshot.get("dependencyHash") != current_dependency:
+            raise HTTPException(409, "同一导入 clientToken 对应了不同工程输入")
+        result = existing.result or {}
+        meta_result = result.get("meta") or {}
+        artifact_id = (result.get("artifactIds") or [None])[0]
+        return {"jobId": existing.id, "artifactId": artifact_id,
+                "durationSec": meta_result.get("durationSec"),
+                "resolution": meta_result.get("resolution"),
+                "fps": meta_result.get("fps"),
+                "status": "pending-adoption" if existing.status == JobStatus.SUCCEEDED else existing.status.value,
+                "adoptEndpoint": f"/api/projects/{project_id}/render/adopt",
+                "idempotent": True}
     audio_mode = str(payload.get("audioMode") or "keep")
     if audio_mode not in ("keep", "master"):
         raise HTTPException(422, "audioMode 必须为 keep 或 master")
@@ -181,16 +234,7 @@ async def import_output(project_id: str, request: Request) -> dict:
         if not size:
             raise HTTPException(422, "成片视频不能为空")
 
-        async def probe(path: Path) -> dict:
-            process = await asyncio.create_subprocess_exec(
-                "ffprobe", "-v", "error", "-show_streams", "-show_format", "-of", "json", str(path),
-                stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
-            output_bytes, _ = await asyncio.wait_for(process.communicate(), timeout=60)
-            if process.returncode:
-                raise ValueError("无法读取上传视频")
-            return json.loads(output_bytes)
-
-        info = await probe(target)
+        info = await _probe_video(target)
         stream = next((s for s in info.get("streams", []) if s.get("codec_type") == "video"), None)
         if stream is None:
             raise HTTPException(422, "上传文件不含视频流")
@@ -214,32 +258,23 @@ async def import_output(project_id: str, request: Request) -> dict:
             if not master or not Path(master["path"]).is_file():
                 raise HTTPException(422, "本工程尚无母轨，无法重混；请先合成配音")
             remuxed = root / f"{asset_id}-remux.mp4"
-            process = await asyncio.create_subprocess_exec(
-                "ffmpeg", "-v", "error", "-y", "-i", str(target), "-i", master["path"],
-                "-map", "0:v:0", "-map", "1:a:0", "-c:v", "copy", "-c:a", "aac", "-b:a", "192k",
-                "-t", f"{expected_sec:.3f}", "-movflags", "+faststart", str(remuxed),
-                stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
-            _, err = await asyncio.wait_for(process.communicate(), timeout=600)
-            if process.returncode:
-                raise HTTPException(422, "音轨重混失败：" + err.decode("utf-8", "replace")[-300:])
+            await _remux_video(target, master["path"], remuxed, expected_sec)
             final_path = remuxed
-            info = await probe(final_path)
+            info = await _probe_video(final_path)
             stream = next(s for s in info["streams"] if s.get("codec_type") == "video")
             duration = float(stream.get("duration") or info.get("format", {}).get("duration") or 0)
         resolution = f"{stream.get('width')}x{stream.get('height')}"
         file_hash = digest.hexdigest() if final_path == target else artifacts._hash_file(str(final_path))
-        entry = artifacts.register(asset_id, "video", str(final_path), dependency_hash(project),
+        entry = artifacts.register(asset_id, "video", str(final_path), current_dependency,
                                    {"source": "outputImport", "projectId": project_id,
                                     "projectSnapshot": project.model_dump(mode="json", by_alias=True),
                                     "provenance": provenance, "audioMode": audio_mode},
                                    file_hash=file_hash)
         registered = True
-        manager: JobManager = request.app.state.job_manager
-        client_token = str(payload.get("clientToken") or f"import-{uuid.uuid4().hex[:8]}")
         job = manager.submit(
             kind="renders", project_id=project_id, queue_class="cpu", client_token=client_token,
             input_snapshot={"revisionId": project.current_draft_revision,
-                            "dependencyHash": dependency_hash(project),
+                            "dependencyHash": current_dependency,
                             "projectSnapshot": project.model_dump(mode="json", by_alias=True),
                             "candidate": True, "imported": True,
                             "resolution": resolution, "fps": fps, "projectId": project_id},

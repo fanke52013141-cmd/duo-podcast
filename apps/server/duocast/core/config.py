@@ -12,6 +12,8 @@ PROJECT_ROOT = Path(__file__).resolve().parents[4]  # apps/server/duocast/core/c
 @dataclass(frozen=True)
 class Settings:
     host: str = "127.0.0.1"
+    # TrustedHost 额外放行的主机名（逗号分隔）。通配监听地址必须显式配置实际访问主机名/IP。
+    trusted_hosts: str = ""
     # 8100 为默认端口：本机 8000 可能被其他本地服务占用（如 PPT_presentation_video server.py），
     # 端口可经 DUOCAST_PORT 覆盖（06 §2 core/config.py）
     port: int = 8100
@@ -44,8 +46,9 @@ class Settings:
     text_model: str = "deepseek-flash"
     video_url: str = "http://127.0.0.1:8191"
     video_input: Path = field(default_factory=lambda: PROJECT_ROOT / "runtime" / "video" / "input")
-    # 批 2（42 号方案）：对外 Ingest API 门禁。为空=仅本机默认放行；
-    # 设置后 /api/ingest/* 必须携带 Authorization: Bearer <token>。
+    # 全局 API 门禁。为空时仅允许回环监听；设置后外部 API 客户端必须携带
+    # Authorization: Bearer <token>，同源浏览器 UI 由 TrustedHost/Origin 放行。
+    # Ingest 始终执行更严格的端点级 Bearer 校验，不使用同源豁免。
     api_token: str = ""
     # 44 号 · 标准模式加速调优参数（默认值=现网行为，零变化）。
     # 回家在 5080 上按 44 号文档梯级 A/B；参数纳入缓存指纹，切配置不误用旧片段。
@@ -86,6 +89,7 @@ class Settings:
         # 队列上限可经环境变量覆盖（12 报告 C-3：5080 单机需按实机调参，无需改代码）
         return cls(
             host=os.environ.get("DUOCAST_HOST", "127.0.0.1"),
+            trusted_hosts=os.environ.get("DUOCAST_TRUSTED_HOSTS", ""),
             port=int(os.environ.get("DUOCAST_PORT", "8100")),
             storage_root=Path(os.environ.get("DUOCAST_STORAGE", str(PROJECT_ROOT / "apps" / "storage"))),
             queue_cap_gpu=cls._env_int("DUOCAST_QUEUE_GPU", 1),
@@ -111,7 +115,7 @@ class Settings:
             text_model=os.environ.get("DUOCAST_TEXT_MODEL", "deepseek-flash"),
             video_url=os.environ.get("DUOCAST_VIDEO_URL", "http://127.0.0.1:8191"),
             video_input=Path(os.environ.get("DUOCAST_VIDEO_INPUT", str(PROJECT_ROOT / "runtime" / "video" / "input"))),
-            api_token=os.environ.get("DUOCAST_API_TOKEN", ""),
+            api_token=os.environ.get("DUOCAST_API_TOKEN", "").strip(),
             video_attention=os.environ.get("DUOCAST_VIDEO_ATTENTION", "sdpa"),
             video_blocks_to_swap=cls._env_nonneg_int("DUOCAST_VIDEO_BLOCKS_TO_SWAP", 38),
             video_prefetch_blocks=cls._env_nonneg_int("DUOCAST_VIDEO_PREFETCH_BLOCKS", 0),

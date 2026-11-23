@@ -28,6 +28,14 @@ def test_latent_key_binds_seed_code_and_source_and_frame_seed_is_order_independe
         worker.latent_key("a"*64, [], identity, True)
 
 
+def test_non_motion_worker_uses_the_seeded_latent_cache_contract():
+    source = (MODULE.parent / "worker.py").read_text(encoding="utf-8")
+    assert "from motion_worker import encode_seeded_latent, file_hash, latent_key, load_latents" in source
+    assert "latent_key(file_hash(video), coords[speaker], vae_identity, request.get('seed', 42))" in source
+    assert "encode_seeded_latent(vae, crop, torch, key, i)" in source
+    assert "vae.get_latents_for_unet(crop)" not in source
+
+
 def test_corrupt_and_invalid_tensor_cache_is_explicit_miss(tmp_path):
     torch = pytest.importorskip("torch", reason="No fake tensors stand in for cache validation")
     target = tmp_path / "latents.pt"

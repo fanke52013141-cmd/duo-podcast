@@ -262,6 +262,26 @@ def test_video_import_candidate_and_adopt(client, tmp_path):
 
 
 @pytest.mark.skipif(not HAS_FFMPEG, reason="ffmpeg unavailable")
+def test_video_import_same_token_returns_same_asset_and_job(client, tmp_path):
+    p = _setup_project_with_timeline(client, tmp_path, seconds=0.5)
+    total_sec = p.audio_timeline.sample_count / 48000
+    video = _make_mp4(tmp_path / "external-idempotent.mp4", seconds=total_sec)
+    meta = json.dumps({"clientToken": "video-import-idempotent", "provenance": {"source": "external-upload"}})
+    first = client.post(f"/api/projects/{p.id}/render/import-output",
+                        files={"file": ("external.mp4", video.read_bytes(), "video/mp4")}, data={"meta": meta})
+    assert first.status_code == 200, first.text
+    second = client.post(f"/api/projects/{p.id}/render/import-output",
+                         files={"file": ("external.mp4", video.read_bytes(), "video/mp4")}, data={"meta": meta})
+    assert second.status_code == 200, second.text
+    assert second.json()["jobId"] == first.json()["jobId"]
+    assert second.json()["artifactId"] == first.json()["artifactId"]
+    assert second.json()["idempotent"] is True
+    imported = [entry for entry in client.get("/api/artifacts").json()["artifacts"]
+                if entry.get("paramsSnapshot", {}).get("source") == "outputImport"]
+    assert len(imported) == 1
+
+
+@pytest.mark.skipif(not HAS_FFMPEG, reason="ffmpeg unavailable")
 def test_video_import_duration_mismatch_rejected(client, tmp_path):
     p = _setup_project_with_timeline(client, tmp_path, seconds=0.5)
     video = _make_mp4(tmp_path / "toolong.mp4", seconds=3.0)
@@ -312,9 +332,9 @@ def test_ingest_script_route(client):
 
 
 def test_ingest_token_gate(client, monkeypatch):
+    p = client.post("/api/projects", json={"title": "门禁"}).json()
     monkeypatch.setattr(client.app.state, "runtime_settings",
                         replace(client.app.state.runtime_settings, api_token="secret-token"))
-    p = client.post("/api/projects", json={"title": "门禁"}).json()
     envelope = {"schemaVersion": "1.0", "kind": "script", "projectId": p["id"],
                 "payload": {"turns": [{"speaker": "A", "lines": [{"displayText": "x"}]}]}}
     assert client.post("/api/ingest/script", json=envelope).status_code == 401

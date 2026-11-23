@@ -1,9 +1,12 @@
 """Structured dialogue generation and selected-turn rewriting through ToAPIs."""
 from __future__ import annotations
 
+import asyncio
 import json
+
 import httpx
 
+from ..services.runtime_config import validate_provider_url
 from .mock import MockTextProvider
 
 
@@ -14,14 +17,17 @@ class ToAPIsTextProvider:
         self.api_key = api_key
         self.model = model
         self.bases = (base_url.rstrip("/"),) if base_url else ("https://toapis.com", "https://toapis.cn")
+        for base in self.bases:
+            validate_provider_url(base, "text_base_url")
         self.capabilities = {"simulated": False, "streaming": False, "maxContextChars": 80000,
                              "structuredOutput": True, "paid": True, "model": model}
 
     async def _chat(self, system, user):
         response = None
-        async with httpx.AsyncClient(timeout=120, trust_env=False) as client:
+        async with httpx.AsyncClient(timeout=120, trust_env=False, follow_redirects=False) as client:
             for base in self.bases:
                 try:
+                    await asyncio.to_thread(validate_provider_url, base, "text_base_url", resolve=True)
                     response = await client.post(base + "/v1/chat/completions",
                         headers={"Authorization": "Bearer " + self.api_key}, json={"model": self.model,
                             "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],

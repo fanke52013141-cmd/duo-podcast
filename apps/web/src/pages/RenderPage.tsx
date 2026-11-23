@@ -133,7 +133,7 @@ export function RenderPage({ projectId }: { projectId: string }) {
   const rendering = !!renderJob;
   const canRender = !!proj && !!timeline && timeline.revisionId === proj.currentDraftRevision
     && motionGenerationAllowed(proj.motionPack,pinnedReady.data?.ready)
-    && timeline.sampleCount > 0 && timeline.sampleCount <= 300 * timeline.sampleRate && !rendering;
+    && timeline.sampleCount > 0 && timeline.sampleCount <= 300 * timeline.sampleRate && !rendering && !render.isPending;
   const resolution = RESOLUTION_OPTIONS.find((r) => r.id === resolutionId)?.value ?? '854x480';
   const totalSecs = timeline ? timeline.sampleCount / (timeline.sampleRate || 48000) : 0;
   const isOverShoulder = latestVariant?.mode === 'overShoulder';
@@ -142,7 +142,7 @@ export function RenderPage({ projectId }: { projectId: string }) {
     && (proj.outputManifest.meta.generationProfile ?? 'accepted') === 'accepted';
 
   const handleRender = (localRedo = false) => {
-    if (!proj || !timeline) return;
+    if (!proj || !timeline || render.isPending) return;
     setError(null);
     render.mutate({
       projectId,
@@ -325,7 +325,7 @@ export function RenderPage({ projectId }: { projectId: string }) {
             });
           }} />
         <Button
-          variant="brand" icon="play" busy={rendering} disabled={!canRender}
+          variant="brand" icon="play" busy={rendering || render.isPending} disabled={!canRender}
           onClick={() => handleRender()}
         ><span id="render-generate-action">{rendering ? '执行中' : simulated ? '运行流程演示' : '生成候选成片'}</span></Button>
       </StageHead>

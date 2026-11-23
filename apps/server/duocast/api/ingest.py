@@ -11,6 +11,7 @@
 from __future__ import annotations
 
 import json
+import secrets
 
 from fastapi import APIRouter, HTTPException, Query, Request
 
@@ -21,12 +22,21 @@ SCHEMA_VERSION = "1.0"
 
 
 async def require_ingest_token(request: Request) -> None:
-    token = getattr(request.app.state.runtime_settings, "api_token", "") or ""
+    token = str(getattr(request.app.state.runtime_settings, "api_token", "") or "").strip()
     if not token:
-        return  # 本地单用户默认：服务只绑 127.0.0.1，不额外设卡
-    auth = request.headers.get("authorization", "")
-    if auth != f"Bearer {token}":
-        raise HTTPException(401, "Ingest 需要有效的 Bearer token（DUOCAST_API_TOKEN）")
+        return  # 本地单用户默认：启动门禁保证服务只绑定回环地址
+    scheme, separator, credential = request.headers.get("authorization", "").partition(" ")
+    if not (
+        separator
+        and scheme.lower() == "bearer"
+        and credential
+        and secrets.compare_digest(credential.encode("utf-8"), token.encode("utf-8"))
+    ):
+        raise HTTPException(
+            401,
+            "Ingest 需要有效的 Bearer token（DUOCAST_API_TOKEN）",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
 
 
 def _validate_envelope(meta: dict, kind: str) -> dict:

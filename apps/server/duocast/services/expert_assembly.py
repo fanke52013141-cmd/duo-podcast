@@ -1,12 +1,37 @@
 """Assemble verified adopted native cores with one authoritative master; no inference."""
 import asyncio
 import json
+import math
 from pathlib import Path
 from fastapi import HTTPException
 from .expert_candidates import current_project, verified_candidate
 from .expert_preview import digest
 from .render_inputs import dependency_hash
 from .owned_process import spawn_owned
+
+
+EXPORT_SIZE = (1280, 720)
+
+
+def roi_letterbox(source_size):
+    """Fit the complete native ROI/frame into 16:9 without anisotropic scaling."""
+    if (not isinstance(source_size, (list, tuple)) or len(source_size) < 2
+            or any(type(value) is not int or value <= 0 for value in source_size[:2])):
+        raise ValueError('Expert ROI 缺少有效原生尺寸')
+    source_width, source_height = source_size[:2]
+    export_width, export_height = EXPORT_SIZE
+    scale = min(export_width / source_width, export_height / source_height)
+    scaled_width = max(2, 2 * math.floor(source_width * scale / 2))
+    scaled_height = max(2, 2 * math.floor(source_height * scale / 2))
+    pad_x = (export_width - scaled_width) // 2
+    pad_y = (export_height - scaled_height) // 2
+    geometry = {'mode': 'letterbox', 'sourceSize': [source_width, source_height],
+                'scaledSize': [scaled_width, scaled_height], 'padding': [pad_x, pad_y],
+                'outputSize': [export_width, export_height]}
+    video_filter = (f'scale={scaled_width}:{scaled_height}:flags=lanczos,'
+                    'unsharp=5:5:0.45:5:5:0,'
+                    f'pad={export_width}:{export_height}:{pad_x}:{pad_y}:color=black,setsar=1')
+    return {'filter': video_filter, **geometry}
 
 
 def checked_artifact(artifacts, artifact_id, expected_hash=None):
@@ -34,6 +59,7 @@ def assembly_plan(state, project_id):
         raise HTTPException(422, '采用记录包含整期之外的窗口')
     missing = [id for id in expected if id not in selection['selected']]
     windows = []
+    source_sizes = set()
     cursor = 0
     for window_id in expected:
         if window_id in missing: continue
@@ -45,6 +71,12 @@ def assembly_plan(state, project_id):
         spec = next((w['segment'] for w in source['windows'] if w['windowId']==window_id), None)
         if not record or not spec or any(record.get(k)!=spec[k] for k in ('outputStartFrame','outputEndFrame','dependencyHash')):
             raise HTTPException(422, '候选缺少可验证的原生窗口，请重新生成')
+        native = spec.get('geometry', {}).get('native')
+        if native is not None:
+            if (not isinstance(native, (list, tuple)) or len(native) < 2
+                    or any(type(value) is not int or value <= 0 for value in native[:2])):
+                raise HTTPException(422, '候选原生 ROI 尺寸无效')
+            source_sizes.add(tuple(native[:2]))
         try:
             entry = checked_artifact(state.artifacts, record['artifactId'], record['fileHash'])
         except ValueError as error:
@@ -57,10 +89,14 @@ def assembly_plan(state, project_id):
         windows.append({**record, 'sourceJobId':job.id})
     if not missing and cursor != clock['totalFrames']:
         raise HTTPException(422, '已采用窗口未覆盖完整时间轨')
+    if len(source_sizes) > 1:
+        raise HTTPException(422, '已采用窗口的原生 ROI 尺寸不一致，不能混合合成')
     result = {'ready':not missing, 'reason':f'还缺少 {len(missing)} 个已采用窗口' if missing else '可以合成，无需模型生成',
         'executionProfile':plan.get('executionProfile','expert-full-frame-reference'),
         'selectionRevision':selection['revision'], 'snapshotId':selection['snapshotId'],
         'dependencyHash':dependency_hash(project), 'missingWindowIds':missing, 'windows':windows, **clock}
+    if source_sizes:
+        result['sourceSize'] = list(next(iter(source_sizes)))
     result['assemblyId'] = 'EA-'+digest(result)[:24]
     return result
 
@@ -72,12 +108,15 @@ class ExpertAssemblyService:
         self.state = state
 
     @staticmethod
-    def result(job,plan,artifact_id,path):
-        return {'artifactIds':[artifact_id], 'simulated':False,'meta':{'path':str(path),
+    def result(job,plan,artifact_id,path,export_geometry=None):
+        meta = {'path':str(path),
             'durationSec':plan['totalSamples']/plan['sampleRate'],'fps':25,'resolution':'1280x720',
             'assemblyId':plan['assemblyId'],'selectionRevision':plan['selectionRevision'],
             'qualityStatus':'needs_review','candidate':True,'dependencyHash':plan['dependencyHash'],
-            'modelCallsSubmitted':0,'expertAssemblyJobId':job.id}}
+            'modelCallsSubmitted':0,'expertAssemblyJobId':job.id}
+        if export_geometry is not None:
+            meta['exportGeometry'] = {key: value for key, value in export_geometry.items() if key != 'filter'}
+        return {'artifactIds':[artifact_id], 'simulated':False, 'meta':meta}
 
     async def command(self, *args, timeout=300):
         process = await spawn_owned(*map(str,args), stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
@@ -100,14 +139,17 @@ class ExpertAssemblyService:
         folder = state.artifacts.root/'expert-assembly'/job.id
         folder.mkdir(parents=True,exist_ok=True)
         artifact_id='VID-EXPERT-ASSEMBLY-'+job.id
+        roi_profile=plan['executionProfile']=='expert-sage-roi-v1'
+        export_geometry = roi_letterbox(plan['sourceSize']) if roi_profile and plan.get('sourceSize') else None
         existing=state.artifacts.by_id(artifact_id)
         if existing:
             await asyncio.to_thread(checked_artifact,state.artifacts,artifact_id)
             if (existing.get('paramsSnapshot')!=job.input_snapshot or Path(existing['path'])!=folder/'final.mp4'
                     or existing['dependencyHash']!=plan['dependencyHash']):
                 raise ValueError('已有整期产物身份不一致，拒绝覆盖')
-            return self.result(job,plan,artifact_id,existing['path'])
+            return self.result(job,plan,artifact_id,existing['path'],export_geometry)
         paths = []
+        source_sizes = set()
         for item in plan['windows']:
             state.job_manager.checkpoint(job)
             entry = await asyncio.to_thread(checked_artifact,state.artifacts,item['artifactId'],item['fileHash'])
@@ -115,7 +157,15 @@ class ExpertAssemblyService:
             video = next(s for s in probe['streams'] if s['codec_type']=='video')
             if int(video['nb_read_frames']) != item['outputEndFrame']-item['outputStartFrame'] or video['avg_frame_rate'] not in {'25/1','25'}:
                 raise ValueError('原生窗口帧数或帧率改变')
+            source_sizes.add((int(video['width']), int(video['height'])))
             paths.append(Path(entry['path']))
+        if roi_profile:
+            if len(source_sizes) != 1:
+                raise ValueError('已采用窗口的原生 ROI 尺寸不一致')
+            actual_size = next(iter(source_sizes))
+            if plan.get('sourceSize') and tuple(plan['sourceSize']) != actual_size:
+                raise ValueError('原生 ROI 尺寸与采用计划不一致')
+            export_geometry = roi_letterbox(actual_size)
         import wave
         with wave.open(master['path'],'rb') as audio:
             if (audio.getframerate(),audio.getnframes(),audio.getnchannels(),audio.getsampwidth()) != (plan['sampleRate'],plan['totalSamples'],1,2):
@@ -124,9 +174,8 @@ class ExpertAssemblyService:
         concat.write_text('\n'.join("file '"+p.as_posix().replace("'","'\\''")+"'" for p in paths),encoding='utf-8')
         partial, final = folder/'final.partial.mp4', folder/'final.mp4'
         duration = plan['totalSamples']/plan['sampleRate']
-        roi_profile=plan['executionProfile']=='expert-sage-roi-v1'
-        video_filter=('scale=1280:720:flags=lanczos,unsharp=5:5:0.45:5:5:0,setsar=1' if roi_profile
-                      else 'scale=1280:720:force_original_aspect_ratio=increase,crop=1280:720,setsar=1')
+        video_filter=(export_geometry['filter'] if export_geometry is not None else
+                      'scale=1280:720:force_original_aspect_ratio=increase,crop=1280:720,setsar=1')
         state.job_manager.set_stage(job,'合成已采用窗口与原始配音，不调用模型')
         await self.command('ffmpeg','-v','error','-y','-f','concat','-safe',0,'-i',concat,'-i',master['path'],
             '-map','0:v:0','-map','1:a:0','-vf',video_filter,
@@ -146,4 +195,4 @@ class ExpertAssemblyService:
         partial.replace(final)
         final_hash=await asyncio.to_thread(state.artifacts._hash_file,str(final))
         state.artifacts.register(artifact_id,'video',str(final),plan['dependencyHash'],job.input_snapshot,'expert-assembly-v1',file_hash=final_hash)
-        return self.result(job,plan,artifact_id,final)
+        return self.result(job,plan,artifact_id,final,export_geometry)

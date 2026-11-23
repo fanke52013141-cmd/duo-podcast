@@ -58,6 +58,9 @@ class Job(BaseModel):
     queue_class: QueueClass = "cpu"
     client_token: str = ""
     input_snapshot: dict[str, Any] = Field(default_factory=dict)
+    # Canonical request fingerprint. Older manifests leave this empty and are
+    # compared by their frozen snapshot on first reuse.
+    input_hash: str = ""
     # Providers may publish detailed stages; persisted jobs must accept them on reload.
     stage: str = "prepare"
     status: JobStatus = JobStatus.QUEUED
@@ -66,6 +69,7 @@ class Job(BaseModel):
     provider_task_id: Optional[str] = None
     attempt: int = 0
     error: Optional[str] = None
+    cancel_reason: Optional[str] = None
     retryable: bool = False
     result: Optional[dict[str, Any]] = None  # {artifactIds: [...]}
     completed_calls: dict[str, dict[str, Any]] = Field(default_factory=dict)

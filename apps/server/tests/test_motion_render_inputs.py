@@ -61,7 +61,16 @@ def test_camera_plan_uses_actual_reverse_views_on_integer_clock():
         {"cameraId": "view-A", "startFrame": 0, "endFrame": 26},
         {"cameraId": "view-B", "startFrame": 26, "endFrame": 250}]
     assets["style"] = "mixed"
-    assert camera_edit_plan(assets, turns, 48000)[0] == {"cameraId": "dual", "startFrame": 0, "endFrame": 50}
+    assert camera_edit_plan(assets, turns, 48000) == [
+        {"cameraId": "dual", "startFrame": 0, "endFrame": 50},
+        {"cameraId": "view-B", "startFrame": 50, "endFrame": 250}]
+    assets["plan"]["totalFrames"] = 100
+    assert camera_edit_plan(assets, [
+        {"speaker": "B", "startSample": 0},
+        {"speaker": "A", "startSample": 60000}], 48000) == [
+        {"cameraId": "dual", "startFrame": 0, "endFrame": 50},
+        {"cameraId": "view-A", "startFrame": 50, "endFrame": 100}]
+    assets["plan"]["totalFrames"] = 250
     del assets["cameras"]["view-B"]
     with pytest.raises(ValueError, match="不完整"):
         camera_edit_plan(assets, turns, 48000)

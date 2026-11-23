@@ -64,6 +64,15 @@ def seedvr2_short_side(target_w: int, target_h: int) -> int:
     return min(target_w, target_h)
 
 
+def exact_size_filter(target_w: int, target_h: int) -> str:
+    """Return a cover-scale filter that always produces the exact export canvas."""
+    if (type(target_w) is not int or type(target_h) is not int
+            or target_w <= 0 or target_h <= 0 or target_w % 2 or target_h % 2):
+        raise ValueError("SeedVR2 output dimensions must be positive even integers")
+    return (f"scale={target_w}:{target_h}:force_original_aspect_ratio=increase:flags=lanczos,"
+            f"crop={target_w}:{target_h},setsar=1")
+
+
 def seedvr2_command(cfg: dict, src: Path, out_dir: Path, target_w: int, target_h: int) -> list[str]:
     """构造 SeedVR2 CLI 命令（纯函数，CPU 可测）。
 
@@ -90,7 +99,7 @@ async def super_resolve_video(src: Path, dst: Path, target_w: int, target_h: int
 
     run: 异步命令执行器 async run(*args)->str（如 ComfyUIVideoProvider._command）。
     fps 参数保留接口兼容（SeedVR2 沿用输入帧率）。CLI 输出无音轨且沿用输入文件名；
-    视频流直接 copy 避免二次编码损失。
+    SeedVR2 只按短边缩放，因此回贴音轨时统一做保宽比 cover 缩放并精确裁切到目标画布。
     """
     cfg = find_seedvr2()
     if cfg is None:
@@ -99,6 +108,7 @@ async def super_resolve_video(src: Path, dst: Path, target_w: int, target_h: int
             "并放置 tools/seedvr2/inference_cli.py 与 tools/seedvr2_models/ 权重"
             "（seedvr2_ema_3b_fp8_e4m3fn.safetensors + ema_vae_fp16.safetensors）；"
             "或设 DUOCAST_EXPORT_SR=0 关闭超分")
+    size_filter = exact_size_filter(target_w, target_h)
     src, dst = Path(src), Path(dst)
     tmp = Path(workdir) if workdir else Path(tempfile.mkdtemp(prefix="duocast_seedvr2_"))
     out_dir = tmp / "seedvr2_out"
@@ -111,5 +121,6 @@ async def super_resolve_video(src: Path, dst: Path, target_w: int, target_h: int
             raise RuntimeError("SeedVR2 未产出超分视频")
         produced = candidates[0]
     await run("ffmpeg", "-v", "error", "-y", "-i", str(produced), "-i", str(src),
-              "-map", "0:v:0", "-map", "1:a:0", "-c:v", "copy",
+              "-map", "0:v:0", "-map", "1:a:0", "-vf", size_filter,
+              "-c:v", "libx264", "-preset", "fast", "-crf", "16", "-pix_fmt", "yuv420p",
               "-c:a", "aac", "-b:a", "192k", "-shortest", "-movflags", "+faststart", str(dst))

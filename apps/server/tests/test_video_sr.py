@@ -2,7 +2,7 @@
 
 SeedVR2 为唯一超分引擎（Real-ESRGAN 已移除）；默认关闭，渲染页 exportSr 选项按次开启，
 DUOCAST_EXPORT_SR=1 可全局默认开。验证开关解析（默认关/请求级覆盖/环境变量）、依赖定位、
-命令构造纯函数、超分判定、缺失依赖明确报错、音轨回贴不二次编码。
+命令构造纯函数、超分判定、缺失依赖明确报错、音轨回贴与精确尺寸归一化。
 真实画质/耗时留 GPU 按 44 号文档第十节实测。
 """
 from __future__ import annotations
@@ -132,6 +132,18 @@ def test_seedvr2_command_attention_override(tmp_path, monkeypatch):
 
 # ---------- 缺失依赖明确报错（不静默降级） ----------
 
+def test_super_resolve_rejects_invalid_size_before_engine(tmp_path, monkeypatch):
+    monkeypatch.setattr(video_sr, "find_seedvr2", lambda: {"python": Path("python"), "cli": Path("cli"), "model_dir": Path("models")})
+    calls = []
+
+    async def run(*args, **kwargs):
+        calls.append(args)
+
+    with pytest.raises(ValueError, match="positive even integers"):
+        asyncio.run(video_sr.super_resolve_video(tmp_path / "in.mp4", tmp_path / "out.mp4", 1921, 1080, 25, run))
+    assert calls == []
+
+
 def test_super_resolve_missing_deps_raises(tmp_path, monkeypatch):
     monkeypatch.setattr(video_sr, "find_seedvr2", lambda: None)
 
@@ -142,9 +154,23 @@ def test_super_resolve_missing_deps_raises(tmp_path, monkeypatch):
         asyncio.run(video_sr.super_resolve_video(tmp_path / "in.mp4", tmp_path / "out.mp4", 1920, 1080, 25, run))
 
 
-# ---------- 产出回贴：视频 copy + 原音轨 ----------
+# ---------- 精确尺寸归一化 ----------
 
-def test_seedvr2_mux_copy_and_audio(tmp_path, monkeypatch):
+def test_exact_size_filter_uses_cover_scale_and_exact_crop():
+    assert video_sr.exact_size_filter(1920, 1080) == (
+        "scale=1920:1080:force_original_aspect_ratio=increase:flags=lanczos,"
+        "crop=1920:1080,setsar=1")
+
+
+@pytest.mark.parametrize("width,height", [(0, 1080), (1920, -1), (1921, 1080), (1920.0, 1080)])
+def test_exact_size_filter_rejects_invalid_dimensions(width, height):
+    with pytest.raises(ValueError, match="positive even integers"):
+        video_sr.exact_size_filter(width, height)
+
+
+# ---------- 产出回贴：精确归一化 + 原音轨 ----------
+
+def test_seedvr2_mux_normalizes_size_and_audio(tmp_path, monkeypatch):
     py, cli, mdl = _seedvr2_tree(tmp_path)
     monkeypatch.setenv("DUOCAST_SEEDVR2_PYTHON", str(py))
     monkeypatch.setattr(video_sr, "_REPO_ROOT", tmp_path)
@@ -163,7 +189,9 @@ def test_seedvr2_mux_copy_and_audio(tmp_path, monkeypatch):
                                              workdir=tmp_path / "work"))
     assert len(calls) == 2
     mux = calls[1]
-    assert "-c:v copy" in " ".join(mux) and "-map 1:a:0" in " ".join(mux)
+    joined = " ".join(mux)
+    assert video_sr.exact_size_filter(1920, 1080) in joined
+    assert "-c:v libx264" in joined and "-map 1:a:0" in joined
 
 
 def test_seedvr2_no_output_raises(tmp_path, monkeypatch):

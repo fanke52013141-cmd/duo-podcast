@@ -108,7 +108,8 @@ def test_retry_inherits_snapshot_and_completed_calls(tmp_path):
     assert new.completed_calls == {"unit-key": {"audioAssetId": "AUD-1", "sampleCount": 48000}}
     assert new.retried_from == job.id
     assert new.attempt == job.attempt + 1
-    assert new.client_token == "t1-retry-1"
+    assert new.client_token == f"retry-of-{job.id}"
+    assert manager.retry(job.id).id == new.id
     # 原终态任务保留（审计链）
     assert manager.get(job.id).status == JobStatus.FAILED
 
@@ -122,8 +123,9 @@ def test_retry_token_increments_and_is_idempotent_per_attempt(tmp_path):
     manager.transition(first, JobStatus.RUNNING)
     manager.transition(first, JobStatus.FAILED)
     second = manager.retry(first.id)
-    assert second.client_token == "t1-retry-1-retry-1"
+    assert second.client_token == f"retry-of-{first.id}"
     assert second.retried_from == first.id
+    assert manager.retry(first.id).id == second.id
 
 
 def test_retry_rejects_non_terminal(tmp_path):

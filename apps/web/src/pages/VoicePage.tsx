@@ -1,4 +1,4 @@
-﻿/* ============================================================================
+/* ============================================================================
    HF-03 · 阶段③ 试听配音（真实数据流，01 §5 权威）
    主视图：左 语音引擎面板（固定 300px，引擎单选 + A/B 音色绑定）/ 右 配音清单（话轮级）
    底部：时长检查条 + TimelineBar（全应用唯一深色面，05 §1.5）
@@ -136,7 +136,7 @@ export function VoicePage({ projectId }: { projectId: string }) {
   // 合成许可：有工程、有话轮、没有正在进行的合成任务即可。
   // 已确认的配音也允许重做（11 报告 P2-16 + v3.1 死锁解除：重合成会替换当前时间轨
   // 并撤销 voice/sample 确认，voice_svc 写回规则）。
-  const canSynthesize = !!proj && !!revision && turnCount > 0 && !synthesizing;
+  const canSynthesize = !!proj && !!revision && turnCount > 0 && !synthesizing && !synth.isPending;
 
   const updateBinding = (spk: 'A' | 'B', patch: Partial<VoiceBinding>) => {
     if (!bs) return;
@@ -170,6 +170,7 @@ export function VoicePage({ projectId }: { projectId: string }) {
   }, [audJob.data, auditionJob]);
 
   const startAudition = (spk: 'A' | 'B') => {
+    if (audition.isPending) return;
     setError(null);
     audition.mutateAsync({ projectId, speaker: spk, text: auditionText.trim() || undefined, referenceAudio: bs?.[spk].localRefAudio ?? undefined })
       .then((r) => setAuditionJob({ id: r.jobId, spk }))
@@ -200,7 +201,7 @@ export function VoicePage({ projectId }: { projectId: string }) {
   };
 
   const handleSynthesize = () => {
-    if (!proj || !revision || !bs) return;
+    if (!proj || !revision || !bs || synth.isPending) return;
     setError(null);
     setSelectedUnitId(null);
     synth.mutate({
@@ -213,7 +214,7 @@ export function VoicePage({ projectId }: { projectId: string }) {
   };
 
   const handleUnitSynthesize = (turnId: string) => {
-    if (!proj || !revision || !bs) return;
+    if (!proj || !revision || !bs || synth.isPending) return;
     setError(null);
     synth.mutate({
       projectId, clientToken: crypto.randomUUID(), revisionId: revision.id,
@@ -547,7 +548,7 @@ export function VoicePage({ projectId }: { projectId: string }) {
                   {!ttsSimulated && (
                     <Button
                       variant="secondary" size="sm" icon="play"
-                      busy={auditionJob?.spk === spk.id} disabled={!!auditionJob}
+                      busy={audition.isPending || auditionJob?.spk === spk.id} disabled={!!auditionJob || audition.isPending}
                       title="合成一句话试听当前参考音色"
                       onClick={() => startAudition(spk.id)}
                     >{bs?.[spk.id].auditionState === 'passed' ? '再试听' : '试听'}</Button>

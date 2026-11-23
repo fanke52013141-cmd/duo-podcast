@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import os
 import re
 import uuid
 import asyncio
@@ -15,9 +16,74 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse
 
 from ..core.config import settings
+from ..services.owned_process import spawn_owned
 from ..services.visual_svc import apply_visual_variant
 
 router = APIRouter(prefix="/api", tags=["assets"])
+
+_MEDIA_PROTOCOL_WHITELIST = "file"
+_AUDIO_FORMAT_WHITELIST = "wav,mp3,flac,ogg,oga,opus,mp4,mov,m4a,matroska,webm,aac,ac3,eac3"
+_VIDEO_FORMAT_WHITELIST = "mp4,mov,m4v,matroska,webm,avi"
+_IMAGE_UPLOAD_LIMIT = 10 * 1024 * 1024
+_UPLOAD_READ_CHUNK = 64 * 1024
+
+
+def _local_media_path(value) -> Path:
+    """Return an existing absolute local file; never hand URI/UNC input to FFmpeg."""
+    raw = os.fspath(value)
+    if (not isinstance(raw, str) or not raw or "://" in raw
+            or raw.startswith(("\\\\", "//"))):
+        raise ValueError("媒体输入必须是本地普通文件")
+    path = Path(raw)
+    if not path.is_absolute():
+        raise ValueError("媒体输入必须使用绝对路径")
+    try:
+        resolved = path.resolve(strict=True)
+    except (OSError, RuntimeError) as exc:
+        raise ValueError("媒体输入文件不存在") from exc
+    if str(resolved).startswith(("\\\\", "//")) or not resolved.is_file():
+        raise ValueError("媒体输入必须是本地普通文件")
+    return resolved
+
+
+async def _run_media_command(executable: str, args: list[str], *, timeout: float):
+    """Run a bounded media command and always reap its owned process tree."""
+    process = await spawn_owned(
+        executable, *map(str, args),
+        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+    try:
+        stdout, stderr = await asyncio.wait_for(process.communicate(), timeout)
+        return process.returncode, stdout, stderr
+    finally:
+        await process.stop()
+
+
+async def _transcode_audio(source, target, *, timeout: float = 60, max_duration=None):
+    """Transcode one local audio file with network/playlist demuxers disabled."""
+    source = _local_media_path(source)
+    args = [
+        "-v", "error", "-nostdin",
+        "-protocol_whitelist", _MEDIA_PROTOCOL_WHITELIST,
+        "-format_whitelist", _AUDIO_FORMAT_WHITELIST,
+        "-i", str(source),
+    ]
+    if max_duration is not None:
+        args.extend(["-t", str(max_duration)])
+    args.extend(["-ar", "48000", "-ac", "1", "-c:a", "pcm_s16le", "-f", "wav", str(target)])
+    return await _run_media_command("ffmpeg", args, timeout=timeout)
+
+
+async def _read_upload_limited(upload, max_bytes: int, message: str) -> bytes:
+    """Read an upload incrementally and stop before retaining an oversized body."""
+    data = bytearray()
+    while True:
+        chunk = await upload.read(min(_UPLOAD_READ_CHUNK, max_bytes - len(data) + 1))
+        if not chunk:
+            break
+        data.extend(chunk)
+        if len(data) > max_bytes:
+            raise HTTPException(422, message)
+    return bytes(data)
 
 
 @router.post("/uploads/audio")
@@ -35,12 +101,10 @@ async def upload_audio(request: Request) -> dict:
     asset_id = "AUD-REF-" + uuid.uuid4().hex
     source, target = root / f"{asset_id}.source", root / f"{asset_id}.wav"
     source.write_bytes(data)
+    registered = False
     try:
-        process = await asyncio.create_subprocess_exec("ffmpeg", "-v", "error", "-y", "-i", str(source),
-            "-t", "30", "-ar", "48000", "-ac", "1", "-c:a", "pcm_s16le", str(target),
-            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
-        _, error = await process.communicate()
-        if process.returncode:
+        returncode, _, error = await _transcode_audio(source, target, timeout=60, max_duration=30)
+        if returncode:
             raise HTTPException(422, "无法读取参考音频：" + error.decode("utf-8", "replace")[-300:])
         import wave
         with wave.open(str(target)) as reader:
@@ -48,9 +112,16 @@ async def upload_audio(request: Request) -> dict:
                 raise HTTPException(422, "参考音频至少需要 1 秒")
         entry = store.register(asset_id, "audio", str(target), store._hash_file(str(target)),
                                {"source": "voiceReference"})
+        registered = True
         return {"artifactId": asset_id, "path": str(target), "fileHash": entry["fileHash"]}
+    except TimeoutError as exc:
+        raise HTTPException(422, "参考音频处理超时") from exc
+    except OSError as exc:
+        raise HTTPException(422, "媒体处理程序不可用") from exc
     finally:
         source.unlink(missing_ok=True)
+        if not registered:
+            target.unlink(missing_ok=True)
 
 _UPLOAD_SUBDIR = Path("uploads") / "images"
 _NAME_RE = re.compile(r"^[A-Za-z0-9._-]+$")
@@ -163,6 +234,8 @@ def save_uploaded_image(request: Request, data: bytes, filename: str) -> dict:
 
     供角色图片与阶段④底图上传共用；非 PNG/JPEG 一律 422。
     """
+    if not data or len(data) > _IMAGE_UPLOAD_LIMIT:
+        raise HTTPException(422, "图片必须为 0–10MB")
     is_png = data[:8] == _PNG_MAGIC
     is_jpeg = data[:3] == _JPEG_MAGIC
     if not (is_png or is_jpeg):
@@ -195,9 +268,7 @@ async def upload_scene(request: Request):
     upload = form.get("file")
     if upload is None or not hasattr(upload, "read"):
         raise HTTPException(422, "请选择 PNG/JPEG 场景图片")
-    data = await upload.read(10*1024*1024+1)
-    if len(data) > 10*1024*1024:
-        raise HTTPException(422, "场景图片超过 10MB")
+    data = await _read_upload_limited(upload, _IMAGE_UPLOAD_LIMIT, "场景图片超过 10MB")
     saved = save_uploaded_image(request, data, getattr(upload, "filename", ""))
     assets = request.app.state.artifacts
     entry = assets.register("IMG-SCENE-"+uuid.uuid4().hex, "image", saved["path"], saved["fileHash"],
@@ -276,9 +347,7 @@ async def upload_character_image(character_id: str, request: Request) -> dict:
     upload = form.get("file")
     if upload is None or not hasattr(upload, "read"):
         raise HTTPException(422, "缺少上传文件字段 file")
-    data = await upload.read()
-    if len(data) > 10 * 1024 * 1024:
-        raise HTTPException(422, "图片超过 10MB 限制")
+    data = await _read_upload_limited(upload, _IMAGE_UPLOAD_LIMIT, "图片超过 10MB 限制")
     saved = save_uploaded_image(request, data, getattr(upload, "filename", ""))
     web_path = saved["webPath"]
     updated = store.update(character_id, {"imagePath": web_path})
@@ -291,9 +360,7 @@ async def upload_image(request: Request) -> dict:
     upload = form.get("file")
     if upload is None or not hasattr(upload, "read"):
         raise HTTPException(422, "缺少上传文件字段 file")
-    data = await upload.read()
-    if len(data) > 10 * 1024 * 1024:
-        raise HTTPException(422, "图片超过 10MB 限制")
+    data = await _read_upload_limited(upload, _IMAGE_UPLOAD_LIMIT, "图片超过 10MB 限制")
     return save_uploaded_image(request, data, getattr(upload, "filename", ""))
 
 
@@ -333,9 +400,7 @@ async def upload_master_image(project_id: str, request: Request) -> dict:
     upload = form.get("file")
     if upload is None or not hasattr(upload, "read"):
         raise HTTPException(422, "缺少上传文件字段 file")
-    data = await upload.read()
-    if len(data) > 10 * 1024 * 1024:
-        raise HTTPException(422, "图片超过 10MB 限制")
+    data = await _read_upload_limited(upload, _IMAGE_UPLOAD_LIMIT, "图片超过 10MB 限制")
     saved = save_uploaded_image(request, data, getattr(upload, "filename", ""))
     aspect = str(form.get("aspect") or project.aspect)
     if aspect not in ("landscape", "portrait"):
@@ -415,9 +480,7 @@ async def import_variant(project_id: str, request: Request) -> dict:
     upload = form.get("file")
     if upload is None or not hasattr(upload, "read"):
         raise HTTPException(422, "缺少上传文件字段 file")
-    data = await upload.read(10 * 1024 * 1024 + 1)
-    if len(data) > 10 * 1024 * 1024:
-        raise HTTPException(422, "图片超过 10MB 限制")
+    data = await _read_upload_limited(upload, _IMAGE_UPLOAD_LIMIT, "图片超过 10MB 限制")
     saved = save_uploaded_image(request, data, getattr(upload, "filename", ""))
     aspect = str(payload.get("aspect") or project.aspect)
     if aspect not in ("landscape", "portrait"):

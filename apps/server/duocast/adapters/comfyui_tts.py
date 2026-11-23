@@ -135,23 +135,42 @@ class ComfyUITTSProvider:
     def _ensure_ref_in_input(self, speaker: str, reference=None) -> str:
         if hasattr(reference, "model_dump"):
             reference = reference.model_dump(by_alias=True)
-        if reference and reference.get("artifactId"):
+        expected_hash = ""
+        artifact_reference = bool(reference and reference.get("artifactId"))
+        if artifact_reference:
             entry = self.artifacts.by_id(reference["artifactId"])
             if not entry or entry["kind"] != "audio":
                 raise RuntimeError("TTS_NO_REF: 参考音频资产不存在")
-            src = entry["path"]
+            src = entry.get("path")
+            expected_hash = entry.get("fileHash") or ""
+            # 调用方保存的引用哈希也必须与当前登记一致，避免复用旧绑定。
+            if reference.get("fileHash") and reference["fileHash"] != expected_hash:
+                raise RuntimeError("TTS_REF_HASH: 参考音频绑定哈希与产物登记不一致")
         else:
             src = self.refs.get(speaker) or self.refs.get("A")
         if not src:
             raise RuntimeError("TTS_NO_REF: 未配置声线参考音频（DUOCAST_TTS_REF_A/B）")
         src = Path(src)
-        if not src.exists():
+        if not src.is_file():
             raise RuntimeError(f"TTS_NO_REF: 参考音频不存在 {src}")
-        name = f"duocast_ref_{speaker}_{self.artifacts._hash_file(str(src))[:16]}{src.suffix.lower()}"
+        try:
+            payload = src.read_bytes()
+        except OSError as exc:
+            raise RuntimeError(f"TTS_NO_REF: 参考音频无法读取 {src}") from exc
+        source_hash = hashlib.sha256(payload).hexdigest()
+        if artifact_reference and not expected_hash:
+            raise RuntimeError("TTS_REF_HASH: 参考音频产物登记缺少 fileHash")
+        if expected_hash and source_hash != expected_hash:
+            raise RuntimeError("TTS_REF_HASH: 参考音频物理哈希与产物登记不一致")
+        name = f"duocast_ref_{speaker}_{source_hash[:16]}{src.suffix.lower()}"
         dst = self.input_dir / name
-        if not dst.exists() or dst.stat().st_size != src.stat().st_size:
-            self.input_dir.mkdir(parents=True, exist_ok=True)
-            dst.write_bytes(src.read_bytes())
+        self.input_dir.mkdir(parents=True, exist_ok=True)
+        # 文件名带哈希，但现存文件仍可能被同内容替换或损坏；不能只比较大小。
+        if not dst.is_file() or self.artifacts._hash_file(str(dst)) != source_hash:
+            dst.write_bytes(payload)
+        copied_hash = self.artifacts._hash_file(str(dst))
+        if copied_hash != source_hash:
+            raise RuntimeError("TTS_REF_HASH: 参考音频复制后哈希校验失败")
         return name
 
     def _http_json(self, path: str, payload: dict | None = None) -> dict:
@@ -190,6 +209,9 @@ class ComfyUITTSProvider:
             raise ValueError("语速必须大于 0")
         speaker = self._speaker_of(req)
         ref_name = self._ensure_ref_in_input(speaker, req.get("referenceAudio"))
+        reference_hash = self.artifacts._hash_file(str(self.input_dir / ref_name))
+        if not reference_hash:
+            raise RuntimeError("TTS_REF_HASH: 参考音频复制后无法读取")
 
         wf = copy.deepcopy(WORKFLOW)
         wf["2"]["inputs"]["text_文本"] = text
@@ -214,7 +236,7 @@ class ComfyUITTSProvider:
         audio_dir = self.artifacts_root / "audio"
         audio_dir.mkdir(parents=True, exist_ok=True)
         dependency_hash = hashlib.sha256(
-            json.dumps([text, speaker, speed, a["filename"]], ensure_ascii=False).encode()
+            json.dumps([text, speaker, speed, reference_hash, a["filename"]], ensure_ascii=False).encode()
         ).hexdigest()[:16]
         artifact_id = f"AUD-{uuid.uuid4().hex[:12]}"
         path = audio_dir / f"{artifact_id}.wav"

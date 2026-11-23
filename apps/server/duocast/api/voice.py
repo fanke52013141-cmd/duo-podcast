@@ -8,6 +8,7 @@ import wave
 from fastapi import APIRouter, HTTPException, Request
 
 from ..jobs.manager import JobManager
+from .assets import _transcode_audio
 from ..services.voice_svc import adopt_unit_candidate, find_revision
 from ..services.voice_svc import retime_adopted_audio, effective_pronunciation
 
@@ -18,6 +19,14 @@ def _merged_pronunciation(request: Request, project) -> list[dict]:
     """合成用读音词典：先全局（machine.json）后本工程，同词条工程级覆盖全局。"""
     machine = getattr(request.app.state, "machine", None)
     return effective_pronunciation(project, machine.get_global_pronunciation() if machine is not None else [])
+
+
+def _requires_voice_media(request: Request) -> bool | None:
+    """真实 TTS 的采用命令必须重建可校验母轨；mock 演示保持无媒体流程。"""
+    runtime = getattr(request.app.state, "runtime_settings", None)
+    if runtime is None:
+        return None  # 单测/旧装配场景由服务层按已保存声线判断
+    return (getattr(runtime, "tts_provider", "mock") or "mock") != "mock"
 
 
 @router.post("/synthesize")
@@ -105,10 +114,15 @@ async def adopt(project_id: str, unit_id: str, payload: dict, request: Request) 
     if not isinstance(candidate_asset_id, str) or not candidate_asset_id.strip():
         raise HTTPException(422, "candidateAudioAssetId 必须是非空字符串")
     try:
+        project = request.app.state.project_store.load(project_id)
+        if project is None:
+            raise KeyError("PROJECT_NOT_FOUND")
         timeline = adopt_unit_candidate(
             request.app.state.project_store, project_id, unit_id, candidate_asset_id,
             artifact_store=request.app.state.artifacts,
             artifacts_root=request.app.state.artifacts.root,
+            pronunciation=_merged_pronunciation(request, project),
+            require_media=_requires_voice_media(request),
         )
     except KeyError as exc:
         if str(exc).strip("\"") == "PROJECT_NOT_FOUND":
@@ -128,7 +142,6 @@ async def import_unit_audio(project_id: str, unit_id: str, request: Request) -> 
     转码为 48kHz PCM16 单声道（母轨权威规格）→ 登记资产 → 注入为候选；
     不自动采用，人试听后走现有 /units/{id}/adopt 采纳。
     """
-    import asyncio
     import json as _json
     from ..services.voice_svc import attach_unit_candidate
     store = request.app.state.project_store
@@ -159,12 +172,8 @@ async def import_unit_audio(project_id: str, unit_id: str, request: Request) -> 
     source.write_bytes(data)
     registered = False
     try:
-        process = await asyncio.create_subprocess_exec(
-            "ffmpeg", "-v", "error", "-y", "-i", str(source),
-            "-ar", "48000", "-ac", "1", "-c:a", "pcm_s16le", str(target),
-            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
-        _, error = await process.communicate()
-        if process.returncode:
+        returncode, _, error = await _transcode_audio(source, target, timeout=120)
+        if returncode:
             raise HTTPException(422, "无法读取上传音频：" + error.decode("utf-8", "replace")[-300:])
         with wave.open(str(target)) as reader:
             sample_count = reader.getnframes()
@@ -184,6 +193,10 @@ async def import_unit_audio(project_id: str, unit_id: str, request: Request) -> 
         raise HTTPException(404, "project not found") from exc
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
+    except TimeoutError as exc:
+        raise HTTPException(422, "音频转码超时") from exc
+    except OSError as exc:
+        raise HTTPException(422, "媒体处理程序不可用") from exc
     finally:
         source.unlink(missing_ok=True)
         if not registered:

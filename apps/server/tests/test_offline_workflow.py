@@ -24,10 +24,10 @@ def client(tmp_path, monkeypatch):
 def test_config_preflight_does_not_persist_or_contact_a_provider(client, monkeypatch):
     monkeypatch.delenv('DUOCAST_TEST_ABSENT', raising=False)
     before = client.get('/api/machine').json()['runtimeConfig']
-    invalid = {'text_provider':'toapis','text_base_url':'https://example.com/v1','credential_env':'DUOCAST_TEST_ABSENT'}
+    invalid = {'text_provider':'toapis','text_base_url':'https://toapis.com/v1','credential_env':'DUOCAST_TEST_ABSENT'}
     result = client.post('/api/machine/validate-config', json={'runtimeConfig':invalid}).json()
     assert not result['valid'] and len(result['errors']) == 2
-    valid = {**invalid,'text_base_url':'https://example.com','text_model':'test-model'}
+    valid = {**invalid,'text_base_url':'https://toapis.com','text_model':'test-model'}
     result = client.post('/api/machine/validate-config', json={'runtimeConfig':valid}).json()
     assert result['valid'] and result['warnings']
     assert client.get('/api/machine').json()['runtimeConfig'] == before

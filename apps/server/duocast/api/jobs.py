@@ -6,7 +6,7 @@ from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Query, Request
 
-from ..jobs.manager import JobManager
+from ..jobs.manager import JobInputConflict, JobManager
 from ..storage.project_store import InvalidProjectInput
 
 router = APIRouter(prefix="/api/jobs", tags=["jobs"])
@@ -111,16 +111,19 @@ async def abandon_job(job_id: str, request: Request) -> dict:
 
 
 @router.post("/{job_id}/retry")
-async def retry_job(job_id: str, request: Request) -> dict:
+async def retry_job(job_id: str, request: Request, payload: dict | None = None) -> dict:
     """P0-B（42 号方案）：失败/取消/未知任务原地重试。
 
     派生新任务继承输入快照与已完成单元账本，只补失败段；
     外部付费任务（motion.prepare / UNKNOWN 渲染）有专门护栏，返回 409 指路。
     """
     try:
-        job = _manager(request).retry(job_id)
+        key = str((payload or {}).get("idempotencyKey") or (payload or {}).get("clientToken") or "")
+        job = _manager(request).retry(job_id, key)
     except KeyError as exc:
         raise HTTPException(404, str(exc)) from exc
+    except JobInputConflict as exc:
+        raise HTTPException(409, str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(409, str(exc)) from exc
     return job.model_dump(mode="json", by_alias=True)

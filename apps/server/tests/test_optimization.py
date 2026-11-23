@@ -13,7 +13,7 @@ from duocast.core.eventbus import EventBus
 from duocast.domain.audio import AudioTimeline
 from duocast.domain.job import JobStatus
 from duocast.domain.project import Approval, ScriptRevision, StageState, Turn, Line
-from duocast.jobs.manager import JobManager
+from duocast.jobs.manager import JobInputConflict, JobManager
 from duocast.jobs.recovery import recover_on_startup
 from duocast.services.script_svc import apply_script_revision
 from duocast.services.stage_svc import derive_stage_states
@@ -116,7 +116,9 @@ def test_job_snapshot_and_idempotency_are_scoped(tmp_path):
     first = manager.submit('test', 'one', 'gpu', 'token', snapshot)
     snapshot['nested']['text'] = 'edited'
     assert first.input_snapshot['nested']['text'] == 'original'
-    assert manager.submit('test', 'one', 'gpu', 'token', {}).id == first.id
+    with pytest.raises(JobInputConflict):
+        manager.submit('test', 'one', 'gpu', 'token', {})
+    assert manager.submit('test', 'one', 'gpu', 'token', {'nested': {'text': 'original'}}).id == first.id
     assert manager.submit('test', 'two', 'gpu', 'token', {}).id != first.id
     assert manager.submit('another-kind', 'one', 'gpu', 'token', {}).id != first.id
     for i in range(10):

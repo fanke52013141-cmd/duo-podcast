@@ -8,11 +8,12 @@ from __future__ import annotations
 
 import json
 import re
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import ValidationError
 
-from ..domain.project import Project
+from ..domain.project import Approval, Project
 from ..services.motion_binding import resolve_motion_binding
 from ..services.stage_svc import derive_stage_states
 from ..services.render_inputs import dependency_hash, validate_render_options, visual_dependency_hash
@@ -195,6 +196,37 @@ async def delete_project(project_id: str, request: Request) -> dict:
     except OSError as exc:
         raise HTTPException(500, f"删除失败（目录被占用或权限不足）: {exc}") from exc
     return {"deleted": project_id, "jobsMoved": moved_jobs}
+
+
+@router.post("/{project_id}/approvals")
+async def append_approval(project_id: str, payload: dict, request: Request) -> dict:
+    """Append one confirmation atomically; clients never replace the audit list."""
+    store = _init_store(request)
+    project = store.load(project_id)
+    if project is None:
+        raise HTTPException(404, "工程不存在")
+    kind = payload.get("kind")
+    if kind not in CONFIRM_KINDS:
+        raise HTTPException(422, "未知确认类型")
+    spec = payload.get("spec") or {}
+    if not isinstance(spec, dict):
+        raise HTTPException(422, "确认 spec 必须是对象")
+    approval = Approval(
+        kind=kind,
+        input_revision_id=str(payload.get("inputRevisionId") or ""),
+        spec=spec,
+        decision="accepted",
+        note=str(payload.get("note") or "")[:500],
+        at=datetime.now(timezone.utc).isoformat(timespec="milliseconds"),
+    ).model_dump(mode="json", by_alias=True)
+    approvals = [item.model_dump(mode="json", by_alias=True) for item in project.approvals]
+    approvals.append(approval)
+    # Reuse the existing binding/sample validation and revision check. If another
+    # writer wins the race, apply() returns 409 instead of overwriting its record.
+    return await patch_project(project_id, {
+        "expectedRevision": project.revision,
+        "approvals": approvals,
+    }, request)
 
 
 def _validate_confirm_bindings(store: ProjectStore, project_id: str, approvals: list) -> None:

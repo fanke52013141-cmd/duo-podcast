@@ -21,9 +21,13 @@ def test_legacy_hashes_and_default_mode():
     assert visual_dependency_hash(fast)!=visual_dependency_hash(project)
 
 def fake_install(root):
-    for name in ('worker.py','quality.py','render_geometry.py','assets/manifest.json','venv/Scripts/python.exe','assets/stage.png','assets/parsing_bisenet.pth',
+    for name in ('worker.py','motion_worker.py','motion_audio_cache.py','resident_worker.py','face_restore.py',
+        'quality.py','render_geometry.py','assets/manifest.json','venv/Scripts/python.exe','assets/stage.png','assets/parsing_bisenet.pth',
         'assets/template_A.mp4','assets/template_B.mp4','assets/face_coordinates.json',
-        'models/musetalkV15/unet.pth','models/sd-vae/diffusion_pytorch_model.bin','models/whisper/pytorch_model.bin'):
+        'models/musetalkV15/unet.pth','models/musetalkV15/musetalk.json',
+        'models/sd-vae/config.json','models/sd-vae/diffusion_pytorch_model.bin',
+        'models/whisper/config.json','models/whisper/pytorch_model.bin',
+        'vendor/MuseTalk/musetalk/models/vae.py'):
         path=root/name
         path.parent.mkdir(exist_ok=True,parents=True)
         path.write_bytes(b'test fixture')
@@ -54,6 +58,30 @@ def test_create_validation_and_template_persistence(tmp_path,monkeypatch):
         reread=client.get('/api/projects/FAST').json()
         assert reread['generationMode']=='fast'
         assert client.patch('/api/projects/FAST',json={'generationMode':'standard','expectedRevision':project.revision}).status_code==422
+
+def test_template_identity_covers_models_vendor_worker_and_packages(tmp_path):
+    from duocast.adapters.musetalk_video import template_identity
+    root = tmp_path/'engine'
+    fake_install(root)
+    metadata = root/'venv/Lib/site-packages/torch-1.0.dist-info/METADATA'
+    metadata.parent.mkdir(parents=True)
+    metadata.write_text('Name: torch\nVersion: 1.0\n', encoding='utf-8')
+    original = template_identity(root)
+    assert original['runtimeIdentity'] == template_identity(root)['runtimeIdentity']
+    before_optional_removal = original['version']
+    (root/'resident_worker.py').unlink()
+    original = template_identity(root)
+    assert original['version'] != before_optional_removal
+    from duocast.adapters.musetalk_video import require_engine
+    assert require_engine(root) == root
+    for name in ('models/musetalkV15/unet.pth', 'models/sd-vae/diffusion_pytorch_model.bin',
+                 'models/whisper/pytorch_model.bin', 'vendor/MuseTalk/musetalk/models/vae.py',
+                 'face_restore.py', 'venv/Lib/site-packages/torch-1.0.dist-info/METADATA'):
+        path = root/name
+        path.write_bytes(path.read_bytes()+b'changed')
+        assert template_identity(root)['version'] != original['version'], name
+        original = template_identity(root)
+
 
 def test_master_mixed_audio_and_tamper_detection(tmp_path):
     artifacts=ArtifactStore(tmp_path)

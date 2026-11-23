@@ -57,4 +57,5 @@ def test_demo_flow_and_restart_do_not_invent_media(tmp_path, monkeypatch):
         assert client.get(f'/api/jobs/{render_job}').json()['status'] == 'succeeded'
         assert client.get(base).json()['audioTimeline']['sampleCount'] == audio['sampleCount']
         duplicate = client.post(base + '/script/generate', json={'clientToken': 'script-token'})
-        assert duplicate.json()['jobId'] == submitted.json()['jobId']
+        assert duplicate.status_code == 409
+        assert client.get(f'/api/jobs/{submitted.json()["jobId"]}').json()['status'] == 'succeeded'
