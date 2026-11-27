@@ -75,8 +75,11 @@ async def sample(project_id: str, payload: dict, request: Request) -> dict:
         planned = representative_range(project)
         if planned:
             payload = {**payload, "rangeStartSec": planned["start"], "rangeEndSec": planned["end"]}
+    runtime = getattr(request.app.state, "runtime_settings", None)
+    vidu_active = (getattr(runtime, "video_provider", "mock") == "vidu"
+                   and not request.app.state.capabilities.video.get("simulated", True))
     validate_render_options(project, payload, _merged_pronunciation(request, project),
-                            real_video=not request.app.state.capabilities.video.get("simulated", True))
+                            real_video=not request.app.state.capabilities.video.get("simulated", True) and not vidu_active)
     validate_motion_source(project, payload, request.app.state.artifacts)
     timeline = project.audio_timeline
     if timeline is None or timeline.sample_count <= 0 or timeline.sample_rate <= 0:
@@ -91,6 +94,29 @@ async def sample(project_id: str, payload: dict, request: Request) -> dict:
     revision_id = payload.get("revisionId") or project.current_draft_revision
     if timeline.revision_id != revision_id or revision_id != project.current_draft_revision:
         raise HTTPException(409, "配音已过期，请先采用当前脚本对应的配音")
+    vidu_fields = {}
+    if vidu_active:
+        runtime = request.app.state.runtime_settings
+        model = runtime.vidu_model
+        duration = max(1, min(16, round(float(end) - float(start))))
+        end = float(start) + duration
+        if end > total + 0.2:
+            raise HTTPException(422, "Vidu 样片至少需要 1 秒配音，请调整样片区间")
+        visual_id = resolve_visual_id(project, payload)
+        visual = next((item for item in project.visual_variants if item.id == visual_id), None)
+        image_id = visual.master_image.artifact_id if visual else ""
+        mode = "reference" if model == "3.4" else "first-frame"
+        if not image_id and model == "3.4":
+            raise HTTPException(422, "Vidu Q4 样片需要一张已登记的参考图")
+        vidu_fields = {
+            "provider": "vidu", "mode": "api", "requestKey": client_token,
+            "prompt": "双人播客场景中人物自然眨眼并做轻微动作，镜头稳定，保持人物身份、服装与构图。",
+            "viduModel": model, "viduMode": mode if image_id else "text",
+            "viduDuration": duration, "viduResolution": "540p" if model == "3.4" else "1080p",
+            "viduRatio": "9:16" if project.aspect == "portrait" else "16:9",
+            "imageArtifactIds": [image_id] if image_id else [],
+            "withMasterAudio": bool(timeline.master_audio_asset_id),
+        }
     snapshot = {
         "revisionId": revision_id,
         "resolution": payload.get("resolution", "854x480"),
@@ -113,6 +139,7 @@ async def sample(project_id: str, payload: dict, request: Request) -> dict:
         "rangeEndSec": float(end),
         "aspect": payload.get("aspect", project.aspect),
         "projectId": project_id,
+        **vidu_fields,
     }
     if project.motion_pack is not None and project.generation_mode == 'fast':
         from ..services.motion_runtime_identity import freeze_motion_runtime
@@ -123,7 +150,7 @@ async def sample(project_id: str, payload: dict, request: Request) -> dict:
     job = manager.submit(
         kind="sample.generate",
         project_id=project_id,
-        queue_class="cpu" if snapshot["cacheOnly"] else "gpu",
+        queue_class="api" if vidu_active else "cpu" if snapshot["cacheOnly"] else "gpu",
         client_token=client_token,
         input_snapshot=snapshot,
     )

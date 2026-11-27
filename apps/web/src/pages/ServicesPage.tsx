@@ -7,7 +7,17 @@ import { useProjectStore } from '../stores';
 import { sendJson } from '../lib/api';
 
 const CHANNELS = [{key:'text', label:'文本', real:'toapis'}, {key:'image', label:'图片', real:'toapis'}, {key:'tts', label:'语音', real:'comfyui'}, {key:'video', label:'视频', real:'comfyui'}];
-const DEFAULTS: Record<string, string | number> = {text_provider:'mock',image_provider:'mock',tts_provider:'mock',video_provider:'mock',text_model:'deepseek-flash',text_base_url:'https://toapis.com',image_base_url:'https://toapis.com',comfyui_url:'http://127.0.0.1:8188',video_url:'http://127.0.0.1:8191',credential_env:'DUOCAST_TOAPIS_KEY',budget_yuan:2};
+const DEFAULTS: Record<string, string | number> = {
+  text_provider:'mock',image_provider:'mock',tts_provider:'mock',video_provider:'mock',
+  text_model:'deepseek-flash',text_base_url:'https://toapis.com',image_base_url:'https://toapis.com',
+  comfyui_url:'http://127.0.0.1:8188',video_url:'http://127.0.0.1:8191',
+  vidu_base_url:'https://service.vidu.cn',vidu_model:'3.4',
+  minimax_base_url:'https://api.minimaxi.com',minimax_model:'speech-2.8-hd',
+  minimax_voice_a:'male-qn-qingse',minimax_voice_b:'',
+  volcengine_base_url:'https://openspeech.bytedance.com',volcengine_model:'seed-audio-1.0',
+  volcengine_voice_a:'',volcengine_voice_b:'',
+  credential_env:'DUOCAST_TOAPIS_KEY',budget_yuan:2,
+};
 
 export function ServicesPage() {
   const machine = useMachine();
@@ -21,7 +31,13 @@ export function ServicesPage() {
   const [validation,setValidation] = useState<{valid:boolean;errors:string[];warnings:string[]}|null>(null);
   const [diagnostics,setDiagnostics] = useState<Record<string,unknown>|null>(null);
   useEffect(()=>{
-    if(machine.data) setConfig({...DEFAULTS,...Object.fromEntries(Object.entries(machine.data.activeConfig ?? {}).filter(([,v])=>typeof v!=='boolean')) as Record<string,string|number>,...machine.data.runtimeConfig});
+    if(machine.data) setConfig({
+      ...DEFAULTS,
+      // activeConfig 还包含诊断快照（如 video_acceleration），不能混入可保存表单。
+      ...Object.fromEntries(Object.entries(machine.data.activeConfig ?? {})
+        .filter(([key,value])=>key in DEFAULTS && (typeof value==='string'||typeof value==='number'))) as Record<string,string|number>,
+      ...machine.data.runtimeConfig,
+    });
   },[machine.data]);
   const change=(key:string,value:string|number)=>{setValidation(null);setConfig(s=>({...s,[key]:value}));};
   const validate=async()=>{setValidating(true);try{const result=await sendJson<{valid:boolean;errors:string[];warnings:string[]}>('/machine/validate-config','POST',{runtimeConfig:config});setValidation(result);return result.valid;}catch(e){setMessage((e as Error).message);return false;}finally{setValidating(false);}};
@@ -34,11 +50,47 @@ export function ServicesPage() {
         <div className="hf-formcol">
           {CHANNELS.map(c=><section className="hf-block" key={c.key}>
             <h3 className="hf-block-t">{c.label}服务</h3>
-            <Field label="提供方"><select className="wu-input" aria-label={c.label+'提供方'} value={config[c.key+'_provider']} onChange={e=>change(c.key+'_provider',e.target.value)}><option value="mock">演示 · 不产真实媒体</option><option value={c.real}>{c.real} · 真实服务</option></select></Field>
+            <Field label="提供方"><select className="wu-input" aria-label={c.label+'提供方'} value={config[c.key+'_provider']} onChange={e=>change(c.key+'_provider',e.target.value)}>
+              <option value="mock">{c.key==='text'?'本地规则生成 · 演示草稿':'演示 · 不产真实媒体'}</option>
+              {c.key === 'tts' ? <>
+                <option value="comfyui">本地 ComfyUI · IndexTTS 2.5</option>
+                <option value="minimax">MiniMax · 异步云端语音</option>
+                <option value="volcengine">火山引擎 · 语音合成 1.0</option>
+              </> : c.key === 'video' ? <>
+                <option value="comfyui">comfyui · 本地真实服务</option>
+                <option value="vidu">Vidu · 云端视频生成</option>
+              </> : <option value={c.real}>{c.real} · 真实服务</option>}
+            </select></Field>
             {(c.key==='text'||c.key==='image') && <Field label="服务根地址"><Input aria-label={c.label+'服务根地址'} value={config[c.key+'_base_url']} onChange={e=>change(c.key+'_base_url',e.target.value)}/></Field>}
             {c.key==='text' && <Field label="模型"><Input aria-label="文本模型" value={config.text_model} onChange={e=>change('text_model',e.target.value)}/></Field>}
             {c.key==='image' && <p className="wu-caption">图片能力 <InfoTip text="图片适配器使用 gpt-image-2-vip 文生图；人物参考编辑尚未开放，可上传已审看的双人底图。" /></p>}
-            {(c.key==='tts'||c.key==='video') && <Field label="引擎地址"><Input aria-label={c.label+'引擎地址'} value={config[c.key==='tts'?'comfyui_url':'video_url']} onChange={e=>change(c.key==='tts'?'comfyui_url':'video_url',e.target.value)}/></Field>}
+            {c.key==='video' && config.video_provider==='comfyui' && <Field label="引擎地址"><Input aria-label="视频引擎地址" value={config.video_url} onChange={e=>change('video_url',e.target.value)}/></Field>}
+            {c.key==='video' && config.video_provider==='vidu' && <div className="wu-stack">
+              <Field label="Vidu BaseURL"><select className="wu-input" aria-label="Vidu BaseURL" value={config.vidu_base_url} onChange={e=>change('vidu_base_url',e.target.value)}>
+                <option value="https://service.vidu.cn">https://service.vidu.cn</option>
+                <option value="https://service.vidu.com">https://service.vidu.com</option>
+              </select></Field>
+              <Field label="Vidu 模型"><select className="wu-input" aria-label="Vidu 模型" value={config.vidu_model} onChange={e=>change('vidu_model',e.target.value)}>
+                <option value="3.4">3.4 · Q4 参考生视频</option>
+                <option value="3.2">3.2 · Q3 多模式</option>
+              </select></Field>
+              <Alert tone="info">在启动服务的系统环境中设置 DUOCAST_VIDU_TOKEN。当前进程{machine.data?.activeConfig?.viduCredentialPresent?'已读取凭据':'未读取凭据'}；此页面不接收或保存密钥。</Alert>
+            </div>}
+            {c.key==='tts' && config.tts_provider==='comfyui' && <Field label="本地引擎地址"><Input aria-label="语音引擎地址" value={config.comfyui_url} onChange={e=>change('comfyui_url',e.target.value)}/></Field>}
+            {c.key==='tts' && config.tts_provider==='minimax' && <div className="wu-stack">
+              <Field label="MiniMax 服务根地址"><Input aria-label="MiniMax 服务根地址" value={config.minimax_base_url} onChange={e=>change('minimax_base_url',e.target.value)}/></Field>
+              <Field label="MiniMax 模型"><Input aria-label="MiniMax 模型" value={config.minimax_model} onChange={e=>change('minimax_model',e.target.value)}/></Field>
+              <Field label="A 默认 voice_id"><Input aria-label="MiniMax A voice_id" value={config.minimax_voice_a} onChange={e=>change('minimax_voice_a',e.target.value)}/></Field>
+              <Field label="B 默认 voice_id"><Input aria-label="MiniMax B voice_id" value={config.minimax_voice_b} onChange={e=>change('minimax_voice_b',e.target.value)} placeholder="可在配音页单独填写"/></Field>
+              <Alert tone="info">在启动服务的系统环境中设置 DUOCAST_MINIMAX_API_KEY。当前进程{machine.data?.activeConfig?.minimaxCredentialPresent?'已读取凭据':'未读取凭据'}；密钥不会保存到此页面或工程。</Alert>
+            </div>}
+            {c.key==='tts' && config.tts_provider==='volcengine' && <div className="wu-stack">
+              <Field label="火山语音服务根地址"><Input aria-label="火山语音服务根地址" value={config.volcengine_base_url} onChange={e=>change('volcengine_base_url',e.target.value)}/></Field>
+              <Field label="火山模型"><Input aria-label="火山模型" value={config.volcengine_model} readOnly/></Field>
+              <Field label="A 默认 speaker"><Input aria-label="火山 A speaker" value={config.volcengine_voice_a} onChange={e=>change('volcengine_voice_a',e.target.value)} placeholder="例如你的音色 ID"/></Field>
+              <Field label="B 默认 speaker"><Input aria-label="火山 B speaker" value={config.volcengine_voice_b} onChange={e=>change('volcengine_voice_b',e.target.value)} placeholder="可在配音页单独填写"/></Field>
+              <Alert tone="info">在启动服务的系统环境中设置 DUOCAST_VOLCENGINE_API_KEY。当前进程{machine.data?.activeConfig?.volcengineCredentialPresent?'已读取凭据':'未读取凭据'}；使用 X-Api-Key 调用，不在此页面保存密钥。</Alert>
+            </div>}
             <Badge tone="muted">{machine.data?.capabilities[c.key==='text'?'textApi':c.key==='image'?'imageApi':c.key as 'tts'|'video']?.mode==='mock'?'演示可运行':'已装配 · 待检测及样片验证'}</Badge>
             <Button variant="secondary" busy={test.isPending} onClick={()=>test.mutate(c.key,{onSuccess:r=>setResults(s=>({...s,[c.key]:(r.simulated?'演示自检：':'')+(r.message??r.error??'检测完成')+(r.checkedAt?' · '+new Date(r.checkedAt).toLocaleTimeString(): '')})),onError:e=>setResults(s=>({...s,[c.key]:e.message}))})}>检测当前配置</Button>
             {results[c.key] && <p role="status">{results[c.key]}</p>}

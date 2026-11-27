@@ -195,6 +195,35 @@
 
 ---
 
+## 自由输入与云端语音（2026-11-27）
+
+原「脚本 → 配音 → 本地口型视频」流程保留，并新增以下入口：
+
+- **文案**：阶段①「已有脚本」可导入 JSON / TXT / CSV，也可下载三种对应模板；文件直接形成新草稿，不调用文本 API。话题与文章可通过本地规则模板（演示质量）或当前文本 API 生成。
+- **录音**：阶段③每条话轮都可直接上传音频，无需先运行 TTS。上传后成为候选，试听并逐条采纳；全部话轮具备有效音频后才能确认配音和进入本地渲染。也可切换本地 IndexTTS、MiniMax 或火山引擎。
+- **MiniMax**：服务设置选择 `MiniMax`，模型与 A/B 默认 `voice_id` 可配置；使用异步 T2A v2（建任务 → 原任务轮询 → 文件检索 → 下载/解包 → 转为 48kHz WAV）。
+- **火山引擎**：服务设置选择 `火山引擎`，填写 A/B 默认 `speaker`；使用语音合成 1.0 `/api/v3/tts/create` 与 Base64 音频响应，再转换为统一母轨规格。
+- **Vidu 视频**：阶段⑤选择「Vidu API 生成」，支持 Q3（3.2）文生/首帧/首尾帧/参考图与 Q4（3.4）参考图。单次生成 1–16 秒候选，可叠加当前母轨的指定区间；Vidu 不负责双人口型同步，采用前必须播放审看。
+- **已有视频**：阶段⑤选择「直接上传视频」，无需脚本、配音时间轨或本地合成；上传视频及原音轨保持不变，播放审看后手动采用即可下载。直接成片和独立 API 成片不会被后续脚本/配音编辑误标为过期。
+
+云语音与 Vidu 密钥仅通过服务进程环境变量配置，不写入网页、工程、备份或日志：
+
+```powershell
+# MiniMax（二选一）
+$env:DUOCAST_MINIMAX_API_KEY = "你的 MiniMax API Key"
+# 火山引擎（语音三选一）
+$env:DUOCAST_VOLCENGINE_API_KEY = "你的火山语音 API Key"
+# Vidu 视频（另需官方 CLI >=0.2.33）
+npm install -g vidu-cli@0.2.33
+$env:DUOCAST_VIDU_TOKEN = "你的 Vidu Token"
+# 可选：CLI 不在 PATH 时指定原生可执行文件
+$env:DUOCAST_VIDU_PATH = "C:\path\to\vidu-cli.exe"
+```
+
+设置环境变量后，从同一终端启动后端；在服务设置保存提供方、模型和默认音色并重启。页面「检测当前配置」对云语音只检查装配与凭据是否读取，对 Vidu 只检查本机 CLI 版本，均不发起付费生成；实际音色、画面和效果仍需人工验收。协议移植参考 [free-creation](https://github.com/fanke52013141-cmd/free-creation) 当前 `src/main/gateway/audio.ts` 与 `src/main/gateway/vidu-cli.ts`，未套用其历史旧接口。
+
+---
+
 ## 本地运行
 
 ```bash

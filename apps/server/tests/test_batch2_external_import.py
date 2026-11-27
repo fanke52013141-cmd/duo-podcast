@@ -201,7 +201,44 @@ def test_audio_import_rejects_garbage_and_missing_timeline(client, tmp_path):
     res = client.post(f"/api/projects/{empty['id']}/voice/units/U-T01/import-audio",
                       files={"file": ("ok.wav", _make_wav(tmp_path / "ok2.wav").read_bytes(), "audio/wav")})
     assert res.status_code == 422
-    assert "先合成" in res.text
+    assert "脚本" in res.text
+
+
+@pytest.mark.skipif(not HAS_FFMPEG, reason="ffmpeg unavailable")
+def test_audio_upload_without_tts_supports_partial_adoption_then_completion(client, tmp_path):
+    """有脚本即可上传真人录音；全部逐条采用后才允许确认并生成母轨。"""
+    store = client.app.state.project_store
+    p = store.create(f"upload-first-{tmp_path.name[-6:]}")
+    p = store.apply(p.id, {"script_revisions": [_revision()], "current_draft_revision": "R1"}, p.revision)
+    for index, unit_id in enumerate(("U-T01", "U-T02")):
+        upload = _make_wav(tmp_path / f"direct-{index}.wav", 0.5 + index * 0.25)
+        res = client.post(f"/api/projects/{p.id}/voice/units/{unit_id}/import-audio",
+                          files={"file": (f"direct-{index}.wav", upload.read_bytes(), "audio/wav")})
+        assert res.status_code == 200, res.text
+        candidate_id = res.json()["candidateAudioAssetId"]
+        current = client.get(f"/api/projects/{p.id}").json()
+        assert current["audioTimeline"]["revisionId"] == "R1"
+        assert len(current["audioTimeline"]["units"]) == 2
+        adopted = client.post(f"/api/projects/{p.id}/voice/units/{unit_id}/adopt",
+                              json={"candidateAudioAssetId": candidate_id})
+        assert adopted.status_code == 200, adopted.text
+        timeline = adopted.json()["audioTimeline"]
+        if index == 0:
+            assert timeline["units"][0]["sampleCount"] > 0
+            assert timeline["units"][1]["sampleCount"] == 0
+            assert timeline["masterAudioAssetId"] is None
+            approval = client.post(f"/api/projects/{p.id}/approvals", json={
+                "kind": "voice", "inputRevisionId": "R1", "expectedRevision": current["revision"],
+            })
+            assert approval.status_code == 422
+        else:
+            assert all(unit["sampleCount"] > 0 for unit in timeline["units"])
+            assert timeline["masterAudioAssetId"]
+            latest = client.get(f"/api/projects/{p.id}").json()
+            approval = client.post(f"/api/projects/{p.id}/approvals", json={
+                "kind": "voice", "inputRevisionId": "R1", "expectedRevision": latest["revision"],
+            })
+            assert approval.status_code == 200, approval.text
 
 
 # ---------- 图片带区域导入 ----------

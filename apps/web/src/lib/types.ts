@@ -96,6 +96,8 @@ export interface VoiceBinding {
   modelId: string;
   localRefAudio?: { artifactId: string; path: string; fileHash: string } | null;
   minimaxVoiceId?: string | null;
+  /** MiniMax voice_id 或火山 speaker；只保存非敏感音色标识。 */
+  providerVoiceId?: string | null;
   auditionState: 'none' | 'passed' | 'stale';
 }
 
@@ -106,6 +108,7 @@ export interface SynthesisUnit {
   providerProfileId: string;
   modelId: string;
   voiceBindingId: string;
+  voiceId?: string;
   emotion: Record<string, unknown>;
   speedRatio: number;
   pronunciationRevision: string;

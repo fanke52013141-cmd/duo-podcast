@@ -48,6 +48,12 @@ def _live_video(request: Request) -> bool:
     return registry is not None and not registry.video.get("simulated", True)
 
 
+def _landscape_only_video(request: Request) -> bool:
+    """Vidu 支持多种画幅；旧本地数字人引擎仍只允许横屏。"""
+    provider = getattr(getattr(request.app.state, "runtime_settings", None), "video_provider", "mock")
+    return _live_video(request) and provider != "vidu"
+
+
 def _inject_states(request: Request, proj: Project) -> dict:
     jobs = request.app.state.job_manager.list(proj.id) if proj.id else []
     states = derive_stage_states(proj, jobs, _merged_pronunciation(request, proj))
@@ -102,7 +108,7 @@ async def create_project(request: Request, payload: dict) -> dict:
             raise HTTPException(422, f"模板不存在: {template_id}")
         if generation_mode == "fast" and (tpl.get("config") or {}).get("aspect", "landscape") != "landscape":
             raise HTTPException(422, "快速模式暂只支持横屏双人演播室模板")
-        if _live_video(request) and (tpl.get("config") or {}).get("aspect", "landscape") != "landscape":
+        if _landscape_only_video(request) and (tpl.get("config") or {}).get("aspect", "landscape") != "landscape":
             raise HTTPException(422, "当前真实引擎仅支持横屏，请选择横屏模板")
     # ID 白名单（P1-4 路径穿越）：显式 ID 先过正则，非法直接 422。
     project_id = payload.get("id")
@@ -250,6 +256,11 @@ def _validate_confirm_bindings(store: ProjectStore, project_id: str, approvals: 
                 f"确认记录必须绑定当前草稿 {current.current_draft_revision}，"
                 f"收到的是 {entry.get('inputRevisionId')!r}（kind={entry.get('kind')}，可能已过期）",
             )
+        if entry.get("kind") == "voice":
+            timeline = current.audio_timeline
+            if (timeline is None or timeline.revision_id != current.current_draft_revision
+                    or not timeline.units or any(unit.sample_count <= 0 for unit in timeline.units)):
+                raise HTTPException(422, "仍有话轮缺少已采用音频，请上传并采用或完成合成后再确认配音")
 
 
 @router.patch("/{project_id}")
@@ -266,7 +277,7 @@ async def patch_project(project_id: str, payload: dict, request: Request) -> dic
         locks = patch["cameraLocks"]
         if not isinstance(locks, dict) or set(locks) - {"A", "B"} or any(type(v) is not bool for v in locks.values()):
             raise HTTPException(422, "机位锁定必须是 {A?: bool, B?: bool}")
-    if patch.get("aspect") == "portrait" and _live_video(request):
+    if patch.get("aspect") == "portrait" and _landscape_only_video(request):
         raise HTTPException(422, "当前真实引擎仅支持横屏，请保留横屏画幅")
     if "approvals" in patch and isinstance(patch["approvals"], list):
         _validate_confirm_bindings(store, project_id, patch["approvals"])

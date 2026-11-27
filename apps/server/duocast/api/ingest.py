@@ -196,10 +196,12 @@ _PAYLOAD_SCHEMAS = {
     },
     "video": {
         "type": "object",
-        "description": "multipart：file=视频（≤2GB）；meta=信封。时长须与权威时间轨一致（±0.2s）；产物成为候选成片，走 /render/adopt 采纳。",
+        "description": "multipart：file=视频（≤2GB）；meta=信封。默认要求时长与权威时间轨一致（±0.2s）；mode=direct 时不依赖时间轨且保留原音轨。产物成为候选，走 /render/adopt 采纳。",
         "properties": {
+            "mode": {"enum": ["timeline", "direct"], "default": "timeline",
+                     "description": "direct=独立成片上传，不运行本地合成，不校验母轨时长"},
             "audioMode": {"enum": ["keep", "master"], "default": "keep",
-                          "description": "master=仅取画面，音轨重混本工程母轨"},
+                          "description": "master=仅取画面，音轨重混本工程母轨；direct 仅支持 keep"},
         },
     },
 }

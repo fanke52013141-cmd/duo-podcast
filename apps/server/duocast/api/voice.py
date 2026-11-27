@@ -29,6 +29,13 @@ def _requires_voice_media(request: Request) -> bool | None:
     return (getattr(runtime, "tts_provider", "mock") or "mock") != "mock"
 
 
+def _tts_queue(request: Request) -> str:
+    """本地 ComfyUI 占 GPU；MiniMax / 火山是 API 队列，不占本机显存。"""
+    runtime = getattr(request.app.state, "runtime_settings", None)
+    provider = getattr(runtime, "tts_provider", "mock") if runtime is not None else "mock"
+    return "gpu" if provider in {"mock", "comfyui"} else "api"
+
+
 @router.post("/synthesize")
 async def synthesize(project_id: str, payload: dict, request: Request) -> dict:
     manager: JobManager = request.app.state.job_manager
@@ -67,11 +74,13 @@ async def synthesize(project_id: str, payload: dict, request: Request) -> dict:
         # 读音词典在提交时冻结进快照（01 §4.2：读音在合成阶段读取）
         "pronunciation": _merged_pronunciation(request, project),
         "projectId": project_id,
+        # 重试继承同一冻结快照；云适配器据此恢复原远端任务，避免重复计费。
+        "requestKey": client_token,
     }
     job = manager.submit(
         kind="tts.synthesize",
         project_id=project_id,
-        queue_class="gpu",
+        queue_class=_tts_queue(request),
         client_token=client_token,
         input_snapshot=snapshot,
     )
@@ -184,7 +193,8 @@ async def import_unit_audio(project_id: str, unit_id: str, request: Request) -> 
                                    {"source": "unitImport", "turnId": unit.turn_id if unit else "",
                                     "provenance": provenance})
         registered = True
-        attach_unit_candidate(store, project_id, unit_id, entry["artifactId"], sample_count)
+        attach_unit_candidate(store, project_id, unit_id, entry["artifactId"], sample_count,
+                              pronunciation=_merged_pronunciation(request, project))
         return {"unitId": unit_id, "candidateAudioAssetId": entry["artifactId"],
                 "sampleCount": sample_count, "durationSec": round(sample_count / 48000, 3),
                 "status": "pending-adoption",
@@ -217,13 +227,17 @@ async def audition(project_id: str, payload: dict, request: Request) -> dict:
     job = manager.submit(
         kind="tts.audition",
         project_id=project_id,
-        queue_class="gpu",
+        queue_class=_tts_queue(request),
         client_token=client_token,
         input_snapshot={
             "speaker": speaker,
             "text": (payload.get("text") or "")[:120],
             "speedRatio": payload.get("speedRatio", 1.0),
             "referenceAudio": payload.get("referenceAudio"),
+            "providerProfileId": payload.get("providerProfileId"),
+            "modelId": payload.get("modelId"),
+            "voiceId": payload.get("voiceId"),
+            "requestKey": client_token,
         },
     )
     return {"jobId": job.id, "clientToken": client_token}

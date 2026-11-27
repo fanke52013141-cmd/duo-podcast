@@ -21,7 +21,9 @@ from fastapi.staticfiles import StaticFiles
 
 from .adapters.base import CapabilityRegistry, TTSProvider
 from .adapters.comfyui_tts import ComfyUITTSProvider
+from .adapters.cloud_tts import MiniMaxTTSProvider, VolcengineTTSProvider
 from .adapters.comfyui_video import ComfyUIVideoProvider
+from .adapters.vidu_video import ViduVideoProvider
 from .adapters.musetalk_video import ModeVideoProvider, engine_root
 from .adapters.mock import MockImageProvider, MockTextProvider, MockTTSProvider, MockVideoProvider
 from .adapters.toapis_image import ToAPIsImageProvider
@@ -232,6 +234,7 @@ def _job_runner(manager: JobManager, store: ProjectStore, artifacts: ArtifactSto
                 pronunciation=job.input_snapshot.get("pronunciation"),
                 artifact_store=artifacts,
                 artifacts_root=artifacts.root,
+                request_key=job.input_snapshot.get("requestKey") or job.retried_from or job.id,
                 # 单元级进度：写入 job.stage 并随 SSE 推给阶段③/任务中心
                 progress=lambda done, total: manager.set_stage(job, f"unit {done}/{total}"),
             )
@@ -251,7 +254,11 @@ def _job_runner(manager: JobManager, store: ProjectStore, artifacts: ArtifactSto
                 "lineTexts": [snap.get("text") or "你好，这是一段音色试听。"],
                 "voiceBindingId": f"VB-{speaker}-audition",
                 "speaker": speaker,
-                "providerProfileId": "tts-audition", "modelId": "",
+                "providerProfileId": snap.get("providerProfileId") or getattr(tts_provider, "name", "tts-audition"),
+                "modelId": snap.get("modelId") or "",
+                "voiceId": snap.get("voiceId") or "",
+                "requestKey": snap.get("requestKey") or job.retried_from or job.id,
+                "unitId": f"audition-{speaker}",
                 "emotion": {"label": "自然"}, "speedRatio": snap.get("speedRatio", 1.0),
                 "referenceAudio": snap.get("referenceAudio"),
             })
@@ -286,6 +293,10 @@ def _job_runner(manager: JobManager, store: ProjectStore, artifacts: ArtifactSto
             if video_provider is not None and not video_provider.capabilities.get("simulated", True):
                 result = await video_api.render(job.input_snapshot, progress=lambda stage: manager.set_stage(job, stage))
                 result["meta"]["dependencyHash"] = job.input_snapshot.get("dependencyHash")
+                if job.input_snapshot.get("provider") == "vidu":
+                    # Vidu 是独立画面候选，不按双人口型时间轨判定过期，也不自动采用。
+                    result["meta"].update(candidate=True, mode="api", provider="vidu")
+                    return result
                 current = store.load(job.project_id)
                 if current is None:
                     raise RuntimeError("project vanished")
@@ -372,6 +383,14 @@ async def lifespan(app: FastAPI):
                                "lora": cfg.video_lora, "lora_strength": cfg.video_lora_strength},
         "credential_env": runtime_config.get("credential_env", "DUOCAST_TOAPIS_KEY"),
         "credentialPresent": bool(cfg.toapis_key), "budget_yuan": runtime_config.get("budget_yuan", 2),
+        "minimax_base_url": cfg.minimax_base_url, "minimax_model": cfg.minimax_model,
+        "minimax_voice_a": cfg.minimax_voice_a, "minimax_voice_b": cfg.minimax_voice_b,
+        "minimaxCredentialPresent": bool(cfg.minimax_key),
+        "volcengine_base_url": cfg.volcengine_base_url, "volcengine_model": cfg.volcengine_model,
+        "volcengine_voice_a": cfg.volcengine_voice_a, "volcengine_voice_b": cfg.volcengine_voice_b,
+        "volcengineCredentialPresent": bool(cfg.volcengine_key),
+        "vidu_base_url": cfg.vidu_base_url, "vidu_model": cfg.vidu_model,
+        "viduCredentialPresent": bool(cfg.vidu_key),
     }
     cache = CacheStore(settings.storage_root / "cache")
 
@@ -403,7 +422,20 @@ async def lifespan(app: FastAPI):
             artifacts_root=settings.storage_root / "artifacts",
             artifact_store=artifacts,
         )
+    elif cfg.tts_provider == "minimax" and cfg.minimax_key:
+        local_tts = MiniMaxTTSProvider(
+            api_key=cfg.minimax_key, base_url=cfg.minimax_base_url, model=cfg.minimax_model,
+            voices={"A": cfg.minimax_voice_a, "B": cfg.minimax_voice_b},
+            artifacts_root=settings.storage_root / "artifacts", artifact_store=artifacts,
+        )
+    elif cfg.tts_provider == "volcengine" and cfg.volcengine_key:
+        local_tts = VolcengineTTSProvider(
+            api_key=cfg.volcengine_key, base_url=cfg.volcengine_base_url, model=cfg.volcengine_model,
+            voices={"A": cfg.volcengine_voice_a, "B": cfg.volcengine_voice_b},
+            artifacts_root=settings.storage_root / "artifacts", artifact_store=artifacts,
+        )
     else:
+        # 已请求云服务但缺少密钥时明确保留模拟能力；providers/test 会报告未就绪。
         local_tts = MockTTSProvider()
     video = (ComfyUIVideoProvider(base_url=cfg.video_url, input_dir=settings.video_input,
                                 artifact_store=artifacts,
@@ -411,9 +443,12 @@ async def lifespan(app: FastAPI):
                                 prefetch_blocks=cfg.video_prefetch_blocks, text_cfg=cfg.video_text_cfg,
                                 audio_cfg=cfg.video_audio_cfg, compile_model=cfg.video_compile,
                                 lora=cfg.video_lora or None, lora_strength=cfg.video_lora_strength)
-             if cfg.video_provider == "comfyui" else MockVideoProvider())
+             if cfg.video_provider == "comfyui" else
+             ViduVideoProvider(api_key=cfg.vidu_key, base_url=cfg.vidu_base_url, model=cfg.vidu_model,
+                               artifact_store=artifacts, binary_path=cfg.vidu_binary or None)
+             if cfg.video_provider == "vidu" and cfg.vidu_key else MockVideoProvider())
     from .services.fast_catalog import catalog
-    if (engine_root() or any(t.get("ready") for t in catalog())) and not video.capabilities.get("simulated", True):
+    if isinstance(video, ComfyUIVideoProvider) and (engine_root() or any(t.get("ready") for t in catalog())):
         video = ModeVideoProvider(video, artifacts)
     capabilities = CapabilityRegistry(
         text=text_api.capabilities,
@@ -429,6 +464,7 @@ async def lifespan(app: FastAPI):
     from .storage.expert_versions import ExpertVersionStore
     app.state.expert_version_store = ExpertVersionStore(settings.storage_root / 'expert-versions')
     app.state.artifacts = artifacts
+    app.state.video_service = video
     app.state.motion_pack_store = MotionPackStore(settings.storage_root / "motion-packs", artifacts.by_id)
     if isinstance(video, ModeVideoProvider):
         video.fast.motion_store = app.state.motion_pack_store

@@ -68,6 +68,7 @@ def build_units(project: Project, revision: ScriptRevision, bindings: dict[str, 
             provider_profile_id=binding.get("providerProfileId", "mock-tts"),
             model_id=binding.get("modelId", ""),
             voice_binding_id=binding_id,
+            voice_id=str(binding.get("providerVoiceId") or binding.get("minimaxVoiceId") or ""),
             emotion={"label": turn.tone or "自然"},
             speed_ratio=turn.speed_ratio,
         )
@@ -87,6 +88,7 @@ def _unit_fingerprint(turn, unit: SynthesisUnit, pronunciation: list[dict] | Non
         "lineTexts": apply_pronunciation([line.spoken_text for line in turn.lines], pronunciation),
         "voiceBindingId": unit.voice_binding_id,
         "providerProfileId": unit.provider_profile_id, "modelId": unit.model_id,
+        "voiceId": unit.voice_id,
         "emotion": unit.emotion, "speedRatio": unit.speed_ratio,
     }
     if reference:
@@ -104,6 +106,7 @@ def _effective_bindings(project: Project, supplied: dict[str, dict]) -> dict[str
             "providerProfileId": binding.provider_profile_id, "modelId": binding.model_id,
             "localRefAudio": binding.local_ref_audio.model_dump(by_alias=True) if binding.local_ref_audio else None,
             "minimaxVoiceId": binding.minimax_voice_id,
+            "providerVoiceId": binding.provider_voice_id or binding.minimax_voice_id,
         }
         for binding in project.voice_bindings
     }
@@ -121,6 +124,7 @@ def binding_models(bindings: dict[str, dict]) -> list[VoiceBinding]:
             model_id=b.get("modelId", ""),
             local_ref_audio=b.get("localRefAudio"),
             minimax_voice_id=b.get("minimaxVoiceId"),
+            provider_voice_id=b.get("providerVoiceId") or b.get("minimaxVoiceId"),
             audition_state="none",
         ))
     return out
@@ -139,6 +143,7 @@ async def synthesize_timeline(
     artifacts_root: Path | None = None,
     target_turn_ids: list[str] | None = None,
     pronunciation: list[dict] | None = None,
+    request_key: str = "",
     progress=None,
 ) -> AudioTimeline:
     """逐单元请求 TTS，累积整数样本偏移，构造并写回 AudioTimeline。
@@ -221,6 +226,8 @@ async def synthesize_timeline(
                 "lineTexts": line_texts, "voiceBindingId": unit.voice_binding_id,
                 "speaker": turn_speaker.get(unit.turn_id, "A"),
                 "providerProfileId": unit.provider_profile_id, "modelId": unit.model_id,
+                "voiceId": unit.voice_id,
+                "unitId": unit.id, "requestKey": request_key,
                 "emotion": unit.emotion, "speedRatio": unit.speed_ratio,
                 "referenceAudio": bindings.get(turn_speaker.get(unit.turn_id, "A"), {}).get("localRefAudio"),
             })
@@ -404,7 +411,9 @@ def _timeline_from_adopted_units(
             unit.adopted_audio_asset_id = candidate_asset_id
             unit.sample_count = count
         if not unit.adopted_audio_asset_id or unit.sample_count <= 0:
-            raise ValueError(f"ADOPTION_INCOMPLETE: 话轮 {unit.turn_id} 尚无可采用音频")
+            # 外部录音允许从未合成的时间轨开始逐条建立；未齐话轮保持 0 样本，
+            # 确认与渲染入口另有完整性门禁，不能把半成品当成可交付配音。
+            unit.sample_count = 0
         result.unit_offsets[unit.id] = offset
         offset += unit.sample_count
         if index < len(gaps):
@@ -456,12 +465,19 @@ def adopt_unit_candidate(
             (binding.get("providerProfileId") or "") not in ("", "mock-tts")
             for binding in bindings.values()
         )
+    complete = bool(canonical.units) and all(
+        unit.sample_count > 0 and (unit.adopted_audio_asset_id or not require_media)
+        for unit in canonical.units
+    )
     paths = _paths_for_adopted_units(canonical, artifact_store)
-    if artifact_store is not None and artifacts_root is not None and len(paths) == len(canonical.units):
+    if complete and artifact_store is not None and artifacts_root is not None and len(paths) == len(canonical.units):
         canonical.master_audio_asset_id = _build_master_track(
             canonical, revision.id, artifact_store, Path(artifacts_root))
-    elif require_media:
+    elif complete and require_media:
         raise ValueError("ADOPTION_MEDIA: 已采用音频资产缺失或产物存储未配置，拒绝写回")
+    else:
+        # 逐条上传期间保留候选和已采用单元，但没有完整母轨。
+        canonical.master_audio_asset_id = None
     updated = store.apply(project_id, {
         "audio_timeline": canonical,
         "audio_history": [*project.audio_history, canonical],
@@ -500,18 +516,33 @@ def restore_timeline_version(store: ProjectStore, project_id: str, history_index
 
 
 def attach_unit_candidate(store: ProjectStore, project_id: str, unit_id: str,
-                          asset_id: str, sample_count: int) -> AudioTimeline:
-    """批 2（42 号方案）：把外部上传的成品音频注入为单元候选。
+                          asset_id: str, sample_count: int,
+                          pronunciation: list[dict] | None = None) -> AudioTimeline:
+    """把外部录音注入单元候选；无 TTS 时间轨时先从当前脚本建立空轨。
 
-    只登记候选，不采用、不重建母轨、不动确认——采用走现有 adopt_unit_candidate，
-    与 AI 局部合成候选完全同权。
+    上传本身不采用、不重建母轨、不动确认。用户逐条试听并采用，全部话轮齐全后
+    adopt_unit_candidate 才会生成权威母轨。
     """
     project = store.load(project_id)
     if project is None:
         raise KeyError("PROJECT_NOT_FOUND")
     timeline = project.audio_timeline
     if timeline is None:
-        raise ValueError("UPLOAD_AUDIO: 请先合成整期配音，再上传单元音频")
+        try:
+            revision = find_revision(project, project.current_draft_revision)
+        except KeyError as exc:
+            raise ValueError("UPLOAD_AUDIO: 请先导入或生成包含话轮的脚本") from exc
+        bindings = _effective_bindings(project, {})
+        units = build_units(project, revision, bindings, pronunciation)
+        if not units:
+            raise ValueError("UPLOAD_AUDIO: 请先准备包含话轮的脚本")
+        if not any(unit.id == unit_id for unit in units):
+            raise ValueError(f"UPLOAD_AUDIO: 合成单元不存在：{unit_id}")
+        timeline = AudioTimeline(
+            revision_id=revision.id, units=units,
+            unit_offsets={unit.id: 0 for unit in units},
+            transition_gap_ms=[320] * max(0, len(units) - 1), sample_count=0,
+        )
     if timeline.revision_id != project.current_draft_revision:
         raise ValueError("UPLOAD_AUDIO: 配音已过期，请先重新合成当前脚本的配音")
     timeline = timeline.model_copy(deep=True)

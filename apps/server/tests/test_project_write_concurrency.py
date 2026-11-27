@@ -8,6 +8,7 @@ from types import SimpleNamespace
 import pytest
 
 from duocast.api.projects import append_approval
+from duocast.domain.audio import AudioTimeline, SynthesisUnit
 from duocast.domain.project import Project
 from duocast.services.render_svc import apply_output_version
 from duocast.storage.project_store import ProjectRevisionConflict, ProjectStore
@@ -53,11 +54,17 @@ def test_atomic_approval_endpoint_appends_without_client_snapshot(tmp_path):
     first = asyncio.run(append_approval("P", {
         "kind": "script", "inputRevisionId": "R1", "note": "first",
     }, request))
+    # 本用例验证原子追加；声音确认必须有完整时间轨是独立的前置契约。
+    current = store.load("P")
+    store.apply("P", {"audio_timeline": AudioTimeline(
+        revision_id="R1", sample_count=48000, unit_offsets={"U-T01": 0},
+        units=[SynthesisUnit(id="U-T01", turn_id="T01", sample_count=48000)],
+    )}, current.revision)
     second = asyncio.run(append_approval("P", {
         "kind": "voice", "inputRevisionId": "R1", "note": "second",
     }, request))
     assert [item["note"] for item in second["approvals"]] == ["first", "second"]
-    assert first["revision"] + 1 == second["revision"]
+    assert current.revision + 2 == second["revision"]  # 先补时间轨，再原子追加确认
 
 
 def test_output_version_allocator_never_reuses_historical_id(tmp_path):

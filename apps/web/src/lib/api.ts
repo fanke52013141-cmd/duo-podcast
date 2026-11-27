@@ -623,9 +623,9 @@ export interface OutputImportResult {
 export const useImportOutput = () => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ projectId, file, audioMode }: { projectId: string; file: File; audioMode?: 'keep' | 'master' }) =>
+    mutationFn: ({ projectId, file, audioMode, mode }: { projectId: string; file: File; audioMode?: 'keep' | 'master'; mode?: 'direct' }) =>
       uploadFile<OutputImportResult>(`/projects/${projectId}/render/import-output`, file, {
-        meta: JSON.stringify({ audioMode: audioMode ?? 'keep', provenance: { source: 'external-upload', tool: '本机上传' } }),
+        meta: JSON.stringify({ audioMode: audioMode ?? 'keep', mode, provenance: { source: 'external-upload', tool: '本机上传' } }),
       }),
     onSuccess: (_d, input) => {
       qc.invalidateQueries({ queryKey: ['project', input.projectId] });
@@ -647,6 +647,16 @@ export interface RenderGenInput {
   candidate?: boolean;
   visualVariantId?: string;
   cameraMode?: 'twoShot' | 'speaker';
+  provider?: 'vidu';
+  prompt?: string;
+  viduModel?: '3.4' | '3.2';
+  viduMode?: 'text' | 'first-frame' | 'first-last-frame' | 'reference';
+  viduDuration?: number;
+  viduResolution?: '540p' | '720p' | '1080p' | '2k' | '4k';
+  viduRatio?: '16:9' | '9:16' | '1:1' | '4:3' | '3:4';
+  imageArtifactIds?: string[];
+  withMasterAudio?: boolean;
+  rangeStartSec?: number;
   projectId: string;
   clientToken: string;
   revisionId: string;
@@ -674,6 +684,16 @@ export const useRenderGenerate = () => {
         fastQuality: input.fastQuality,
         exportSr: input.exportSr,
         fps: input.fps,
+        provider: input.provider,
+        prompt: input.prompt,
+        viduModel: input.viduModel,
+        viduMode: input.viduMode,
+        viduDuration: input.viduDuration,
+        viduResolution: input.viduResolution,
+        viduRatio: input.viduRatio,
+        imageArtifactIds: input.imageArtifactIds,
+        withMasterAudio: input.withMasterAudio,
+        rangeStartSec: input.rangeStartSec,
       }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['jobs'] }),
   });

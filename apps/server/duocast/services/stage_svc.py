@@ -44,13 +44,16 @@ def derive_stage_states(project: Project, jobs: list | None = None, pronunciatio
     )
     demo_render_stale = bool(demo_jobs) and not demo_render
     has_render = bool(project.selected_output_version) or demo_render
+    # 直接上传的独立成片不依赖脚本、配音或视觉资产，不参与本地渲染过期传播。
+    output_mode = ((project.output_manifest or {}).get("meta") or {}).get("mode")
+    direct_output = output_mode in {"direct", "api"}
 
     states["create"] = StageState.DONE if has_script else StageState.READY
     states["script"] = _stage(has_script, "script" in approved, "script.generate" in running_kinds)
     states["voice"] = _stage(has_voice, "voice" in approved, "tts.synthesize" in running_kinds)
     states["visual"] = _stage(has_visual, "sample" in approved, "visual.generate" in running_kinds)
     states["render"] = _stage(has_render, True, "renders" in running_kinds)
-    if demo_render_stale and "renders" not in running_kinds:
+    if demo_render_stale and "renders" not in running_kinds and not direct_output:
         # 演示产物跑过、但脚本/配音/画面又改过：给出「已过期」，而不是退回「未准备」。
         states["render"] = StageState.STALE
     timeline = project.audio_timeline
@@ -63,7 +66,7 @@ def derive_stage_states(project: Project, jobs: list | None = None, pronunciatio
         states["visual"] = StageState.STALE
     # render 过期传播（12 报告 U-3）：输出版本 OUT-{rev}-vN 内嵌脚本版本，
     # 草稿改动后旧成片必须显示「已过期」，不能保持「已就绪」。
-    if has_render and project.output_version and project.current_draft_revision:
+    if has_render and project.output_version and project.current_draft_revision and not direct_output:
         rev_in_output = _output_revision(project.output_version)
         if rev_in_output and rev_in_output != project.current_draft_revision:
             states["render"] = StageState.STALE
@@ -73,7 +76,7 @@ def derive_stage_states(project: Project, jobs: list | None = None, pronunciatio
             if not audio_inputs_match(project, pronunciation):
                 states["voice"] = StageState.STALE
                 states["visual"] = StageState.STALE
-                if has_render:
+                if has_render and not direct_output:
                     states["render"] = StageState.STALE
     sample_approval = latest.get("sample")
     # 样片绑定的是「画面依赖」（F4）；旧数据里可能是整份依赖哈希，两种都认。
@@ -82,7 +85,7 @@ def derive_stage_states(project: Project, jobs: list | None = None, pronunciatio
         if declared not in (visual_dependency_hash(project), current_hash):
             states["visual"] = StageState.STALE
     output_hash = ((project.output_manifest or {}).get("meta") or {}).get("dependencyHash")
-    if output_hash and output_hash != current_hash and "renders" not in running_kinds:
+    if output_hash and output_hash != current_hash and "renders" not in running_kinds and not direct_output:
         states["render"] = StageState.STALE
     return states
 
