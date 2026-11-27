@@ -12,6 +12,30 @@ async def export_selection(provider, job, req, request_key, folder, cores, recor
     selected_windows = selection.get('windows', [])
     if selected_windows and len(selected_windows) != len(cores):
         raise ValueError('Selection core count differs from frozen windows')
+    roi_profile = req.get('expertProfile') == 'expert-sage-roi-v1'
+    export_geometry = None
+    if roi_profile:
+        from .expert_assembly import roi_letterbox
+        if not cores:
+            raise ValueError('Expert ROI selection has no native cores')
+        declared_sizes = set()
+        for window in selected_windows:
+            native = window.get('segment', {}).get('geometry', {}).get('native')
+            if native is not None:
+                if (not isinstance(native, (list, tuple)) or len(native) < 2
+                        or any(type(value) is not int or value <= 0 for value in native[:2])):
+                    raise ValueError('Expert ROI declared an invalid native size')
+                declared_sizes.add(tuple(native[:2]))
+        actual_sizes = set()
+        for core in cores:
+            probe = json.loads(await provider._command(
+                'ffprobe', '-v', 'error', '-select_streams', 'v:0', '-show_entries',
+                'stream=width,height', '-of', 'json', core))
+            stream = probe['streams'][0]
+            actual_sizes.add((int(stream['width']), int(stream['height'])))
+        if len(actual_sizes) != 1 or len(declared_sizes) > 1 or declared_sizes and declared_sizes != actual_sizes:
+            raise ValueError('Expert ROI cores have inconsistent native geometry')
+        export_geometry = roi_letterbox(next(iter(actual_sizes)))
     for window, core, record in zip(selected_windows, cores, records):
         segment = window['segment']
         actual_hash = provider.artifacts._hash_file(str(core))
@@ -31,8 +55,11 @@ async def export_selection(provider, job, req, request_key, folder, cores, recor
     offset = start/rate-first_frame/25
     if offset < 0:
         raise ValueError('Selected cores do not cover the audio range')
-    key = content_hash({'requestKey': request_key, 'cores': [r['coreHash'] for r in records],
-                        'range': [start, end], 'recipe': 'expert-selection-v1'})
+    key_data = {'requestKey': request_key, 'cores': [r['coreHash'] for r in records],
+                'range': [start, end], 'recipe': 'expert-selection-v2'}
+    if export_geometry is not None:
+        key_data['exportGeometry'] = {key: value for key, value in export_geometry.items() if key != 'filter'}
+    key = content_hash(key_data)
     output = folder/'exports'/key
     output.mkdir(parents=True, exist_ok=True)
     final = output/'final.mp4'
@@ -41,9 +68,8 @@ async def export_selection(provider, job, req, request_key, folder, cores, recor
     if existing:
         provider._artifact(artifact_id, {'video'})
     else:
-        roi_profile=req.get('expertProfile')=='expert-sage-roi-v1'
-        video_filter=('scale=1280:720:flags=lanczos,unsharp=5:5:0.45:5:5:0,setsar=1' if roi_profile
-                      else 'scale=1280:720:force_original_aspect_ratio=increase,crop=1280:720,setsar=1')
+        video_filter=(export_geometry['filter'] if export_geometry is not None else
+                      'scale=1280:720:force_original_aspect_ratio=increase,crop=1280:720,setsar=1')
         concat = output/'cores.txt'
         concat.write_text('\n'.join("file '"+p.as_posix().replace("'", "'\\''")+"'" for p in cores), encoding='utf-8')
         partial = output/'final.partial.mp4'
@@ -58,15 +84,19 @@ async def export_selection(provider, job, req, request_key, folder, cores, recor
         audio = next(s for s in raw['streams'] if s['codec_type'] == 'audio')
         if (int(video['nb_read_frames']) != ((end-start)*25+rate-1)//rate
                 or abs(float(audio['duration'])-duration) > .03
-                or abs(float(video['duration'])-duration) > .045):
-            raise ValueError('Selected expert media has an invalid native clock')
+                or abs(float(video['duration'])-duration) > .045
+                or (video['width'], video['height']) != (1280, 720)):
+            raise ValueError('Selected expert media has an invalid native clock or export geometry')
         await provider._command('ffmpeg', '-v', 'error', '-xerror', '-i', partial, '-f', 'null', '-', timeout=120)
         provider.manager.checkpoint(job)
         partial.replace(final)
         provider.artifacts.register(artifact_id, 'video', str(final), req['dependencyHash'], req, 'expert-selection-v1')
-    return {'artifactIds': [artifact_id], 'simulated': False, 'meta': {
+    meta = {
         'durationSec': duration, 'fps': 25, 'resolution': '1280x720', 'qualityStatus': 'needs_review',
         'automaticAdoption': False, 'reviewSampleRange': [start, end],
         'selectedSampleRange': selection['selectedSampleRange'],
         'generatedWindows': sum(not r.get('reused') for r in records),'reusedWindows':sum(bool(r.get('reused')) for r in records),
-        'windowArtifacts':window_artifacts, 'path': str(final)}}
+        'windowArtifacts':window_artifacts, 'path': str(final)}
+    if export_geometry is not None:
+        meta['exportGeometry'] = {key: value for key, value in export_geometry.items() if key != 'filter'}
+    return {'artifactIds': [artifact_id], 'simulated': False, 'meta': meta}

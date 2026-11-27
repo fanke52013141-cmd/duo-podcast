@@ -5,9 +5,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { createSingleFlight, recoveryRead, recoveryWrite, recoveryRemove, registerNavigationGuard } from '../lib/navigation';
+import { getScriptTemplate, parseScriptFile, type ScriptFileFormat } from '../lib/scriptTransfer';
 import type { Project } from '../lib/types';
 import {
-  useCapabilities, useGenerateScript, useImportScript, useJobs, useJobCancel, usePatchProject, useProject,
+  useCapabilities, useGenerateScript, useImportScript, useJobs, useJobCancel, useMachine, usePatchProject, useProject,
 } from '../lib/api';
 import { STAGE_META, type SourceKind } from '../lib/types';
 import { Alert, Badge, Button, Choice, Field, Icon, Input, SegControl, Tabs, Textarea } from '../components/wu';
@@ -34,11 +35,13 @@ export function CreateEpisodePage({ projectId }: { projectId: string }) {
   const project = useProject(projectId);
   const jobs = useJobs(projectId);
   const caps = useCapabilities();
+  const machine = useMachine();
   const patchProject = usePatchProject();
   const generateScript = useGenerateScript();
   const importScript = useImportScript();
   const scriptFileRef = useRef<HTMLInputElement>(null);
   const [importNotice, setImportNotice] = useState<string | null>(null);
+  const [importError, setImportError] = useState<string | null>(null);
   const generateOnce=useRef(createSingleFlight());
   const cancelJob = useJobCancel();
   const setView = useProjectStore((s) => s.setView);
@@ -118,6 +121,9 @@ export function CreateEpisodePage({ projectId }: { projectId: string }) {
   }, [proj?.aspect]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const textReady = caps.data?.textApi.ready ?? false;
+  const textProvider = String(machine.data?.activeConfig?.text_provider ?? 'mock');
+  const videoProvider = String(machine.data?.activeConfig?.video_provider ?? 'mock');
+  const textModel = String(machine.data?.activeConfig?.text_model ?? '');
   const canGenerate = !recoverable && content.trim().length > 0 && (sourceKind === 'script' || textReady) && !generateScript.isPending;
 
   // 当前工程的脚本生成任务（幂等 clientToken 定位）
@@ -152,34 +158,45 @@ export function CreateEpisodePage({ projectId }: { projectId: string }) {
     }
   });
 
-  // 批 2（42 号方案）：外部脚本文件导入。.json 走结构化导入；.txt 读入后走现有解析导入。
+  // 批 2（42 号方案）：三种文件都在本机解析，直接创建新草稿，不调用文本生成 API。
   const handleScriptFile = async (file: File | undefined) => {
     if (!file || !proj) return;
     setError(null);
     setImportNotice(null);
-    const text = await file.text();
-    if (file.name.toLowerCase().endsWith('.json')) {
-      let parsed: unknown;
-      try { parsed = JSON.parse(text); } catch { setError('JSON 解析失败：请检查文件格式'); return; }
-      const obj = (parsed && typeof parsed === 'object') ? parsed as Record<string, unknown> : {};
-      const payload = (obj.payload && typeof obj.payload === 'object') ? obj.payload : obj;
-      importScript.mutate({
-        projectId,
-        envelope: {
-          schemaVersion: '1.0', kind: 'script', clientToken: crypto.randomUUID(),
-          expectedRevision: proj.revision,
-          provenance: { source: 'external-upload', tool: file.name },
-          payload,
-        },
-      }, {
-        onSuccess: (r) => setImportNotice(`已导入 ${r.turnCount} 条话轮 → 草稿 ${r.revisionId}${r.warnings?.length ? '。' + r.warnings.join('；') : ''}。请前往编辑对话检查后确认。`),
-        onError: (e) => setError((e as Error).message),
-      });
-    } else {
-      setContent(text);
-      setSourceKind('script');
-      setImportNotice('已读入脚本文本，点击下方「解析并导入」完成导入。');
-    }
+    setImportError(null);
+    let text: string;
+    try { text = await file.text(); }
+    catch { setImportError(`无法读取“${file.name}”，请重新选择文件。`); return; }
+    let parsed: ReturnType<typeof parseScriptFile>;
+    try { parsed = parseScriptFile(file.name, text); }
+    catch (e) { setImportError((e as Error).message); return; }
+    // 先落保存队列，再用最新 revision 导入，避免未保存编辑造成乐观锁冲突。
+    if (!await saveDraft()) { setImportError('现有草稿保存失败，未导入文件；请解决保存问题后重试。'); return; }
+    setContent(parsed.content);
+    setSourceKind('script');
+    const latest = qc.getQueryData<Project>(['project', projectId]) ?? proj;
+    importScript.mutate({
+      projectId,
+      envelope: {
+        schemaVersion: '1.0', kind: 'script', clientToken: crypto.randomUUID(),
+        expectedRevision: latest.revision,
+        provenance: { source: 'external-upload', tool: file.name },
+        payload: parsed.payload,
+      },
+    }, {
+      onSuccess: (r) => setImportNotice(`已导入 ${r.turnCount} 条话轮 → 草稿 ${r.revisionId}${r.warnings?.length ? '。' + r.warnings.join('；') : ''}。请前往编辑对话检查后确认。`),
+      onError: (e) => setImportError((e as Error).message),
+    });
+  };
+
+  const downloadScriptTemplate = (format: ScriptFileFormat) => {
+    const template = getScriptTemplate(format);
+    // Excel 打开 UTF-8 CSV 时需要 BOM；解析器同时兼容有无 BOM 的文件。
+    const blob = new Blob([format === 'csv' ? '\ufeff' : '', template.content], { type: template.mimeType });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url; link.download = template.fileName; link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
 
   const handleAspect = (v: 'landscape' | 'portrait') => {
@@ -229,6 +246,13 @@ export function CreateEpisodePage({ projectId }: { projectId: string }) {
             onSelect={(id) => {if(!recoverable)setSourceKind(id as SourceKind);}}
             idPrefix="src"
           />
+          <p className="wu-caption" style={{ marginTop: 10, lineHeight: 1.6 }}>
+            {sourceKind === 'script'
+              ? '直接上传：JSON / TXT / CSV 文案在本机解析，可下载模板。'
+              : textProvider === 'toapis'
+                ? `API 生成：使用当前文本服务${textModel ? ` · ${textModel}` : ''}。`
+                : '本地生成：使用内置规则模板，无需外部 API；仅作演示草稿，请在下一阶段审改。'}
+          </p>
           <div style={{ marginTop: 12, display: 'grid', gap: 12 }}>
             <Field labelFor="src-content" label={SOURCE_TABS.find((t) => t.id === sourceKind)?.label ?? '内容'}>
               <Textarea
@@ -247,19 +271,28 @@ export function CreateEpisodePage({ projectId }: { projectId: string }) {
               <Alert tone="warning">话题超过 200 字，建议改用「粘贴文章」。</Alert>
             )}
             {sourceKind === 'script' && (
-              <div className="wu-row" style={{ gap: 8 }}>
-                <Button variant="secondary" size="sm" icon="upload" busy={importScript.isPending}
-                  disabled={generating || !!recoverable || importScript.isPending}
-                  onClick={() => scriptFileRef.current?.click()}>
-                  上传脚本文件（.json / .txt）
-                </Button>
-                <span className="wu-caption">.json 按结构化契约导入；.txt 用 A:/B: 格式</span>
-                <input ref={scriptFileRef} type="file" accept=".json,.txt,application/json,text/plain" hidden
+              <div className="wu-stack" style={{ gap: 8 }}>
+                <div className="wu-row" style={{ gap: 8, flexWrap: 'wrap' }}>
+                  <Button variant="secondary" size="sm" icon="upload" busy={importScript.isPending}
+                    disabled={generating || !!recoverable || importScript.isPending}
+                    onClick={() => scriptFileRef.current?.click()}>
+                    上传脚本文件（.json / .txt / .csv）
+                  </Button>
+                  <span className="wu-caption">选择后立即新建草稿；TXT 每行一条，CSV 使用 speaker,text 表头</span>
+                </div>
+                <div className="wu-row" style={{ gap: 8, flexWrap: 'wrap' }}>
+                  <span className="wu-caption">下载文案模板：</span>
+                  <Button variant="ghost" size="sm" icon="download" onClick={() => downloadScriptTemplate('json')}>JSON 模板</Button>
+                  <Button variant="ghost" size="sm" icon="download" onClick={() => downloadScriptTemplate('txt')}>TXT 模板</Button>
+                  <Button variant="ghost" size="sm" icon="download" onClick={() => downloadScriptTemplate('csv')}>CSV 模板</Button>
+                </div>
+                <input ref={scriptFileRef} type="file" accept=".json,.txt,.csv,application/json,text/plain,text/csv" hidden
                   aria-label="上传脚本文件"
                   onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; void handleScriptFile(f); }} />
               </div>
             )}
             {importNotice && <Alert tone="success" onClose={() => setImportNotice(null)}>{importNotice}</Alert>}
+            {importError && <Alert tone="danger" onClose={() => setImportError(null)}>脚本导入失败：{importError}</Alert>}
 
             {/* 生成区：就绪 → 执行中两步进度 → 结果 */}
             {generating ? (
@@ -372,8 +405,8 @@ export function CreateEpisodePage({ projectId }: { projectId: string }) {
           <Field label="比例">
             <div className="wu-row">
               <Choice checked={aspect === 'landscape'} onChange={() => handleAspect('landscape')} label="横屏 16:9" />
-              {proj?.generationMode !== 'fast' && caps.data?.video.mode === 'mock' && <Choice checked={aspect === 'portrait'} onChange={() => handleAspect('portrait')} label="竖屏（仅演示）" />}
-              {caps.data?.video.mode === 'live' && <InfoTip text="当前真实引擎仅支持横屏；竖屏仅在演示模式可用。" />}
+              {proj?.generationMode !== 'fast' && (caps.data?.video.mode === 'mock' || videoProvider === 'vidu') && <Choice checked={aspect === 'portrait'} onChange={() => handleAspect('portrait')} label={videoProvider === 'vidu' ? '竖屏 9:16' : '竖屏（仅演示）'} />}
+              {caps.data?.video.mode === 'live' && videoProvider !== 'vidu' && <InfoTip text="当前本地真实引擎仅支持横屏；竖屏可改用 Vidu 或上传成片。" />}
             </div>
           </Field>
           {aspect === 'portrait' && (

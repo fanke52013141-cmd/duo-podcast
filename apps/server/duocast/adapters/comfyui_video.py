@@ -20,6 +20,7 @@ import httpx
 from ..services.listening_plan import listening_plan, listening_prompt, reference_workflow
 from ..services.video_plans import camera_plan, clipped_camera_plan, closeup_box, crop_region, adaptive_prompt
 from ..services.generation_profiles import configure_generation_profile, listener_layer_filter, validate_video_stream, PROFILES
+from ..services.owned_process import spawn_owned
 
 # Persisted fingerprint of the accepted v4 generator. Only its unchanged legacy
 # prompt path may reuse that cache; adaptive work has a distinct fingerprint.
@@ -63,7 +64,7 @@ class ComfyUIVideoProvider:
         def normalized(code):
             constants = tuple(normalized(c) if isinstance(c, CodeType) else c for c in code.co_consts)
             return code.replace(co_firstlineno=0, co_linetable=b"", co_consts=constants)
-        self.motion_implementation_hash = hashlib.sha256(marshal.dumps((normalized(type(self)._automatic_reference.__code__), normalized(listening_prompt.__code__), normalized(reference_workflow.__code__), normalized(type(self)._shot.__code__), normalized(type(self)._prepare_motion_reference.__code__), normalized(type(self)._compose_listener.__code__), normalized(adaptive_prompt.__code__), normalized(configure_generation_profile.__code__), normalized(listener_layer_filter.__code__)))).hexdigest()
+        self.motion_implementation_hash = hashlib.sha256(marshal.dumps((normalized(type(self)._automatic_reference.__code__), normalized(listening_prompt.__code__), normalized(reference_workflow.__code__), normalized(type(self)._shot.__code__), normalized(type(self)._prepare_motion_reference.__code__), normalized(type(self)._compose_listener.__code__), normalized(type(self)._mask_png.__code__), normalized(type(self)._read_image_size.__code__), normalized(type(self).image_scale_geometry.__code__), normalized(adaptive_prompt.__code__), normalized(configure_generation_profile.__code__), normalized(listener_layer_filter.__code__)))).hexdigest()
 
     def acceleration_fingerprint(self) -> dict:
         """加速参数指纹：纳入 motion_digest，切配置不会误用旧配置生成的片段。"""
@@ -94,10 +95,18 @@ class ComfyUIVideoProvider:
         return Path(entry["path"])
 
     @staticmethod
-    async def _command(*args, cwd=None):
-        process = await asyncio.create_subprocess_exec(
+    async def _command(*args, cwd=None, timeout=None):
+        process = await spawn_owned(
             *map(str, args), stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE, cwd=cwd)
-        out, err = await process.communicate()
+        try:
+            if timeout is None:
+                out, err = await process.communicate()
+            else:
+                out, err = await asyncio.wait_for(process.communicate(), timeout)
+        finally:
+            # OwnedProcess.stop is cancellation-safe and also kills descendants
+            # that outlived the direct ffmpeg/ffprobe/SeedVR2 process.
+            await process.stop()
         if process.returncode:
             raise RuntimeError(err.decode("utf-8", "replace")[-3000:])
         return out
@@ -142,6 +151,7 @@ class ComfyUIVideoProvider:
         if visual.get("mode", "twoShot") != "twoShot":
             raise RuntimeError("当前真实渲染器需要双人同框场景，请选择同框机位")
         image = self._asset(visual["masterImage"].get("artifactId"))
+        mask_geometry = self.image_scale_geometry(*self._read_image_size(image))
         width, height = map(int, req.get("resolution", "854x480").split("x"))
         fps = int(req.get("fps", 25))
         if (width, height) not in {(854, 480), (1280, 720), (1920, 1080)} or fps not in {25, 30}:
@@ -160,6 +170,7 @@ class ComfyUIVideoProvider:
         motion_digest = hashlib.sha256(json.dumps({
             "audio": self.artifacts._hash_file(str(master)), "image": self.artifacts._hash_file(str(image)),
             "timeline": timeline, "speakers": speakers, "regions": visual["personRegions"],
+            "maskGeometry": mask_geometry,
             "workflow": workflow_template, "performance": performance,
             "strategy": f"listening-v4-cfg{self.text_cfg:g}" if performance_mode == "legacy" else "listening-adaptive-v1",
             "acceleration": self.acceleration_fingerprint(),
@@ -188,7 +199,7 @@ class ComfyUIVideoProvider:
         # Real masks follow the saved person regions, rather than rebinding both voices to a full image.
         for speaker in ("A", "B"):
             region = visual["personRegions"][speaker]
-            self._mask_png(self.input_dir / f"{digest}_{speaker}.png", region)
+            self._mask_png(self.input_dir / f"{digest}_{speaker}.png", region, mask_geometry)
         shutil.copyfile(image, self.input_dir / f"{digest}.png")
         (folder / "performance_plan.json").write_text(json.dumps(performance, ensure_ascii=False, indent=2), encoding="utf-8")
         segments = []
@@ -446,12 +457,123 @@ class ComfyUIVideoProvider:
                 for u in timeline["units"]]
 
     @staticmethod
-    def _mask_png(path, region):
-        width, height = 864, 480
+    def image_scale_geometry(source_width, source_height, scale_to_length=480, multiple=16):
+        """Mirror workflow node 213's original-aspect letterbox geometry.
+
+        The installed LayerUtility node scales the selected side, truncates the
+        other side, rounds both up to a multiple, then letterboxes with integer
+        content dimensions and centered padding.
+        """
+        if (type(source_width) is not int or type(source_height) is not int
+                or type(scale_to_length) is not int or type(multiple) is not int
+                or min(source_width, source_height, scale_to_length, multiple) <= 0):
+            raise ValueError("图像缩放几何参数必须为正整数")
+        ratio = source_width / source_height
+        if ratio > 1:
+            target_height = scale_to_length
+            target_width = int(target_height * ratio)
+        else:
+            target_width = scale_to_length
+            target_height = int(target_width / ratio)
+        target_width = ((target_width + multiple - 1) // multiple) * multiple
+        target_height = ((target_height + multiple - 1) // multiple) * multiple
+        if target_width > 4096 or target_height > 2160:
+            raise ValueError("图像缩放画布超出安全尺寸上限")
+        if ratio > target_width / target_height:
+            content_width = target_width
+            content_height = int(target_width / source_width * source_height)
+        else:
+            content_height = target_height
+            content_width = int(target_height / source_height * source_width)
+        content_width = min(target_width, max(1, content_width))
+        content_height = min(target_height, max(1, content_height))
+        return {"width": target_width, "height": target_height,
+                "contentX": (target_width - content_width) // 2,
+                "contentY": (target_height - content_height) // 2,
+                "contentWidth": content_width, "contentHeight": content_height}
+
+    @staticmethod
+    def _read_image_size(path):
+        """Read PNG/JPEG dimensions without adding an imaging dependency."""
+        with Path(path).open("rb") as stream:
+            signature = stream.read(8)
+            if signature == b"\x89PNG\r\n\x1a\n":
+                header = stream.read(16)
+                if len(header) != 16 or header[4:8] != b"IHDR":
+                    raise ValueError("PNG 缺少有效 IHDR")
+                width, height = struct.unpack(">II", header[8:16])
+            elif signature[:2] == b"\xff\xd8":
+                stream.seek(0)
+                stream.read(2)  # SOI; segment parsing starts at the first marker.
+                width = height = 0
+                sof = {0xC0, 0xC1, 0xC2, 0xC3, 0xC5, 0xC6, 0xC7,
+                       0xC9, 0xCA, 0xCB, 0xCD, 0xCE, 0xCF}
+                while True:
+                    marker = stream.read(1)
+                    if not marker:
+                        raise ValueError("JPEG 缺少尺寸段")
+                    if marker != b"\xff":
+                        continue
+                    while marker == b"\xff":
+                        marker = stream.read(1)
+                    if not marker or marker in (0xD9, 0xDA):
+                        break
+                    code = marker[0]
+                    raw_length = stream.read(2)
+                    if len(raw_length) != 2:
+                        raise ValueError("JPEG 段长度无效")
+                    length = struct.unpack(">H", raw_length)[0]
+                    if length < 2:
+                        raise ValueError("JPEG 段长度无效")
+                    if code in sof:
+                        payload = stream.read(5)
+                        if len(payload) != 5:
+                            raise ValueError("JPEG 尺寸段不完整")
+                        height, width = struct.unpack(">HH", payload[1:5])
+                        break
+                    stream.seek(length - 2, 1)
+            else:
+                raise ValueError("仅支持 PNG/JPEG 底图")
+        if width <= 0 or height <= 0:
+            raise ValueError("底图尺寸无效")
+        return width, height
+
+    @staticmethod
+    def _mask_png(path, region, geometry=None):
+        path = Path(path)
+        if geometry is None:
+            # Over-shoulder rendering copies <tag>.png next to <tag>_A/B.png.
+            # Keep legacy behavior for synthetic fixtures that are not images.
+            source = None
+            if path.stem.endswith(("_A", "_B")):
+                source = path.with_name(path.stem[:-2] + path.suffix)
+            try:
+                if source is None or not source.is_file():
+                    raise ValueError("mask 源图不存在")
+                geometry = ComfyUIVideoProvider.image_scale_geometry(
+                    *ComfyUIVideoProvider._read_image_size(source))
+            except (OSError, ValueError):
+                geometry = {"width": 864, "height": 480,
+                            "contentX": 0, "contentY": 0,
+                            "contentWidth": 864, "contentHeight": 480}
+        width, height = geometry["width"], geometry["height"]
+        content_x, content_y = geometry["contentX"], geometry["contentY"]
+        content_w, content_h = geometry["contentWidth"], geometry["contentHeight"]
+        if (any(type(v) is not int or v <= 0 for v in (width, height, content_w, content_h))
+                or any(type(v) is not int or v < 0 for v in (content_x, content_y))
+                or content_x + content_w > width or content_y + content_h > height):
+            raise RuntimeError("mask 画布几何无效")
         x, y, w, h = (float(region[k]) for k in ("x", "y", "width", "height"))
         if not all(math.isfinite(v) for v in (x, y, w, h)) or not (0 <= x < x+w <= 1 and 0 <= y < y+h <= 1):
             raise RuntimeError("人物区域必须为画面内有效矩形")
-        left, right, top, bottom = int(x*width), int((x+w)*width), int(y*height), int((y+h)*height)
+        left = content_x + math.floor(x * content_w)
+        right = content_x + math.ceil((x + w) * content_w)
+        top = content_y + math.floor(y * content_h)
+        bottom = content_y + math.ceil((y + h) * content_h)
+        left, right = max(0, min(width - 1, left)), max(1, min(width, right))
+        top, bottom = max(0, min(height - 1, top)), max(1, min(height, bottom))
+        if right <= left or bottom <= top:
+            raise RuntimeError("人物区域在缩放画布中为空")
         rows = b"".join(b"\0" + (b"\0"*left + b"\xff"*(right-left) + b"\0"*(width-right)
             if top <= row < bottom else b"\0"*width) for row in range(height))
         def chunk(kind, data):

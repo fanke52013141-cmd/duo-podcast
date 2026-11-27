@@ -1,4 +1,4 @@
-﻿/* ============================================================================
+/* ============================================================================
    HF-03 · 阶段③ 试听配音（真实数据流，01 §5 权威）
    主视图：左 语音引擎面板（固定 300px，引擎单选 + A/B 音色绑定）/ 右 配音清单（话轮级）
    底部：时长检查条 + TimelineBar（全应用唯一深色面，05 §1.5）
@@ -6,10 +6,11 @@
    ========================================================================== */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  useConfirm, useJob, useJobs, useProject, useVoiceAdopt, useVoiceAudition, useVoiceSynthesize, useVoiceRhythm, useImportUnitAudio, useRevokeApproval, useRestoreTimeline,
+  useConfirm, useJob, useJobs, useMachine, useProject, useVoiceAdopt, useVoiceRhythm, useImportUnitAudio, useRevokeApproval, useRestoreTimeline,
 } from '../lib/api';
+import { useFlexibleVoiceAudition, useFlexibleVoiceSynthesize } from '../lib/voiceSources';
 import type { AudioTimeline, Job, Project, ScriptRevision, SynthesisUnit, Turn, VoiceBinding } from '../lib/types';
-import { Alert, Badge, Button, Choice, Icon } from '../components/wu';
+import { Alert, Badge, Button, Choice, Icon, Input } from '../components/wu';
 import { InfoTip } from '../components/InfoTip';
 import { AppShell, FootBar, StageHead, TimelineBar } from '../components/AppShell';
 import { formatSamples } from '../lib/format';
@@ -22,13 +23,15 @@ import { ImpactPlan } from '../components/ImpactPlan';
 
 const SPEAKERS: { id: 'A' | 'B'; name: string; role: string }[] = (['A', 'B'] as const).map((id) => ({ id, ...SPEAKER_NAMES[id] }));
 
-const ENGINES: { id: 'local' | 'minimax'; label: string; profileId: string }[] = [
-  { id: 'local', label: '本地引擎（默认）', profileId: 'mock-tts' },
-  { id: 'minimax', label: 'MiniMax', profileId: 'minimax' },
+type EngineId = 'local' | 'minimax' | 'volcengine';
+
+const ENGINES: { id: EngineId; label: string; profileId: string; model: string }[] = [
+  { id: 'local', label: '本地 IndexTTS', profileId: 'comfyui-indextts', model: 'IndexTTS 2.5 · 参考声线' },
+  { id: 'minimax', label: 'MiniMax · 云端', profileId: 'minimax', model: 'speech-2.8-hd' },
+  { id: 'volcengine', label: '火山引擎 · 云端', profileId: 'volcengine', model: 'seed-audio-1.0' },
 ];
 
-// 音色由参考音频决定，不再提供硬编码单选项下拉（42 号方案：去掉假选择）。
-const DEFAULT_VOICE_MODEL = 'IndexTTS 2.5 · 参考声线';
+const DEFAULT_VOICE_MODEL = ENGINES[0].model;
 
 const GAP_MAX_MS = 1200;
 
@@ -52,7 +55,8 @@ function defaultBindings(proj: Project): Record<'A' | 'B', VoiceBinding> {
 export function VoicePage({ projectId }: { projectId: string }) {
   const project = useProject(projectId);
   const jobs = useJobs(projectId);
-  const synth = useVoiceSynthesize();
+  const machine = useMachine();
+  const synth = useFlexibleVoiceSynthesize();
   const rhythm = useVoiceRhythm();
   const [rhythmGaps, setRhythmGaps] = useState<number[] | null>(null);
   const adopt = useVoiceAdopt();
@@ -61,18 +65,20 @@ export function VoicePage({ projectId }: { projectId: string }) {
   const audioUploadRef = useRef<HTMLInputElement>(null);
   const [audioUploadUnit, setAudioUploadUnit] = useState<string | null>(null);
   const [importNotice, setImportNotice] = useState<string | null>(null);
-  const audition = useVoiceAudition();
+  const audition = useFlexibleVoiceAudition();
   const confirm = useConfirm();
   const revokeApproval = useRevokeApproval();
   const restoreTimeline = useRestoreTimeline();
   const setView = useProjectStore((s) => s.setView);
-  // 语音通道仍是模拟时，试听 / 参考音频 / MiniMax / 音色下拉都只会产生错误或空操作，
-  // 一律不渲染（真实引擎接入后 capability 变 live 自动恢复）。
   const ttsSimulated = useServiceStore((s) => s.capabilities?.tts.mode !== 'live');
+  const activeProvider = String(machine.data?.activeConfig?.tts_provider ?? 'mock');
+  const activeEngine: EngineId = !ttsSimulated && activeProvider === 'minimax' ? 'minimax'
+    : !ttsSimulated && activeProvider === 'volcengine' ? 'volcengine' : 'local';
 
   const proj = project.data;
   const [bindings, setBindings] = useState<Record<'A' | 'B', VoiceBinding> | null>(null);
-  const [engine, setEngine] = useState<'local' | 'minimax'>('local');
+  const [engine, setEngine] = useState<EngineId>('local');
+  useEffect(() => { setEngine(activeEngine); }, [activeEngine]);
   // 批 3（42 号方案）P1-B：自定义试听文本（默认用所选话轮首句，真实台词验音色）
   const [auditionText, setAuditionText] = useState('');
   const [refNames, setRefNames] = useState<Record<'A' | 'B', string>>({ A: '', B: '' });
@@ -107,15 +113,31 @@ export function VoicePage({ projectId }: { projectId: string }) {
   const synthNotApplied = (lastSynth?.result?.meta as { applied?: boolean } | undefined)?.applied === false;
   // voiceApproved 的推导放在 timelineStale 之后（见下方注释：过期时间轨上的历史确认不算）。
 
+  const selectedSpec = ENGINES.find((item) => item.id === engine) ?? ENGINES[0];
+  const configuredModel = machine.data?.activeConfig?.[`${engine}_model`];
+  const selectedModel = engine !== 'local' && typeof configuredModel === 'string' && configuredModel
+    ? configuredModel : selectedSpec.model;
+  const voiceFor = (spk: 'A' | 'B') => {
+    const configured = machine.data?.activeConfig?.[`${engine}_voice_${spk.toLowerCase()}`];
+    return String(bs?.[spk].providerVoiceId || (typeof configured === 'string' ? configured : '') || '');
+  };
   const bindingsPayload = useMemo(() => {
     if (!bs) return {};
     return Object.fromEntries(
-      Object.entries(bs).map(([spk, b]) => [
-        spk, { id: b.id, characterId: b.characterId, providerProfileId: ttsSimulated ? 'mock-tts' : 'comfyui-indextts',
-          modelId: b.modelId, localRefAudio: b.localRefAudio },
-      ]),
+      (['A', 'B'] as const).map((spk) => {
+        const b = bs[spk];
+        const voiceId = voiceFor(spk);
+        return [spk, {
+          id: b.id, characterId: b.characterId,
+          providerProfileId: ttsSimulated ? 'mock-tts' : selectedSpec.profileId,
+          modelId: ttsSimulated ? b.modelId : selectedModel,
+          providerVoiceId: voiceId,
+          minimaxVoiceId: engine === 'minimax' ? voiceId : undefined,
+          localRefAudio: b.localRefAudio,
+        }];
+      }),
     );
-  }, [bs, ttsSimulated]);
+  }, [bs, ttsSimulated, selectedSpec.profileId, selectedModel, engine, machine.data?.activeConfig]);
 
   // 时间轨可能来自旧话轮数的草稿；间隔数组必须重采样到当前 turnCount-1，
   // 否则增删话轮后合成被服务端 INVALID_GAPS 拒绝（保留已调值，新相邻位补 320）。
@@ -132,11 +154,13 @@ export function VoicePage({ projectId }: { projectId: string }) {
   // 已确认 = 后端 stage_svc 判定阶段③ 为 done（含"确认绑定当前时间轨 + 输入指纹一致"）。
   // 前端不再自算确认条件，避免「轨道已过期、按钮仍显示已确认」的两套口径（F3）。
   const voiceApproved = !timelineStale && proj?.stageProgress.voice === 'done';
+  const voiceComplete = !!timeline?.units.length && timeline.units.every((unit) => unit.sampleCount > 0);
+  const adoptedCount = timeline?.units.filter((unit) => unit.sampleCount > 0).length ?? 0;
+  const cloudVoicesReady = engine !== 'volcengine' || ttsSimulated
+    || (['A', 'B'] as const).every((spk) => !!voiceFor(spk));
 
-  // 合成许可：有工程、有话轮、没有正在进行的合成任务即可。
-  // 已确认的配音也允许重做（11 报告 P2-16 + v3.1 死锁解除：重合成会替换当前时间轨
-  // 并撤销 voice/sample 确认，voice_svc 写回规则）。
-  const canSynthesize = !!proj && !!revision && turnCount > 0 && !synthesizing;
+  // 合成许可：有工程、有话轮、没有正在进行的合成任务即可。火山必须明确 A/B speaker。
+  const canSynthesize = !!proj && !!revision && turnCount > 0 && !synthesizing && !synth.isPending && cloudVoicesReady;
 
   const updateBinding = (spk: 'A' | 'B', patch: Partial<VoiceBinding>) => {
     if (!bs) return;
@@ -170,19 +194,30 @@ export function VoicePage({ projectId }: { projectId: string }) {
   }, [audJob.data, auditionJob]);
 
   const startAudition = (spk: 'A' | 'B') => {
+    if (audition.isPending) return;
     setError(null);
-    audition.mutateAsync({ projectId, speaker: spk, text: auditionText.trim() || undefined, referenceAudio: bs?.[spk].localRefAudio ?? undefined })
+    if (engine === 'volcengine' && !voiceFor(spk)) {
+      setError(`请先填写 ${spk} 的火山 speaker 音色 ID`);
+      return;
+    }
+    audition.mutateAsync({
+      projectId, speaker: spk, text: auditionText.trim() || undefined,
+      referenceAudio: bs?.[spk].localRefAudio ?? undefined,
+      providerProfileId: ttsSimulated ? 'mock-tts' : selectedSpec.profileId,
+      modelId: selectedModel, voiceId: voiceFor(spk) || undefined,
+    })
       .then((r) => setAuditionJob({ id: r.jobId, spk }))
       .catch((e) => setError(`试听提交失败：${e instanceof Error ? e.message : e}`));
   };
 
-  const pickEngine = (id: 'local' | 'minimax') => {
+  const pickEngine = (id: EngineId) => {
     setEngine(id);
-    const profile = ENGINES.find((e) => e.id === id)?.profileId ?? 'mock-tts';
+    const spec = ENGINES.find((e) => e.id === id) ?? ENGINES[0];
     if (!bs) return;
+    // 两家云音色命名不互通，切换引擎时清除项目级临时音色，保留服务默认配置。
     setBindings({
-      A: { ...bs.A, providerProfileId: profile },
-      B: { ...bs.B, providerProfileId: profile },
+      A: { ...bs.A, providerProfileId: spec.profileId, modelId: spec.model, providerVoiceId: '', minimaxVoiceId: '' },
+      B: { ...bs.B, providerProfileId: spec.profileId, modelId: spec.model, providerVoiceId: '', minimaxVoiceId: '' },
     });
   };
 
@@ -200,7 +235,7 @@ export function VoicePage({ projectId }: { projectId: string }) {
   };
 
   const handleSynthesize = () => {
-    if (!proj || !revision || !bs) return;
+    if (!proj || !revision || !bs || synth.isPending) return;
     setError(null);
     setSelectedUnitId(null);
     synth.mutate({
@@ -213,7 +248,7 @@ export function VoicePage({ projectId }: { projectId: string }) {
   };
 
   const handleUnitSynthesize = (turnId: string) => {
-    if (!proj || !revision || !bs) return;
+    if (!proj || !revision || !bs || synth.isPending) return;
     setError(null);
     synth.mutate({
       projectId, clientToken: crypto.randomUUID(), revisionId: revision.id,
@@ -252,6 +287,10 @@ export function VoicePage({ projectId }: { projectId: string }) {
 
   const handleConfirm = () => {
     if (!proj || !timeline) return;
+    if (!voiceComplete) {
+      setError('仍有话轮缺少已采用音频。请逐条上传并采纳，或生成整期配音后再确认。');
+      return;
+    }
     confirm.mutate({ projectId, expectedRevision: proj.revision, kind: 'voice', inputRevisionId: timeline.revisionId }, {
       onError: (e) => setError((e as Error).message),
     });
@@ -449,8 +488,8 @@ export function VoicePage({ projectId }: { projectId: string }) {
             时间轨过期时禁用：确认绑定当前时间轨，服务端会因绑定非当前草稿而 422。 */}
         <Button
           variant="brand" size="sm" icon="check"
-          disabled={voiceApproved || !timeline || timelineStale}
-          title={timelineStale ? '脚本已改动，请先重新生成整期配音再确认' : undefined}
+          disabled={voiceApproved || !timeline || timelineStale || !voiceComplete}
+          title={timelineStale ? '脚本已改动，请先重新生成整期配音再确认' : !voiceComplete ? '仍有话轮缺少已采用音频' : undefined}
           onClick={handleConfirm}
         >{voiceApproved ? '已确认' : '确认配音'}</Button>
       </StageHead>
@@ -458,6 +497,9 @@ export function VoicePage({ projectId }: { projectId: string }) {
       <div className="hf-body">
         {proj && <ImpactPlan projectId={projectId} revision={proj.revision}/>}
         {error && <Alert tone="danger" onClose={dismissError}>{error}</Alert>}
+        {ttsSimulated && ['minimax', 'volcengine'].includes(activeProvider) && (
+          <Alert tone="warning">已选择 {activeProvider === 'minimax' ? 'MiniMax' : '火山引擎'}，但服务进程尚未读到凭据，当前仍是演示语音。请到服务设置查看环境变量并重启；也可以直接上传录音。</Alert>
+        )}
         {synthNotApplied && (
           <Alert tone="warning">
             上一次合成期间脚本被改动：结果已存入音频历史，未替换当前时间轨。请重新生成整期配音后再确认。
@@ -487,20 +529,40 @@ export function VoicePage({ projectId }: { projectId: string }) {
             时间轨对应脚本 {timeline?.revisionId}，当前草稿为 {proj?.currentDraftRevision}；请<b>重新生成整期配音</b>后再确认。
           </Alert>
         )}
+        {timeline && !timelineStale && !voiceComplete && (
+          <Alert tone="info">
+            已采用 {adoptedCount}/{timeline.units.length} 条音频。可继续逐条上传并采纳，也可生成整期配音；补齐前不会开放确认。
+          </Alert>
+        )}
+        {!!revision?.turns.length && !timeline && (
+          <Alert tone="info">可以直接使用下方每条话轮的「上传音频」，无需先运行 TTS；上传后试听并采纳。</Alert>
+        )}
 
         <div className="hf-s3">
           {/* ---- 左：语音引擎面板 ---- */}
           <section className="wu-card hf-eng">
             <h3>语音引擎</h3>
             <div className="hf-engine">
-              {ENGINES.filter((e) => e.id === 'local').map((e) => (
-                <Choice
+              {ENGINES.map((e) => {
+                const enabled = ttsSimulated ? e.id === 'local' : e.id === activeEngine;
+                return <Choice
                   key={e.id} type="radio" name="engine" value={e.id}
                   checked={engine === e.id} onChange={() => pickEngine(e.id)}
-                  label={e.label}
-                />
-              ))}
+                  disabled={!enabled}
+                  label={<span>{e.label}{enabled ? '' : ' · 先在服务设置启用'}</span>}
+                />;
+              })}
             </div>
+            <p className="wu-caption" style={{ lineHeight: 1.6 }}>
+              {ttsSimulated ? '当前为演示语音；可直接上传真人录音，或到服务设置启用真实引擎。' :
+                engine === 'local' ? '本地引擎使用参考音频克隆声线。' :
+                engine === 'minimax' ? 'MiniMax 使用异步 T2A；A/B 可分别填写 voice_id，留空用系统默认音色。' :
+                '火山引擎使用语音合成 1.0；请为 A/B 填写各自 speaker。'}
+              <a className="hf-link" onClick={() => setView('services')}>服务设置</a>
+            </p>
+            {engine === 'volcengine' && !ttsSimulated && !cloudVoicesReady && (
+              <Alert tone="warning">火山 speaker 尚未填齐，填写 A/B 音色后才能合成。</Alert>
+            )}
 
             {!ttsSimulated && (
               <div style={{ marginTop: 8, display: 'grid', gap: 4 }}>
@@ -527,7 +589,20 @@ export function VoicePage({ projectId }: { projectId: string }) {
                   <Badge tone={spk.id === 'A' ? 'info' : 'speaker-b'}>{spk.id}</Badge>
                   <div>
                     <div className="nm">{proj?.characterBindings?.[spk.id]?.name??spk.name} · {proj?.characterBindings?.[spk.id]?.role??spk.role}</div>
-                    {!ttsSimulated && (
+                    {!ttsSimulated && engine !== 'local' && (
+                      <Input
+                        aria-label={`${spk.id} ${engine === 'minimax' ? 'MiniMax voice_id' : '火山 speaker'}`}
+                        value={voiceFor(spk.id)}
+                        placeholder={engine === 'minimax' ? 'MiniMax voice_id（留空用默认）' : '填写火山 speaker（必填）'}
+                        onChange={(e) => updateBinding(spk.id, {
+                          providerVoiceId: e.target.value,
+                          minimaxVoiceId: engine === 'minimax' ? e.target.value : null,
+                          auditionState: 'none',
+                        })}
+                        style={{ marginTop: 6, minWidth: 0 }}
+                      />
+                    )}
+                    {!ttsSimulated && engine === 'local' && (
                       <div className="wu-row" style={{ gap: 8, marginTop: 4, minWidth: 0, alignItems: 'center' }}>
                         <Button
                           variant="ghost" size="sm"
@@ -547,8 +622,8 @@ export function VoicePage({ projectId }: { projectId: string }) {
                   {!ttsSimulated && (
                     <Button
                       variant="secondary" size="sm" icon="play"
-                      busy={auditionJob?.spk === spk.id} disabled={!!auditionJob}
-                      title="合成一句话试听当前参考音色"
+                      busy={audition.isPending || auditionJob?.spk === spk.id} disabled={!!auditionJob || audition.isPending}
+                      title="合成一句话试听当前引擎与音色"
                       onClick={() => startAudition(spk.id)}
                     >{bs?.[spk.id].auditionState === 'passed' ? '再试听' : '试听'}</Button>
                   )}
@@ -633,9 +708,9 @@ export function VoicePage({ projectId }: { projectId: string }) {
                     <Button variant="secondary" size="sm" busy={synthesizing} disabled={synthesizing}
                       onClick={() => handleUnitSynthesize(t.id)}>重生成本条</Button>
                     <Button variant="ghost" size="sm" icon="upload" busy={importAudio.isPending}
-                      disabled={!u || importAudio.isPending}
-                      title={u ? '上传成品音频替代本条 TTS（成为候选，采纳后生效）' : '请先合成整期配音'}
-                      onClick={() => { if (u) { setAudioUploadUnit(u.id); audioUploadRef.current?.click(); } }}>上传音频</Button>
+                      disabled={importAudio.isPending}
+                      title="上传本条真人录音；无需先运行 TTS，成为候选后试听并采纳"
+                      onClick={() => { setAudioUploadUnit(u?.id ?? `U-${t.id}`); audioUploadRef.current?.click(); }}>上传音频</Button>
                     {u?.adoptedAudioAssetId && <Button variant="ghost" size="sm" icon="play"
                       onClick={() => playAsset(u.adoptedAudioAssetId)}>播放</Button>}
                   </div>

@@ -24,6 +24,8 @@ class VoiceBinding(BaseModel):
     model_id: str = ""
     local_ref_audio: Optional[AssetRef] = None
     minimax_voice_id: Optional[str] = None
+    # 云语音通用音色：MiniMax voice_id / 火山 speaker。保留上一字段兼容旧工程。
+    provider_voice_id: Optional[str] = None
     audition_state: Literal["none", "passed", "stale"] = "none"
 
 
@@ -35,6 +37,8 @@ class SynthesisUnit(BaseModel):
     provider_profile_id: str = ""
     model_id: str = ""
     voice_binding_id: str = ""
+    # 冻结本次合成实际请求的供应商音色，换音色必须使旧音频指纹失效。
+    voice_id: str = ""
     emotion: dict = Field(default_factory=lambda: {"label": "自然"})
     speed_ratio: float = 1.0
     pronunciation_revision: str = ""

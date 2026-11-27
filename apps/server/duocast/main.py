@@ -7,17 +7,23 @@
 from __future__ import annotations
 
 import asyncio
+import ipaddress
+import secrets
 from contextlib import asynccontextmanager
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from .adapters.base import CapabilityRegistry, TTSProvider
 from .adapters.comfyui_tts import ComfyUITTSProvider
+from .adapters.cloud_tts import MiniMaxTTSProvider, VolcengineTTSProvider
 from .adapters.comfyui_video import ComfyUIVideoProvider
+from .adapters.vidu_video import ViduVideoProvider
 from .adapters.musetalk_video import ModeVideoProvider, engine_root
 from .adapters.mock import MockImageProvider, MockTextProvider, MockTTSProvider, MockVideoProvider
 from .adapters.toapis_image import ToAPIsImageProvider
@@ -25,7 +31,7 @@ from .adapters.toapis_text import ToAPIsTextProvider
 from .core.config import PROJECT_ROOT, settings
 from .core.eventbus import EventBus
 from .core.logging import log, setup_logging
-from .jobs.manager import JobManager
+from .jobs.manager import JobInputConflict, JobManager, JobPersistenceError
 from .jobs.control import ControlledProvider
 from .jobs.recovery import recover_on_startup
 from .domain.project import Project, ScriptRevision
@@ -42,6 +48,108 @@ from .storage.templates import TemplateStore
 from .storage.motion_packs import MotionPackStore
 
 setup_logging()
+
+
+def _is_loopback_host(host: str) -> bool:
+    value = str(host or "").strip().lower()
+    if value == "localhost":
+        return True
+    try:
+        address = ipaddress.ip_address(value.strip("[]"))
+    except ValueError:
+        return False
+    if isinstance(address, ipaddress.IPv6Address) and address.ipv4_mapped:
+        address = address.ipv4_mapped
+    return address.is_loopback
+
+
+def _require_secure_listen() -> None:
+    token = str(settings.api_token or "").strip()
+    if not token and not _is_loopback_host(settings.host):
+        raise RuntimeError(
+            "DUOCAST_HOST 为非回环地址时必须设置 DUOCAST_API_TOKEN；"
+            "通配监听地址另请用 DUOCAST_TRUSTED_HOSTS 指定实际访问主机名/IP"
+        )
+
+
+def _trusted_hosts() -> list[str]:
+    hosts = {"localhost", "127.0.0.1", "::1", "testserver"}
+    configured = str(settings.host or "").strip().lower()
+    if configured and configured not in {"0.0.0.0", "::", "*"}:
+        hosts.add(configured.strip("[]"))
+    for item in str(settings.trusted_hosts or "").split(","):
+        host = item.strip().lower()
+        if host and host != "*":
+            hosts.add(host.strip("[]"))
+    return sorted(hosts)
+
+
+def _valid_bearer(request: Request, token: str) -> bool:
+    scheme, separator, credential = request.headers.get("authorization", "").partition(" ")
+    return bool(
+        token
+        and separator
+        and scheme.lower() == "bearer"
+        and credential
+        and secrets.compare_digest(credential.encode("utf-8"), token.encode("utf-8"))
+    )
+
+
+def _same_origin_browser(request: Request) -> bool:
+    """Allow the bundled same-origin web UI without putting a token in frontend code.
+
+    TrustedHost runs outside this middleware. Cross-origin browser requests still need
+    a Bearer token; non-browser API clients can always use the token explicitly.
+    """
+    origin = request.headers.get("origin")
+    if not origin:
+        return request.headers.get("sec-fetch-site", "").lower() == "same-origin"
+    try:
+        parsed = urlsplit(origin)
+        request_port = request.url.port or (443 if request.url.scheme == "https" else 80)
+        origin_port = parsed.port or (443 if parsed.scheme == "https" else 80)
+        return bool(
+            parsed.scheme
+            and parsed.hostname
+            and not parsed.username
+            and not parsed.password
+            and not parsed.query
+            and not parsed.fragment
+            and parsed.path in {"", "/"}
+            and parsed.scheme.lower() == request.url.scheme.lower()
+            and parsed.hostname.lower() == request.url.hostname.lower()
+            and origin_port == request_port
+        )
+    except ValueError:
+        return False
+
+
+class APIBearerMiddleware:
+    """Global API gate; Ingest keeps its stricter endpoint-level Bearer contract."""
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope.get("type") != "http":
+            await self.app(scope, receive, send)
+            return
+        request = Request(scope, receive=receive)
+        path = request.url.path
+        if not path.startswith("/api/") or path == "/api/health" or path.startswith("/api/ingest/"):
+            await self.app(scope, receive, send)
+            return
+        runtime = getattr(request.app.state, "runtime_settings", None)
+        token = str(getattr(runtime, "api_token", "") or "").strip()
+        if not token or _valid_bearer(request, token) or _same_origin_browser(request):
+            await self.app(scope, receive, send)
+            return
+        response = JSONResponse(
+            status_code=401,
+            content={"detail": "需要有效的 Bearer token（DUOCAST_API_TOKEN）"},
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+        await response(scope, receive, send)
 
 
 def _job_runner(manager: JobManager, store: ProjectStore, artifacts: ArtifactStore,
@@ -126,6 +234,7 @@ def _job_runner(manager: JobManager, store: ProjectStore, artifacts: ArtifactSto
                 pronunciation=job.input_snapshot.get("pronunciation"),
                 artifact_store=artifacts,
                 artifacts_root=artifacts.root,
+                request_key=job.input_snapshot.get("requestKey") or job.retried_from or job.id,
                 # 单元级进度：写入 job.stage 并随 SSE 推给阶段③/任务中心
                 progress=lambda done, total: manager.set_stage(job, f"unit {done}/{total}"),
             )
@@ -145,7 +254,11 @@ def _job_runner(manager: JobManager, store: ProjectStore, artifacts: ArtifactSto
                 "lineTexts": [snap.get("text") or "你好，这是一段音色试听。"],
                 "voiceBindingId": f"VB-{speaker}-audition",
                 "speaker": speaker,
-                "providerProfileId": "tts-audition", "modelId": "",
+                "providerProfileId": snap.get("providerProfileId") or getattr(tts_provider, "name", "tts-audition"),
+                "modelId": snap.get("modelId") or "",
+                "voiceId": snap.get("voiceId") or "",
+                "requestKey": snap.get("requestKey") or job.retried_from or job.id,
+                "unitId": f"audition-{speaker}",
                 "emotion": {"label": "自然"}, "speedRatio": snap.get("speedRatio", 1.0),
                 "referenceAudio": snap.get("referenceAudio"),
             })
@@ -180,6 +293,10 @@ def _job_runner(manager: JobManager, store: ProjectStore, artifacts: ArtifactSto
             if video_provider is not None and not video_provider.capabilities.get("simulated", True):
                 result = await video_api.render(job.input_snapshot, progress=lambda stage: manager.set_stage(job, stage))
                 result["meta"]["dependencyHash"] = job.input_snapshot.get("dependencyHash")
+                if job.input_snapshot.get("provider") == "vidu":
+                    # Vidu 是独立画面候选，不按双人口型时间轨判定过期，也不自动采用。
+                    result["meta"].update(candidate=True, mode="api", provider="vidu")
+                    return result
                 current = store.load(job.project_id)
                 if current is None:
                     raise RuntimeError("project vanished")
@@ -245,6 +362,7 @@ def _job_runner(manager: JobManager, store: ProjectStore, artifacts: ArtifactSto
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    _require_secure_listen()
     # ---- 存储层装配 ----
     project_store = ProjectStore(settings.storage_root / "projects", debounce_ms=settings.project_debounce_ms)
     artifacts = ArtifactStore(settings.storage_root / "artifacts")
@@ -265,6 +383,14 @@ async def lifespan(app: FastAPI):
                                "lora": cfg.video_lora, "lora_strength": cfg.video_lora_strength},
         "credential_env": runtime_config.get("credential_env", "DUOCAST_TOAPIS_KEY"),
         "credentialPresent": bool(cfg.toapis_key), "budget_yuan": runtime_config.get("budget_yuan", 2),
+        "minimax_base_url": cfg.minimax_base_url, "minimax_model": cfg.minimax_model,
+        "minimax_voice_a": cfg.minimax_voice_a, "minimax_voice_b": cfg.minimax_voice_b,
+        "minimaxCredentialPresent": bool(cfg.minimax_key),
+        "volcengine_base_url": cfg.volcengine_base_url, "volcengine_model": cfg.volcengine_model,
+        "volcengine_voice_a": cfg.volcengine_voice_a, "volcengine_voice_b": cfg.volcengine_voice_b,
+        "volcengineCredentialPresent": bool(cfg.volcengine_key),
+        "vidu_base_url": cfg.vidu_base_url, "vidu_model": cfg.vidu_model,
+        "viduCredentialPresent": bool(cfg.vidu_key),
     }
     cache = CacheStore(settings.storage_root / "cache")
 
@@ -296,7 +422,20 @@ async def lifespan(app: FastAPI):
             artifacts_root=settings.storage_root / "artifacts",
             artifact_store=artifacts,
         )
+    elif cfg.tts_provider == "minimax" and cfg.minimax_key:
+        local_tts = MiniMaxTTSProvider(
+            api_key=cfg.minimax_key, base_url=cfg.minimax_base_url, model=cfg.minimax_model,
+            voices={"A": cfg.minimax_voice_a, "B": cfg.minimax_voice_b},
+            artifacts_root=settings.storage_root / "artifacts", artifact_store=artifacts,
+        )
+    elif cfg.tts_provider == "volcengine" and cfg.volcengine_key:
+        local_tts = VolcengineTTSProvider(
+            api_key=cfg.volcengine_key, base_url=cfg.volcengine_base_url, model=cfg.volcengine_model,
+            voices={"A": cfg.volcengine_voice_a, "B": cfg.volcengine_voice_b},
+            artifacts_root=settings.storage_root / "artifacts", artifact_store=artifacts,
+        )
     else:
+        # 已请求云服务但缺少密钥时明确保留模拟能力；providers/test 会报告未就绪。
         local_tts = MockTTSProvider()
     video = (ComfyUIVideoProvider(base_url=cfg.video_url, input_dir=settings.video_input,
                                 artifact_store=artifacts,
@@ -304,9 +443,12 @@ async def lifespan(app: FastAPI):
                                 prefetch_blocks=cfg.video_prefetch_blocks, text_cfg=cfg.video_text_cfg,
                                 audio_cfg=cfg.video_audio_cfg, compile_model=cfg.video_compile,
                                 lora=cfg.video_lora or None, lora_strength=cfg.video_lora_strength)
-             if cfg.video_provider == "comfyui" else MockVideoProvider())
+             if cfg.video_provider == "comfyui" else
+             ViduVideoProvider(api_key=cfg.vidu_key, base_url=cfg.vidu_base_url, model=cfg.vidu_model,
+                               artifact_store=artifacts, binary_path=cfg.vidu_binary or None)
+             if cfg.video_provider == "vidu" and cfg.vidu_key else MockVideoProvider())
     from .services.fast_catalog import catalog
-    if (engine_root() or any(t.get("ready") for t in catalog())) and not video.capabilities.get("simulated", True):
+    if isinstance(video, ComfyUIVideoProvider) and (engine_root() or any(t.get("ready") for t in catalog())):
         video = ModeVideoProvider(video, artifacts)
     capabilities = CapabilityRegistry(
         text=text_api.capabilities,
@@ -322,6 +464,7 @@ async def lifespan(app: FastAPI):
     from .storage.expert_versions import ExpertVersionStore
     app.state.expert_version_store = ExpertVersionStore(settings.storage_root / 'expert-versions')
     app.state.artifacts = artifacts
+    app.state.video_service = video
     app.state.motion_pack_store = MotionPackStore(settings.storage_root / "motion-packs", artifacts.by_id)
     if isinstance(video, ModeVideoProvider):
         video.fast.motion_store = app.state.motion_pack_store
@@ -377,6 +520,17 @@ async def invalid_project_input(request: Request, exc: InvalidProjectInput) -> J
     return JSONResponse(status_code=422, content={"detail": str(exc)})
 
 
+@app.exception_handler(JobInputConflict)
+async def job_input_conflict(request: Request, exc: JobInputConflict) -> JSONResponse:
+    return JSONResponse(status_code=409, content={"detail": str(exc)})
+
+
+@app.exception_handler(JobPersistenceError)
+async def job_persistence_error(request: Request, exc: JobPersistenceError) -> JSONResponse:
+    return JSONResponse(status_code=503, content={"detail": "任务清单暂时无法写入，请检查磁盘空间和权限后重试"})
+
+
+app.add_middleware(APIBearerMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -386,6 +540,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+# Outermost: reject DNS-rebinding Host headers before CORS or authentication.
+app.add_middleware(TrustedHostMiddleware, allowed_hosts=_trusted_hosts())
 
 from .api import artifacts as artifacts_api
 from .api import assets as assets_api

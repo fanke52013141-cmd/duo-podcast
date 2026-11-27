@@ -11,6 +11,7 @@ import logging
 import os
 import re
 import tempfile
+import threading
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
@@ -48,6 +49,9 @@ class ProjectStore:
         self._projects: dict[str, Project] = {}
         self._debounce_task: Optional[asyncio.Task] = None
         self._dirty: set[str] = set()
+        # Sync endpoints run in thread pools while async jobs mutate projects on
+        # the event loop. Revision checks and cache updates must share one lock.
+        self._lock = threading.RLock()
 
     # ---- 路径 ----
     def _path(self, project_id: str) -> Path:
@@ -74,69 +78,73 @@ class ProjectStore:
 
     # ---- 读 ----
     def load(self, project_id: str) -> Optional[Project]:
-        p = self._path(project_id)
-        if project_id in self._projects:
-            return self._projects[project_id]
-        if not p.exists():
-            return None
-        data = json.loads(p.read_text(encoding="utf-8"))
-        proj = Project.model_validate(data)
-        if proj.id != project_id:
-            raise InvalidProjectInput("project id does not match storage directory")
-        self._projects[project_id] = proj
-        return proj
+        with self._lock:
+            p = self._path(project_id)
+            if project_id in self._projects:
+                return self._projects[project_id]
+            if not p.exists():
+                return None
+            data = json.loads(p.read_text(encoding="utf-8"))
+            proj = Project.model_validate(data)
+            if proj.id != project_id:
+                raise InvalidProjectInput("project id does not match storage directory")
+            self._projects[project_id] = proj
+            return proj
 
     def list_ids(self) -> list[str]:
-        if not self.root.exists():
-            return []
-        candidates = set(self._projects) | {d.name for d in self.root.iterdir()}
-        ids = []
-        for project_id in candidates:
-            try:
-                path = self._path(project_id)
-            except InvalidProjectInput:
-                continue
-            if project_id in self._projects or path.is_file():
-                ids.append(project_id)
-        return sorted(ids)
+        with self._lock:
+            if not self.root.exists():
+                return []
+            candidates = set(self._projects) | {d.name for d in self.root.iterdir()}
+            ids = []
+            for project_id in candidates:
+                try:
+                    path = self._path(project_id)
+                except InvalidProjectInput:
+                    continue
+                if project_id in self._projects or path.is_file():
+                    ids.append(project_id)
+            return sorted(ids)
 
     # ---- 写（唯一入口） ----
     def apply(self, project_id: str, patch: dict[str, Any], expected_revision: int) -> Project:
-        current = self.load(project_id)
-        if not isinstance(patch, dict):
-            raise InvalidProjectInput("patch must be an object")
-        if "id" in patch and patch["id"] != project_id:
-            raise InvalidProjectInput("project id cannot be changed")
-        if type(expected_revision) is not int or expected_revision < 0:
-            raise InvalidProjectInput("expectedRevision must be a non-negative integer")
-        if current is None:
-            raise KeyError(f"project not found: {project_id}")
-        if current.revision != expected_revision:
-            raise ProjectRevisionConflict(
-                f"expectedRevision={expected_revision} != current={current.revision}"
-            )
-        updated = current.model_copy(deep=True)
-        data = updated.model_dump(mode="json")
-        data.update(patch)
-        updated = Project.model_validate(data)
-        updated.revision = expected_revision + 1
-        updated.updated_at = _now_iso()
-        self._projects[project_id] = updated
-        self._dirty.add(project_id)
-        self._schedule_flush()
-        return updated
+        with self._lock:
+            current = self.load(project_id)
+            if not isinstance(patch, dict):
+                raise InvalidProjectInput("patch must be an object")
+            if "id" in patch and patch["id"] != project_id:
+                raise InvalidProjectInput("project id cannot be changed")
+            if type(expected_revision) is not int or expected_revision < 0:
+                raise InvalidProjectInput("expectedRevision must be a non-negative integer")
+            if current is None:
+                raise KeyError(f"project not found: {project_id}")
+            if current.revision != expected_revision:
+                raise ProjectRevisionConflict(
+                    f"expectedRevision={expected_revision} != current={current.revision}"
+                )
+            updated = current.model_copy(deep=True)
+            data = updated.model_dump(mode="json")
+            data.update(patch)
+            updated = Project.model_validate(data)
+            updated.revision = expected_revision + 1
+            updated.updated_at = _now_iso()
+            self._projects[project_id] = updated
+            self._dirty.add(project_id)
+            self._schedule_flush()
+            return updated
 
     def create(self, project_id: str, title: str = "未命名节目") -> Project:
-        path = self._path(project_id)
-        if path.parent.exists() or any(
-            self.root / existing_id == path.parent for existing_id in self._projects
-        ):
-            raise ProjectAlreadyExists(f"project already exists: {project_id}")
-        proj = Project(id=project_id, title=title, revision=0, updated_at=_now_iso())
-        self._projects[project_id] = proj
-        self._dirty.add(project_id)
-        self._schedule_flush()
-        return proj
+        with self._lock:
+            path = self._path(project_id)
+            if path.parent.exists() or any(
+                self.root / existing_id == path.parent for existing_id in self._projects
+            ):
+                raise ProjectAlreadyExists(f"project already exists: {project_id}")
+            proj = Project(id=project_id, title=title, revision=0, updated_at=_now_iso())
+            self._projects[project_id] = proj
+            self._dirty.add(project_id)
+            self._schedule_flush()
+            return proj
 
     # ---- 防抖落盘 ----
     def _schedule_flush(self) -> None:
@@ -165,48 +173,51 @@ class ProjectStore:
         Windows 上 os.replace 不能以已存在目录为目标（WinError 5），因此目标目录
         必须不存在；已存在时（如同秒重复删除）自动追加随机后缀。
         """
-        if self.load(project_id) is None:
-            raise KeyError(f"project not found: {project_id}")
-        self.flush()  # Newly created/debounced projects must reach the recoverable directory first.
-        src = self._path(project_id).parent
-        import uuid as _uuid
-        base = trash_dir if trash_dir is not None else self.trash_dir_for(project_id)
-        dest = base if not base.exists() else base.parent / f"{base.name}-{_uuid.uuid4().hex[:6]}"
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        if src.exists():
-            os.replace(src, dest)
-        self._projects.pop(project_id, None)
-        self._dirty.discard(project_id)
-        logger.info("project moved to trash", extra={"ctx": {"id": project_id}})
-        return dest
+        with self._lock:
+            if self.load(project_id) is None:
+                raise KeyError(f"project not found: {project_id}")
+            self.flush()  # Newly created/debounced projects must reach the recoverable directory first.
+            src = self._path(project_id).parent
+            import uuid as _uuid
+            base = trash_dir if trash_dir is not None else self.trash_dir_for(project_id)
+            dest = base if not base.exists() else base.parent / f"{base.name}-{_uuid.uuid4().hex[:6]}"
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            if src.exists():
+                os.replace(src, dest)
+            self._projects.pop(project_id, None)
+            self._dirty.discard(project_id)
+            logger.info("project moved to trash", extra={"ctx": {"id": project_id}})
+            return dest
 
     async def _flush_later(self) -> None:
         await asyncio.sleep(self.debounce_ms / 1000)
         self.flush()
 
     def flush(self) -> None:
-        for project_id in list(self._dirty):
-            proj = self._projects.get(project_id)
-            if proj is None:
-                continue
-            target = self._path(project_id)
-            target.parent.mkdir(parents=True, exist_ok=True)
-            # 原子替换（02 §6.3）：tmp → fsync → os.replace
-            payload = json.dumps(proj.model_dump(mode="json", by_alias=True), ensure_ascii=False, indent=2)
-            # 独占创建随机临时文件，不跟随预先放置的 project.json.tmp 链接。
-            tmp = None
-            try:
-                with tempfile.NamedTemporaryFile(
-                    mode="w", encoding="utf-8", dir=target.parent,
-                    prefix=".project-", suffix=".json.tmp", delete=False,
-                ) as fh:
-                    tmp = Path(fh.name)
-                    fh.write(payload)
-                    fh.flush()
-                    os.fsync(fh.fileno())
-                os.replace(tmp, target)
-            finally:
-                if tmp is not None:
-                    tmp.unlink(missing_ok=True)
-            self._dirty.discard(project_id)
-            logger.info("project persisted", extra={"ctx": {"id": project_id, "revision": proj.revision}})
+        with self._lock:
+            for project_id in list(self._dirty):
+                proj = self._projects.get(project_id)
+                if proj is None:
+                    self._dirty.discard(project_id)
+                    continue
+                target = self._path(project_id)
+                target.parent.mkdir(parents=True, exist_ok=True)
+                # 原子替换（02 §6.3）：tmp → fsync → os.replace
+                payload = json.dumps(proj.model_dump(mode="json", by_alias=True), ensure_ascii=False, indent=2)
+                # 独占创建随机临时文件，不跟随预先放置的 project.json.tmp 链接。
+                tmp = None
+                try:
+                    with tempfile.NamedTemporaryFile(
+                        mode="w", encoding="utf-8", dir=target.parent,
+                        prefix=".project-", suffix=".json.tmp", delete=False,
+                    ) as fh:
+                        tmp = Path(fh.name)
+                        fh.write(payload)
+                        fh.flush()
+                        os.fsync(fh.fileno())
+                    os.replace(tmp, target)
+                finally:
+                    if tmp is not None:
+                        tmp.unlink(missing_ok=True)
+                self._dirty.discard(project_id)
+                logger.info("project persisted", extra={"ctx": {"id": project_id, "revision": proj.revision}})

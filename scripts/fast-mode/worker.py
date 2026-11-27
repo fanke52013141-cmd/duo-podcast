@@ -5,6 +5,7 @@ import json
 import math
 import time
 import subprocess
+import uuid
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
@@ -15,7 +16,8 @@ for key in ('HF_HOME', 'TORCH_HOME', 'NUMBA_CACHE_DIR', 'MPLCONFIGDIR', 'XDG_CAC
 os.environ.update(HF_HUB_OFFLINE='1', TRANSFORMERS_OFFLINE='1', PYTHONDONTWRITEBYTECODE='1', TOKENIZERS_PARALLELISM='false')
 sys.path.insert(0, str(ROOT / 'vendor/MuseTalk'))
 from quality import quality_options
-from render_geometry import composite_size, project_box, preparation_key
+from render_geometry import composite_size, project_box
+from motion_worker import encode_seeded_latent, file_hash, latent_key, load_latents
 from face_restore import FaceRestorer, restore_fidelity
 import cv2
 import numpy as np
@@ -151,17 +153,23 @@ def run(request, runtime=None):
         frames = read_frames(speaker)
         if not frames or len(frames) != len(coords[speaker]): raise ValueError('Incomplete motion template')
         indices, active = schedule(frames, source['turns'], request['turns'], speaker, count)
-        key = preparation_key(ROOT/f'assets/template_{speaker}.mp4', coords[speaker], models/'sd-vae/config.json', models/'sd-vae/diffusion_pytorch_model.bin')
-        cache = ROOT / 'cache' / f'latents_v2_{speaker}_{key}.pt'
-        if cache.exists():
-            latents = torch.load(cache, map_location='cpu', weights_only=True)
-        else:
-            latents = []
-            for frame, (x1, y1, x2, y2) in zip(frames, coords[speaker]):
-                crop = cv2.resize(frame[y1:y2, x1:x2], (256, 256), interpolation=cv2.INTER_LANCZOS4)
-                latents.append(vae.get_latents_for_unet(crop).cpu())
-            latents = torch.cat(latents)
-            torch.save(latents, cache)
+        video = ROOT / f'assets/template_{speaker}.mp4'
+        vae_identity = {'config': file_hash(models/'sd-vae/config.json'),
+                        'weights': file_hash(models/'sd-vae/diffusion_pytorch_model.bin'),
+                        'implementation': file_hash(ROOT/'vendor/MuseTalk/musetalk/models/vae.py')}
+        key = latent_key(file_hash(video), coords[speaker], vae_identity, request.get('seed', 42))
+        cache = ROOT / 'cache' / 'template_latents_v3' / (key + '.pt')
+        cache.parent.mkdir(parents=True, exist_ok=True)
+        latents, cache_status = load_latents(cache, key, len(frames), torch)
+        missing = [i for i in range(len(frames)) if i not in latents]
+        for i in missing:
+            x1, y1, x2, y2 = coords[speaker][i]
+            crop = cv2.resize(frames[i][y1:y2, x1:x2], (256, 256), interpolation=cv2.INTER_LANCZOS4)
+            latents[i] = encode_seeded_latent(vae, crop, torch, key, i)
+        if missing:
+            temporary = cache.with_name(key + '.' + uuid.uuid4().hex + '.partial')
+            torch.save({'cacheKey': key, 'latents': latents}, temporary)
+            temporary.replace(cache)
         features, n = processor.get_audio_feature(request['tracks'][speaker])
         chunks = processor.get_whisper_chunk(features, 'cuda', torch.float16, whisper, n, fps=25)
         if len(chunks) < count - 1: raise ValueError('Audio feature track too short')
@@ -177,7 +185,7 @@ def run(request, runtime=None):
                 rendered = {}
                 if batch:
                     cond = pe(chunks[batch].cuda().half())
-                    predicted = unet.model(latents[[indices[i] for i in batch]].cuda().half(), torch.tensor([0], device='cuda'), encoder_hidden_states=cond).sample
+                    predicted = unet.model(torch.cat([latents[indices[i]] for i in batch]).cuda().half(), torch.tensor([0], device='cuda'), encoder_hidden_states=cond).sample
                     decoded = vae.decode_latents(predicted)
                     if fidelity is not None and restorer is not None:
                         decoded = restorer.restore_batch(decoded, fidelity)
@@ -195,7 +203,8 @@ def run(request, runtime=None):
             process.stdin.close()
             code = process.wait()
         if code: raise RuntimeError('Role encoding failed')
-        stats[speaker] = {'mouthFrames': sum(active), 'listeningFrames': count-sum(active)}
+        stats[speaker] = {'mouthFrames': sum(active), 'listeningFrames': count-sum(active),
+                          'latentCache': cache_status}
     width, height = map(int, request.get('resolution', '1920x1080').split('x'))
     fps = request.get('fps', 25)
     cameras = request.get('cameraPlan') or [{'start':0,'end':duration,'crop':None}]

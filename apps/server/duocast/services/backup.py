@@ -101,6 +101,9 @@ def import_backup(source, store, artifacts, motion_store=None):
             if not isinstance(meta, dict) or meta.get("format") != 1 or not isinstance(meta.get("artifacts"), list):
                 raise ValueError("不支持的备份版本")
             validated_project = Project.model_validate(meta["project"])
+            runtime_root = str((validated_project.fast_template or {}).get("runtimeRoot") or "")
+            if runtime_root.startswith(("\\\\", "//")):
+                raise ValueError("备份包含 UNC 运行时路径，已拒绝导入")
             pack_snapshot = meta.get('motionPackSnapshot')
             pack_draft = None
             if pack_snapshot is not None:
@@ -181,6 +184,12 @@ def import_backup(source, store, artifacts, motion_store=None):
         imported_pack = motion_store.create(rewrite(pack_draft))
         data['motionPack'] = {'id':imported_pack.id,'version':imported_pack.version}
     data["id"] = project_id
+    runtime_rebound = bool(data.get("fastTemplate")) and not data.get("motionPack")
+    if runtime_rebound:
+        # A portable project may keep its media, but an external worker path is
+        # not portable or trustworthy. Require an explicit local catalog choice.
+        data["fastTemplate"] = {}
+        data["generationMode"] = "standard"
     # Runtime-bound confirmations need a fresh check after relocation; media stays available.
     for approval in data.get("approvals", []):
         if approval.get("kind") in {"sample", "voice"}:
@@ -193,10 +202,12 @@ def import_backup(source, store, artifacts, motion_store=None):
     return {"projectId": saved.id, "missing": meta.get("missing", []),
             "summary": {"sourceProjectId": old_id, "mediaCount": len(validated),
                         "mediaBytes": sum(Path(path).stat().st_size for path in path_map.values()),
-                        "scriptVersions": len(saved.script_revisions),
-                        "recheck": ["声音与参考音频", "样片与生成规格"],
-                        "motionPack": {'imported':imported_pack is not None,
-                                       'id':imported_pack.id if imported_pack else None,
-                                       'requiresReview':validated_project.motion_pack is not None},
-                        "external": ["服务凭据", "模型与引擎", "外置动作模板"]},
+                         "scriptVersions": len(saved.script_revisions),
+                         "recheck": ["声音与参考音频", "样片与生成规格"]
+                                   + (["快速模式运行时需在本机重新选择"] if runtime_rebound else []),
+                         "runtimeRebound": runtime_rebound,
+                         "motionPack": {'imported': imported_pack is not None,
+                                        'id': imported_pack.id if imported_pack else None,
+                                        'requiresReview': validated_project.motion_pack is not None},
+                         "external": ["服务凭据", "模型与引擎", "外置动作模板"]},
             "notice": "已另存工程；模型/模板不包含在备份中，迁移后须重新检查。"}

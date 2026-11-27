@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
+import tempfile
 import uuid
 import wave
 from array import array
@@ -66,6 +68,7 @@ def build_units(project: Project, revision: ScriptRevision, bindings: dict[str, 
             provider_profile_id=binding.get("providerProfileId", "mock-tts"),
             model_id=binding.get("modelId", ""),
             voice_binding_id=binding_id,
+            voice_id=str(binding.get("providerVoiceId") or binding.get("minimaxVoiceId") or ""),
             emotion={"label": turn.tone or "自然"},
             speed_ratio=turn.speed_ratio,
         )
@@ -85,6 +88,7 @@ def _unit_fingerprint(turn, unit: SynthesisUnit, pronunciation: list[dict] | Non
         "lineTexts": apply_pronunciation([line.spoken_text for line in turn.lines], pronunciation),
         "voiceBindingId": unit.voice_binding_id,
         "providerProfileId": unit.provider_profile_id, "modelId": unit.model_id,
+        "voiceId": unit.voice_id,
         "emotion": unit.emotion, "speedRatio": unit.speed_ratio,
     }
     if reference:
@@ -102,6 +106,7 @@ def _effective_bindings(project: Project, supplied: dict[str, dict]) -> dict[str
             "providerProfileId": binding.provider_profile_id, "modelId": binding.model_id,
             "localRefAudio": binding.local_ref_audio.model_dump(by_alias=True) if binding.local_ref_audio else None,
             "minimaxVoiceId": binding.minimax_voice_id,
+            "providerVoiceId": binding.provider_voice_id or binding.minimax_voice_id,
         }
         for binding in project.voice_bindings
     }
@@ -119,6 +124,7 @@ def binding_models(bindings: dict[str, dict]) -> list[VoiceBinding]:
             model_id=b.get("modelId", ""),
             local_ref_audio=b.get("localRefAudio"),
             minimax_voice_id=b.get("minimaxVoiceId"),
+            provider_voice_id=b.get("providerVoiceId") or b.get("minimaxVoiceId"),
             audition_state="none",
         ))
     return out
@@ -137,6 +143,7 @@ async def synthesize_timeline(
     artifacts_root: Path | None = None,
     target_turn_ids: list[str] | None = None,
     pronunciation: list[dict] | None = None,
+    request_key: str = "",
     progress=None,
 ) -> AudioTimeline:
     """逐单元请求 TTS，累积整数样本偏移，构造并写回 AudioTimeline。
@@ -146,7 +153,8 @@ async def synthesize_timeline(
     progress(done, total)：每处理完一个单元回调一次，供任务中心/阶段③显示真实进度。
     """
     bindings = _effective_bindings(project, bindings)
-    if not tts.capabilities.get("simulated", True):
+    simulated = bool(tts.capabilities.get("simulated", True))
+    if not simulated:
         bindings = {speaker: {"id": f"VB-{speaker}-default", "characterId": speaker,
                              "providerProfileId": getattr(tts, "name", "local-tts"),
                              **bindings.get(speaker, {})}
@@ -165,6 +173,15 @@ async def synthesize_timeline(
         raise ValueError("INVALID_GAPS: 停顿数量必须等于发言数减一")
     if any(type(ms) is not int or ms < 0 for ms in [*gaps, lead_in_ms, tail_out_ms]):
         raise ValueError("INVALID_GAPS: 停顿必须是非负整数毫秒")
+    line_texts_by_unit = {
+        unit.id: apply_pronunciation([ln.spoken_text for ln in revision_turn_lines(revision, unit)], pronunciation)
+        for unit in units
+    }
+    for unit in units:
+        if not "".join(line_texts_by_unit[unit.id]).strip():
+            raise ValueError(f"INVALID_AUDIO: 话轮 {unit.turn_id} 没有可朗读文本，请在脚本中删除或补全后重试")
+    if not simulated and (artifact_store is None or artifacts_root is None):
+        raise ValueError("INVALID_AUDIO: 真实合成必须配置产物存储，无法登记或校验音频资产")
     timeline = AudioTimeline(
         revision_id=revision.id,
         unit_offsets={},
@@ -183,13 +200,9 @@ async def synthesize_timeline(
     # 跨 revision 复用是刻意的——改一句脚本会新建草稿版本，但其余句子的读音并没有变。
     reusable_by_unit = _reusable_units(current) if (current and is_full_synthesis) else {}
     offset = lead_in_ms * 48
-    unit_paths: dict[str, str] = {}
     turn_speaker = {t.id: t.speaker for t in revision.turns}
     for index, unit in enumerate(units):
-        line_texts = apply_pronunciation(
-            [ln.spoken_text for ln in revision_turn_lines(revision, unit)], pronunciation)
-        if not "".join(line_texts).strip():
-            raise ValueError(f"INVALID_AUDIO: 话轮 {unit.turn_id} 没有可朗读文本，请在脚本中删除或补全后重试")
+        line_texts = line_texts_by_unit[unit.id]
         previous_adopted = adopted_by_unit.get(unit.id)
         previous_candidates = candidates_by_unit.get(unit.id)
         if previous_adopted:
@@ -213,6 +226,8 @@ async def synthesize_timeline(
                 "lineTexts": line_texts, "voiceBindingId": unit.voice_binding_id,
                 "speaker": turn_speaker.get(unit.turn_id, "A"),
                 "providerProfileId": unit.provider_profile_id, "modelId": unit.model_id,
+                "voiceId": unit.voice_id,
+                "unitId": unit.id, "requestKey": request_key,
                 "emotion": unit.emotion, "speedRatio": unit.speed_ratio,
                 "referenceAudio": bindings.get(turn_speaker.get(unit.turn_id, "A"), {}).get("localRefAudio"),
             })
@@ -222,6 +237,14 @@ async def synthesize_timeline(
             if res.get("sampleRate") != timeline.sample_rate:
                 raise ValueError("INVALID_SAMPLE_RATE: 适配器必须先转换为 48kHz 母轨")
             asset_id = res.get("audioAssetId")
+            if not simulated:
+                if not isinstance(asset_id, str) or not asset_id.strip():
+                    raise ValueError("INVALID_AUDIO: 真实 TTS 未返回音频资产 ID")
+                if not res.get("audioPath"):
+                    raise ValueError("INVALID_AUDIO: 真实 TTS 未返回音频文件路径")
+                # 候选一生成就必须可追溯：登记、物理哈希、WAV 格式和实际样本数
+                # 任一不符都立即失败，不能把坏候选写进工程历史。
+                _read_validated_unit_audio(asset_id, sample_count, timeline.sample_rate, artifact_store)
             if asset_id:
                 if asset_id not in unit.candidate_audio_asset_ids:
                     unit.candidate_audio_asset_ids.append(asset_id)
@@ -230,8 +253,6 @@ async def synthesize_timeline(
                 # 保持已有「整期生成后即可试听」行为；局部生成不会走到这里。
                 unit.adopted_audio_asset_id = asset_id
                 unit.sample_count = sample_count
-                if res.get("audioPath"):
-                    unit_paths[unit.id] = res["audioPath"]
             elif not unit.adopted_audio_asset_id:
                 # 没有已采用音频时，候选仍保留自己的权威长度，供采用接口建立时间线。
                 unit.sample_count = sample_count
@@ -249,13 +270,18 @@ async def synthesize_timeline(
                 pass
     timeline.sample_count = offset + tail_out_ms * 48
 
-    if is_full_synthesis and artifact_store is not None and artifacts_root is not None:
-        # 复用单元的音频路径来自产物清单；新合成单元由适配器直接给出路径。
-        for unit_id, path in _paths_for_adopted_units(timeline, artifact_store).items():
-            unit_paths.setdefault(unit_id, path)
-    if is_full_synthesis and artifact_store is not None and artifacts_root is not None and len(unit_paths) == len(units):
+    if not simulated:
+        # 局部合成也必须确认所有已采用资产仍然存在且未变化；否则只写历史会
+        # 留下“任务成功但媒体不可用”的时间轨。真正拼母轨前还会再逐单元校验。
+        for unit in timeline.units:
+            if unit.adopted_audio_asset_id:
+                _read_validated_unit_audio(
+                    unit.adopted_audio_asset_id, unit.sample_count, timeline.sample_rate, artifact_store)
+    if is_full_synthesis and not simulated:
+        # 真实模式不存在“缺文件所以跳过母轨”的降级路径。全部单元校验通过后
+        # 才原子发布 master，再进入工程写回；失败时旧 timeline/master 不变。
         timeline.master_audio_asset_id = _build_master_track(
-            timeline, unit_paths, revision.id, artifact_store, Path(artifacts_root))
+            timeline, revision.id, artifact_store, Path(artifacts_root))
 
     # 写回工程（原子 apply：audio_timeline + voice_bindings）
     voice_bindings = binding_models(bindings)
@@ -356,9 +382,10 @@ def _timeline_from_adopted_units(
     candidate_units: dict[str, SynthesisUnit],
     unit_id: str,
     candidate_asset_id: str,
+    pronunciation: list[dict] | None = None,
 ) -> AudioTimeline:
     """将一个候选提升为采用版本，并验证其余话轮均能复用当前脚本的采用音频。"""
-    base_units = build_units(project, revision, bindings)
+    base_units = build_units(project, revision, bindings, pronunciation)
     previous = _adopted_units_for_revision(project, revision.id)
     timeline = project.audio_timeline
     gaps = (timeline.transition_gap_ms if timeline and len(timeline.transition_gap_ms) == len(base_units) - 1
@@ -384,7 +411,9 @@ def _timeline_from_adopted_units(
             unit.adopted_audio_asset_id = candidate_asset_id
             unit.sample_count = count
         if not unit.adopted_audio_asset_id or unit.sample_count <= 0:
-            raise ValueError(f"ADOPTION_INCOMPLETE: 话轮 {unit.turn_id} 尚无可采用音频")
+            # 外部录音允许从未合成的时间轨开始逐条建立；未齐话轮保持 0 样本，
+            # 确认与渲染入口另有完整性门禁，不能把半成品当成可交付配音。
+            unit.sample_count = 0
         result.unit_offsets[unit.id] = offset
         offset += unit.sample_count
         if index < len(gaps):
@@ -413,20 +442,42 @@ def adopt_unit_candidate(
     candidate_asset_id: str,
     artifact_store=None,
     artifacts_root: Path | None = None,
+    pronunciation: list[dict] | None = None,
+    require_media: bool | None = None,
 ) -> AudioTimeline:
-    """采用候选音频并重建整期权威时间线与母轨。"""
+    """采用候选音频并重建整期权威时间线与母轨。
+
+    pronunciation 必须与候选生成时的 effective pronunciation 相同；API 在
+    采用时重新合并全局/工程词典并传入，避免服务端凭空猜测候选请求快照。
+    require_media=None 时按已保存声线判断，兼容 mock 无媒体演示流程。
+    """
     project = store.load(project_id)
     if project is None:
         raise KeyError("PROJECT_NOT_FOUND")
     revision = find_revision(project, project.current_draft_revision)
     bindings = _effective_bindings(project, {})
+    effective = effective_pronunciation(project) if pronunciation is None else pronunciation
     candidates = _candidate_units_for_revision(project, revision.id)
     canonical = _timeline_from_adopted_units(
-        project, revision, bindings, candidates, unit_id, candidate_asset_id)
+        project, revision, bindings, candidates, unit_id, candidate_asset_id, effective)
+    if require_media is None:
+        require_media = any(
+            (binding.get("providerProfileId") or "") not in ("", "mock-tts")
+            for binding in bindings.values()
+        )
+    complete = bool(canonical.units) and all(
+        unit.sample_count > 0 and (unit.adopted_audio_asset_id or not require_media)
+        for unit in canonical.units
+    )
     paths = _paths_for_adopted_units(canonical, artifact_store)
-    if artifact_store is not None and artifacts_root is not None and len(paths) == len(canonical.units):
+    if complete and artifact_store is not None and artifacts_root is not None and len(paths) == len(canonical.units):
         canonical.master_audio_asset_id = _build_master_track(
-            canonical, paths, revision.id, artifact_store, Path(artifacts_root))
+            canonical, revision.id, artifact_store, Path(artifacts_root))
+    elif complete and require_media:
+        raise ValueError("ADOPTION_MEDIA: 已采用音频资产缺失或产物存储未配置，拒绝写回")
+    else:
+        # 逐条上传期间保留候选和已采用单元，但没有完整母轨。
+        canonical.master_audio_asset_id = None
     updated = store.apply(project_id, {
         "audio_timeline": canonical,
         "audio_history": [*project.audio_history, canonical],
@@ -465,18 +516,33 @@ def restore_timeline_version(store: ProjectStore, project_id: str, history_index
 
 
 def attach_unit_candidate(store: ProjectStore, project_id: str, unit_id: str,
-                          asset_id: str, sample_count: int) -> AudioTimeline:
-    """批 2（42 号方案）：把外部上传的成品音频注入为单元候选。
+                          asset_id: str, sample_count: int,
+                          pronunciation: list[dict] | None = None) -> AudioTimeline:
+    """把外部录音注入单元候选；无 TTS 时间轨时先从当前脚本建立空轨。
 
-    只登记候选，不采用、不重建母轨、不动确认——采用走现有 adopt_unit_candidate，
-    与 AI 局部合成候选完全同权。
+    上传本身不采用、不重建母轨、不动确认。用户逐条试听并采用，全部话轮齐全后
+    adopt_unit_candidate 才会生成权威母轨。
     """
     project = store.load(project_id)
     if project is None:
         raise KeyError("PROJECT_NOT_FOUND")
     timeline = project.audio_timeline
     if timeline is None:
-        raise ValueError("UPLOAD_AUDIO: 请先合成整期配音，再上传单元音频")
+        try:
+            revision = find_revision(project, project.current_draft_revision)
+        except KeyError as exc:
+            raise ValueError("UPLOAD_AUDIO: 请先导入或生成包含话轮的脚本") from exc
+        bindings = _effective_bindings(project, {})
+        units = build_units(project, revision, bindings, pronunciation)
+        if not units:
+            raise ValueError("UPLOAD_AUDIO: 请先准备包含话轮的脚本")
+        if not any(unit.id == unit_id for unit in units):
+            raise ValueError(f"UPLOAD_AUDIO: 合成单元不存在：{unit_id}")
+        timeline = AudioTimeline(
+            revision_id=revision.id, units=units,
+            unit_offsets={unit.id: 0 for unit in units},
+            transition_gap_ms=[320] * max(0, len(units) - 1), sample_count=0,
+        )
     if timeline.revision_id != project.current_draft_revision:
         raise ValueError("UPLOAD_AUDIO: 配音已过期，请先重新合成当前脚本的配音")
     timeline = timeline.model_copy(deep=True)
@@ -493,43 +559,148 @@ def attach_unit_candidate(store: ProjectStore, project_id: str, unit_id: str,
     return updated.audio_timeline
 
 
+def _read_validated_unit_audio(
+    asset_id: str,
+    sample_count: int,
+    sample_rate: int,
+    artifact_store,
+) -> tuple[dict, bytes]:
+    """校验一个已登记音频资产，返回登记项与完整 PCM16 帧。
+
+    真实音频的权威来源是 artifact manifest，而不是 provider 口头返回的路径。
+    登记哈希和物理哈希、声明样本数和 data 块实际字节数都必须一致。
+    """
+    if artifact_store is None:
+        raise ValueError("INVALID_MASTER_INPUT: 缺少产物登记，无法校验单元音频")
+    entry = artifact_store.by_id(asset_id)
+    if not entry or entry.get("kind") != "audio":
+        raise ValueError(f"INVALID_MASTER_INPUT: 单元音频资产未登记：{asset_id}")
+    registered_path = entry.get("path")
+    if not isinstance(registered_path, str) or not registered_path:
+        raise ValueError(f"INVALID_MASTER_INPUT: 单元音频资产缺少路径：{asset_id}")
+    path = Path(registered_path)
+    if not path.is_file():
+        raise ValueError(f"INVALID_MASTER_INPUT: 单元音频文件缺失：{asset_id}")
+    expected_hash = entry.get("fileHash")
+    physical_hash = artifact_store._hash_file(str(path))
+    if not expected_hash or physical_hash != expected_hash:
+        raise ValueError(f"INVALID_MASTER_INPUT: 单元音频哈希不一致：{asset_id}")
+    if type(sample_count) is not int or sample_count <= 0:
+        raise ValueError(f"INVALID_MASTER_INPUT: 单元音频样本数无效：{asset_id}")
+    try:
+        with wave.open(str(path), "rb") as reader:
+            if (reader.getcomptype() != "NONE" or reader.getnchannels() != 1
+                    or reader.getsampwidth() != 2 or reader.getframerate() != sample_rate
+                    or sample_rate != 48000):
+                raise ValueError("INVALID_MASTER_INPUT: 单元音频必须是 48kHz PCM16 单声道")
+            actual_frames = reader.getnframes()
+            frames = reader.readframes(actual_frames)
+    except (wave.Error, EOFError) as exc:
+        raise ValueError(f"INVALID_MASTER_INPUT: 单元音频无法解析：{asset_id}") from exc
+    if actual_frames != sample_count or len(frames) != sample_count * 2:
+        raise ValueError(
+            f"INVALID_MASTER_INPUT: 单元音频实际样本数与时间轨不一致：{asset_id}"
+            f"（声明 {sample_count}，实际 {len(frames) // 2}）"
+        )
+    return entry, frames
+
+
+def _validate_master_layout(timeline: AudioTimeline) -> None:
+    """拒绝截断/重叠/越界布局，确保母轨长度等于所有单元与静音的精确总和。"""
+    if timeline.sample_rate != 48000 or type(timeline.sample_count) is not int or timeline.sample_count <= 0:
+        raise ValueError("INVALID_MASTER_INPUT: 母轨必须是 48kHz 且总样本数有效")
+    if len(timeline.transition_gap_ms) != max(0, len(timeline.units) - 1):
+        raise ValueError("INVALID_MASTER_INPUT: 母轨停顿数量与单元数量不一致")
+    if any(type(value) is not int or value < 0 for value in [
+        timeline.lead_in_ms, timeline.tail_out_ms, *timeline.transition_gap_ms,
+    ]):
+        raise ValueError("INVALID_MASTER_INPUT: 母轨静音长度必须为非负整数毫秒")
+    if len({unit.id for unit in timeline.units}) != len(timeline.units):
+        raise ValueError("INVALID_MASTER_INPUT: 母轨单元 ID 重复")
+    expected = timeline.lead_in_ms * 48
+    for index, unit in enumerate(timeline.units):
+        if type(unit.sample_count) is not int or unit.sample_count <= 0:
+            raise ValueError(f"INVALID_MASTER_INPUT: 单元样本数无效：{unit.id}")
+        if timeline.unit_offsets.get(unit.id) != expected:
+            raise ValueError(f"INVALID_MASTER_INPUT: 单元偏移不连续：{unit.id}")
+        expected += unit.sample_count
+        if index < len(timeline.transition_gap_ms):
+            expected += timeline.transition_gap_ms[index] * 48
+    expected += timeline.tail_out_ms * 48
+    if expected != timeline.sample_count:
+        raise ValueError("INVALID_MASTER_INPUT: 母轨总样本数与单元布局不一致")
+
+
 def _build_master_track(
     timeline: AudioTimeline,
-    unit_paths: dict[str, str],
     revision_id: str,
     artifact_store,
     artifacts_root: Path,
 ) -> str:
-    """按整数样本偏移把各单元 PCM16/48k 单声道写入静音母轨，登记为 mixed 产物。"""
-    master = array("h", bytes(timeline.sample_count * 2))
+    """严格校验所有单元后拼接 PCM16/48k 单声道母轨，并原子发布。"""
+    _validate_master_layout(timeline)
+    master = array("h", [0]) * timeline.sample_count
+    validated_units: list[dict] = []
     for unit in timeline.units:
-        path = unit_paths.get(unit.id)
-        if not path:
-            continue
-        with wave.open(path, "rb") as wf:
-            if wf.getnchannels() != 1 or wf.getsampwidth() != 2 or wf.getframerate() != timeline.sample_rate:
-                raise ValueError("INVALID_MASTER_INPUT: 单元音频必须是 48kHz PCM16 单声道")
-            frames = wf.readframes(wf.getnframes())
-        start = timeline.unit_offsets.get(unit.id, 0)
-        end = min(start + wf.getnframes(), timeline.sample_count)
-        n = max(0, end - start)
-        master[start:end] = array("h", frames[: n * 2])
-    artifacts_root.mkdir(parents=True, exist_ok=True)
+        if not unit.adopted_audio_asset_id:
+            raise ValueError(f"INVALID_MASTER_INPUT: 单元尚未采用音频：{unit.id}")
+        entry, frames = _read_validated_unit_audio(
+            unit.adopted_audio_asset_id, unit.sample_count, timeline.sample_rate, artifact_store)
+        start = timeline.unit_offsets[unit.id]
+        end = start + unit.sample_count
+        master[start:end] = array("h", frames)
+        validated_units.append({
+            "id": unit.id, "asset": unit.adopted_audio_asset_id,
+            "fileHash": entry["fileHash"], "sampleCount": unit.sample_count,
+            "offset": start,
+        })
+
+    artifacts_root = Path(artifacts_root)
+    audio_dir = artifacts_root / "audio"
+    audio_dir.mkdir(parents=True, exist_ok=True)
     asset_id = f"AUD-M-{uuid.uuid4().hex[:12]}"
-    path = artifacts_root / "audio" / f"master_{revision_id}_{asset_id}.wav"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with wave.open(str(path), "wb") as out:
-        out.setnchannels(1)
-        out.setsampwidth(2)
-        out.setframerate(timeline.sample_rate)
-        out.writeframes(master.tobytes())
-    dependency = hashlib.sha256(json.dumps({
-        "revisionId": revision_id,
-        "units": [{"id": u.id, "asset": u.adopted_audio_asset_id, "offset": timeline.unit_offsets.get(u.id, 0)} for u in timeline.units],
-        "gaps": timeline.transition_gap_ms, "leadIn": timeline.lead_in_ms, "tailOut": timeline.tail_out_ms,
-    }, sort_keys=True, ensure_ascii=False).encode("utf-8")).hexdigest()
-    artifact_store.register(asset_id, "mixed", str(path), dependency,
-                            params_snapshot={"revisionId": revision_id, "sampleCount": timeline.sample_count})
+    path = audio_dir / f"master_{revision_id}_{asset_id}.wav"
+    fd, partial_name = tempfile.mkstemp(
+        dir=str(audio_dir), prefix=f".{path.stem}-", suffix=".partial")
+    os.close(fd)
+    partial = Path(partial_name)
+    published = False
+    try:
+        with wave.open(str(partial), "wb") as out:
+            out.setnchannels(1)
+            out.setsampwidth(2)
+            out.setframerate(timeline.sample_rate)
+            out.writeframes(master.tobytes())
+        # replace 前重新读取临时文件，确认头部声明与 data 块实际长度一致。
+        try:
+            with wave.open(str(partial), "rb") as check:
+                if (check.getnchannels() != 1 or check.getsampwidth() != 2
+                        or check.getframerate() != 48000 or check.getnframes() != timeline.sample_count
+                        or len(check.readframes(check.getnframes())) != timeline.sample_count * 2):
+                    raise ValueError("INVALID_MASTER_OUTPUT: 临时母轨格式或样本数校验失败")
+        except (wave.Error, EOFError) as exc:
+            raise ValueError("INVALID_MASTER_OUTPUT: 临时母轨无法解析") from exc
+        with partial.open("r+b") as fh:
+            os.fsync(fh.fileno())
+        master_hash = artifact_store._hash_file(str(partial))
+        os.replace(str(partial), str(path))
+        published = True
+        dependency = hashlib.sha256(json.dumps({
+            "revisionId": revision_id,
+            "units": validated_units,
+            "gaps": timeline.transition_gap_ms, "leadIn": timeline.lead_in_ms,
+            "tailOut": timeline.tail_out_ms, "sampleCount": timeline.sample_count,
+        }, sort_keys=True, ensure_ascii=False).encode("utf-8")).hexdigest()
+        artifact_store.register(
+            asset_id, "mixed", str(path), dependency,
+            params_snapshot={"revisionId": revision_id, "sampleCount": timeline.sample_count},
+            file_hash=master_hash,
+        )
+    except Exception:
+        partial.unlink(missing_ok=True)
+        if published:
+            path.unlink(missing_ok=True)
+        raise
     return asset_id
 
 
@@ -541,20 +712,9 @@ def retime_adopted_audio(store, project_id, gaps, artifacts):
         raise ValueError("请先采用当前脚本的配音")
     if not isinstance(gaps, list) or len(gaps) != max(0, len(timeline.units)-1) or any(type(g) is not int or not 0 <= g <= 2000 for g in gaps):
         raise ValueError("间隔必须与话轮数量一致，且为0–2000毫秒整数")
-    paths = _paths_for_adopted_units(timeline, artifacts)
     # 演示模式（第五轮实测 A2）：mock TTS 不产出音频文件，全部单元都没有采用音频。
     # 此时只按新间隔重建偏移与总长；真实引擎下缺文件仍然报错，不能静默降级。
     demo_retime = not any(unit.adopted_audio_asset_id for unit in timeline.units)
-    if not demo_retime:
-        if len(paths) != len(timeline.units):
-            raise ValueError("已采用的单元音频缺失：请回到「生成整期配音」重新合成后再调整间隔")
-        for unit in timeline.units:
-            entry = artifacts.by_id(unit.adopted_audio_asset_id)
-            if artifacts._hash_file(paths[unit.id]) != entry["fileHash"]:
-                raise ValueError("单元音频完整性校验失败")
-            with wave.open(paths[unit.id]) as reader:
-                if reader.getnframes() != unit.sample_count or reader.getframerate() != timeline.sample_rate:
-                    raise ValueError("单元音频样本数与时间轨不一致")
     result = timeline.model_copy(deep=True)
     result.transition_gap_ms = gaps
     offset = round(result.lead_in_ms * result.sample_rate / 1000)
@@ -565,7 +725,8 @@ def retime_adopted_audio(store, project_id, gaps, artifacts):
             offset += round(gaps[index] * result.sample_rate / 1000)
     result.sample_count = offset + round(result.tail_out_ms * result.sample_rate / 1000)
     if not demo_retime:
-        result.master_audio_asset_id = _build_master_track(result, paths, result.revision_id, artifacts, artifacts.root)
+        result.master_audio_asset_id = _build_master_track(
+            result, result.revision_id, artifacts, artifacts.root)
     store.apply(project_id, {"audio_timeline":result,"audio_history":[*project.audio_history,result],
                 "approvals":revoke(project.approvals, ("voice",), "调整间隔后重建时间轨")}, expected_revision=project.revision)
     return result

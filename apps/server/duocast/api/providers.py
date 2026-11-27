@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Request
-import httpx
+import asyncio
 from datetime import datetime, timezone
 
+import httpx
+from fastapi import APIRouter, Request
+
 from ..adapters.base import CapabilityRegistry
+from ..services.runtime_config import validate_provider_url
 
 router = APIRouter(prefix="/api/providers", tags=["providers"])
 
@@ -52,11 +55,23 @@ async def test_provider(provider_id: str, request: Request) -> dict:
         cfg = request.app.state.runtime_settings
         public = request.app.state.public_config
         try:
-            if canonical in {"text", "image"}:
+            if canonical == "video" and cfg.video_provider == "vidu":
+                if not cfg.vidu_key:
+                    raise ValueError("DUOCAST_VIDU_TOKEN 未设置")
+                adapter = request.app.state.video_service
+                checked = await adapter.check()
+                message = f"Vidu CLI {checked.get('version', '已就绪')} 本地检查通过；未连接或创建付费任务"
+            elif canonical == "tts" and cfg.tts_provider in {"minimax", "volcengine"}:
+                present = cfg.minimax_key if cfg.tts_provider == "minimax" else cfg.volcengine_key
+                if not present:
+                    raise ValueError("云语音凭据环境变量未设置，请配置后重启服务")
+                message = "云语音配置与协议适配器已装配；未发起付费合成，请用一句话试听验收"
+            elif canonical in {"text", "image"}:
                 if not cfg.toapis_key:
                     raise ValueError("凭据环境变量未设置，请配置后重启服务")
                 base = public[f"{canonical}_base_url"].rstrip("/")
-                async with httpx.AsyncClient(timeout=8, trust_env=False) as client:
+                await asyncio.to_thread(validate_provider_url, base, f"{canonical}_base_url", resolve=True)
+                async with httpx.AsyncClient(timeout=8, trust_env=False, follow_redirects=False) as client:
                     response = await client.get(base + "/v1/models", headers={"Authorization": "Bearer " + cfg.toapis_key})
                     response.raise_for_status()
                     models = response.json().get("data", [])
@@ -65,7 +80,9 @@ async def test_provider(provider_id: str, request: Request) -> dict:
                 message = "凭据与模型清单检测通过；未发起付费生成，生成能力仍需样片验证"
             else:
                 url = cfg.comfyui_url if canonical == "tts" else cfg.video_url
-                async with httpx.AsyncClient(timeout=8, trust_env=False) as client:
+                await asyncio.to_thread(
+                    validate_provider_url, url, "comfyui_url" if canonical == "tts" else "video_url", resolve=True)
+                async with httpx.AsyncClient(timeout=8, trust_env=False, follow_redirects=False) as client:
                     response = await client.get(url.rstrip("/") + "/object_info")
                     response.raise_for_status()
                     nodes = response.json()
@@ -75,7 +92,7 @@ async def test_provider(provider_id: str, request: Request) -> dict:
                         raise ValueError("引擎在线，但缺 WanVideoSampler 节点")
                 message = "引擎及节点检测通过；权重加载和媒体效果请通过样片验证"
             result = {"ok": True, "provider": canonical, "simulated": False, "message": message, "checkedAt": checked_at}
-        except (httpx.HTTPError, ValueError, KeyError):
+        except (httpx.HTTPError, ValueError, KeyError, RuntimeError):
             # Never echo transport exceptions: headers and credential-bearing URLs may be present.
             result = {"ok": False, "provider": canonical, "simulated": False, "message": "检测失败：请检查服务地址、凭据环境变量、所选模型及引擎节点；配置更改后需重启", "checkedAt": checked_at}
         request.app.state.provider_checks[canonical] = result

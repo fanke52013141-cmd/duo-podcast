@@ -189,3 +189,51 @@ def test_synthesize_rejects_empty_turn_with_turn_id(tmp_path):
     tts = FakeRealTTS(artifacts_root=tmp_path, artifact_store=None)
     with pytest.raises(ValueError, match=r"INVALID_AUDIO: 话轮 T01"):
         asyncio.run(synthesize_timeline(None, tts, proj, rev, {}))
+
+
+def test_cloud_provider_selection_preserves_voice_ids_and_uses_api_queue(tmp_path, monkeypatch):
+    """装配层不得把 MiniMax / 火山绑定重写成本地引擎；本测试不发真实网络请求。"""
+    captured = []
+
+    class RecordingCloudTTS(FakeRealTTS):
+        name = "minimax"
+        capabilities = {"simulated": False, "engine": "fixture-cloud"}
+
+        async def synthesize(self, payload):
+            captured.append(dict(payload))
+            return self._make_wav()
+
+    monkeypatch.setattr('duocast.main.settings', replace(
+        settings, storage_root=tmp_path, tts_provider='minimax', minimax_key='dummy'))
+    monkeypatch.setattr('duocast.main.MiniMaxTTSProvider', RecordingCloudTTS)
+    with TestClient(app) as client:
+        project_id = client.post('/api/projects', json={'title': '云语音绑定'}).json()['id']
+        base = f'/api/projects/{project_id}'
+        gen = client.post(base + '/script/generate', json={
+            'sourceInput': {'kind': 'article', 'content': '你好。\n欢迎来聊一聊。'},
+            'clientToken': 'cloud-script'})
+        wait_job(client, gen.json()['jobId'])
+        count = current_turn_count(client, base)
+        accepted = client.post(base + '/voice/synthesize', json={
+            'transitionGapMs': [320] * (count - 1),
+            'voiceBindings': {
+                'A': {'id': 'VB-A', 'characterId': 'A', 'providerProfileId': 'minimax',
+                      'modelId': 'speech-2.8-hd', 'providerVoiceId': 'voice-for-A'},
+                'B': {'id': 'VB-B', 'characterId': 'B', 'providerProfileId': 'minimax',
+                      'modelId': 'speech-2.8-hd', 'providerVoiceId': 'voice-for-B'},
+            }})
+        assert accepted.status_code == 200, accepted.text
+        job = wait_job(client, accepted.json()['jobId'])
+        assert job['queueClass'] == 'api'
+        assert job['result']['simulated'] is False
+        saved_project = client.get(base).json()
+        timeline = saved_project['audioTimeline']
+        revision = next(item for item in saved_project['scriptRevisions'] if item['id'] == saved_project['currentDraftRevision'])
+        speakers = {turn['id']: turn['speaker'] for turn in revision['turns']}
+        by_speaker = {speakers[unit['turnId']]: unit for unit in timeline['units']}
+        assert by_speaker['A']['voiceId'] == 'voice-for-A'
+        assert by_speaker['B']['voiceId'] == 'voice-for-B'
+    assert captured
+    assert {item['speaker']: item['voiceId'] for item in captured} == {
+        'A': 'voice-for-A', 'B': 'voice-for-B',
+    }

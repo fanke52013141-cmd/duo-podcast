@@ -76,9 +76,11 @@ def build_motion_worker_inputs(store, artifacts, pack_id, version, style, turns,
 
 
 def camera_edit_plan(assets, turns, sample_rate):
-    """Choose actual cameras on the same integer sample clock as motion."""
+    """Choose actual cameras in O(turns log turns), without a per-frame array."""
     count, fps = assets["plan"]["totalFrames"], assets["plan"]["fps"]
     cameras, style = assets["cameras"], assets["style"]
+    if type(count) is not int or count < 1 or type(fps) is not int or fps < 1 or type(sample_rate) is not int or sample_rate < 1:
+        raise ValueError("动作计划时钟无效")
     dual = next((id for id, c in cameras.items() if c["mode"] == "twoShot"), None)
     reverse = {c["subjectSpeaker"]: id for id, c in cameras.items() if c["mode"] == "overShoulder"}
     if style == "twoShot":
@@ -87,18 +89,37 @@ def camera_edit_plan(assets, turns, sample_rate):
         return [{"cameraId": dual, "startFrame": 0, "endFrame": count}]
     if set(reverse) != {"A", "B"} or style == "mixed" and dual is None:
         raise ValueError("真实反打机位不完整")
-    # Silence retains the previous view. Mixed uses the shared opening view
-    # for two seconds, then switches to the visible speaker's real camera.
-    selected = [reverse["A"]] * count
+
+    # Each turn changes the camera from its ceil-aligned first frame onward.
+    # Keeping only change points avoids O(turns * frames) slice copies.
+    changes = {0: reverse["A"]}
     for turn in turns:
-        first = (turn["startSample"] * fps + sample_rate - 1) // sample_rate
-        selected[first:] = [reverse[turn["speaker"]]] * (count-first)
+        speaker = turn.get("speaker")
+        start = turn.get("startSample")
+        if speaker not in reverse or type(start) is not int or start < 0:
+            raise ValueError("话轮镜头切换输入无效")
+        first = (start * fps + sample_rate - 1) // sample_rate
+        if first < count:
+            changes[max(0, first)] = reverse[speaker]
     if style == "mixed":
-        selected[:min(count, fps * 2)] = [dual] * min(count, fps * 2)
+        opening_end = min(count, fps * 2)
+        opening_camera = reverse["A"]
+        for frame in sorted(changes):
+            if frame > opening_end:
+                break
+            opening_camera = changes[frame]
+        later = {frame: camera_id for frame, camera_id in changes.items() if frame > opening_end}
+        changes = {0: dual}
+        if opening_end < count:
+            changes[opening_end] = opening_camera
+        changes.update(later)
+
     shots = []
-    for frame, camera_id in enumerate(selected):
+    for frame in sorted(changes):
+        camera_id = changes[frame]
         if shots and shots[-1]["cameraId"] == camera_id:
-            shots[-1]["endFrame"] = frame + 1
-        else:
-            shots.append({"cameraId": camera_id, "startFrame": frame, "endFrame": frame+1})
+            continue
+        shots.append({"cameraId": camera_id, "startFrame": frame, "endFrame": count})
+    for index in range(len(shots) - 1):
+        shots[index]["endFrame"] = shots[index + 1]["startFrame"]
     return shots

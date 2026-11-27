@@ -17,12 +17,19 @@ import uuid
 from pathlib import Path
 from typing import Any
 
+from ..services.runtime_config import validate_provider_url, validate_public_download_url
+
 BASES = ("https://toapis.com", "https://toapis.cn")
 
 
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        raise ValueError("PROVIDER_REDIRECT_FORBIDDEN: redirect is not allowed")
+
+
 def _opener():
-    # 本机 localhost 会被系统代理劫持（Windows 环境陷阱），显式直连。
-    return urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    # 本机 localhost 会被系统代理劫持（Windows 环境陷阱），显式直连；禁止携带密钥跨站重定向。
+    return urllib.request.build_opener(urllib.request.ProxyHandler({}), _NoRedirect())
 
 
 class ToAPIsImageProvider:
@@ -33,6 +40,8 @@ class ToAPIsImageProvider:
                  timeout_s: int = 600, base_url: str | None = None) -> None:
         self.api_key = api_key
         self.bases = (base_url.rstrip("/"),) if base_url else BASES
+        for base in self.bases:
+            validate_provider_url(base, "image_base_url")
         self.artifacts_root = Path(artifacts_root)
         self.store = artifact_store
         self.size = size
@@ -57,6 +66,7 @@ class ToAPIsImageProvider:
     # ---- 同步实现 ----
 
     def _call(self, opener, url: str, data: dict | None = None) -> dict:
+        validate_provider_url(url, "image_base_url", resolve=True)
         headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
         body = json.dumps(data).encode("utf-8") if data is not None else None
         request = urllib.request.Request(url, data=body, headers=headers)
@@ -110,6 +120,8 @@ class ToAPIsImageProvider:
         if not url:
             raise RuntimeError("IMAGE_NO_RESULT: 任务完成但没有图片 URL")
         # 结果 URL 的 CDN 会拒绝 Python-urllib 默认 UA（实测 403），用浏览器 UA 下载。
+        # 仅允许公网 HTTPS，且禁止重定向，避免 provider 响应把服务器变成 SSRF 客户端。
+        validate_public_download_url(url)
         dl_req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"})
         image_bytes = opener.open(dl_req, timeout=120).read()
         if image_bytes[:8] not in (b"\x89PNG\r\n\x1a\n", b"\xff\xd8\xff"):

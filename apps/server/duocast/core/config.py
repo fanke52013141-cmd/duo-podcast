@@ -12,6 +12,8 @@ PROJECT_ROOT = Path(__file__).resolve().parents[4]  # apps/server/duocast/core/c
 @dataclass(frozen=True)
 class Settings:
     host: str = "127.0.0.1"
+    # TrustedHost 额外放行的主机名（逗号分隔）。通配监听地址必须显式配置实际访问主机名/IP。
+    trusted_hosts: str = ""
     # 8100 为默认端口：本机 8000 可能被其他本地服务占用（如 PPT_presentation_video server.py），
     # 端口可经 DUOCAST_PORT 覆盖（06 §2 core/config.py）
     port: int = 8100
@@ -26,8 +28,19 @@ class Settings:
     project_debounce_ms: int = 500
     # 事件日志保留条数（超出后最旧事件轮转，重连需走快照路径）
     event_log_cap: int = 20_000
-    # 关口 A（链路实测 2026-09-19）：TTS 提供方切换 mock | comfyui
+    # TTS 提供方：mock | comfyui | minimax | volcengine。
+    # 云语音密钥只从环境变量读取；machine.json 仅保存非敏感模型/音色配置。
     tts_provider: str = "mock"
+    minimax_key: str = ""
+    minimax_base_url: str = "https://api.minimaxi.com"
+    minimax_model: str = "speech-2.8-hd"
+    minimax_voice_a: str = "male-qn-qingse"
+    minimax_voice_b: str = ""
+    volcengine_key: str = ""
+    volcengine_base_url: str = "https://openspeech.bytedance.com"
+    volcengine_model: str = "seed-audio-1.0"
+    volcengine_voice_a: str = ""
+    volcengine_voice_b: str = ""
     comfyui_url: str = "http://127.0.0.1:8188"
     comfyui_input: Path = field(
         default_factory=lambda: Path(r"D:\软件\Wan2.2-ReMix-SVI2-V3\Wan2.2-ReMix-SVI2-V3\ComfyUI\input"))
@@ -40,12 +53,18 @@ class Settings:
     image_quality: str = "low"
     image_resolution: str = "1k"
     video_provider: str = "mock"
+    # Vidu 官方 CLI 通道；Token 和可选二进制路径仅从环境变量读取。
+    vidu_key: str = ""
+    vidu_base_url: str = "https://service.vidu.cn"
+    vidu_model: str = "3.4"
+    vidu_binary: str = ""
     text_provider: str = "mock"
     text_model: str = "deepseek-flash"
     video_url: str = "http://127.0.0.1:8191"
     video_input: Path = field(default_factory=lambda: PROJECT_ROOT / "runtime" / "video" / "input")
-    # 批 2（42 号方案）：对外 Ingest API 门禁。为空=仅本机默认放行；
-    # 设置后 /api/ingest/* 必须携带 Authorization: Bearer <token>。
+    # 全局 API 门禁。为空时仅允许回环监听；设置后外部 API 客户端必须携带
+    # Authorization: Bearer <token>，同源浏览器 UI 由 TrustedHost/Origin 放行。
+    # Ingest 始终执行更严格的端点级 Bearer 校验，不使用同源豁免。
     api_token: str = ""
     # 44 号 · 标准模式加速调优参数（默认值=现网行为，零变化）。
     # 回家在 5080 上按 44 号文档梯级 A/B；参数纳入缓存指纹，切配置不误用旧片段。
@@ -86,6 +105,7 @@ class Settings:
         # 队列上限可经环境变量覆盖（12 报告 C-3：5080 单机需按实机调参，无需改代码）
         return cls(
             host=os.environ.get("DUOCAST_HOST", "127.0.0.1"),
+            trusted_hosts=os.environ.get("DUOCAST_TRUSTED_HOSTS", ""),
             port=int(os.environ.get("DUOCAST_PORT", "8100")),
             storage_root=Path(os.environ.get("DUOCAST_STORAGE", str(PROJECT_ROOT / "apps" / "storage"))),
             queue_cap_gpu=cls._env_int("DUOCAST_QUEUE_GPU", 1),
@@ -93,6 +113,16 @@ class Settings:
             queue_cap_cpu=cls._env_int("DUOCAST_QUEUE_CPU", 4),
             project_debounce_ms=cls._env_int("DUOCAST_PROJECT_DEBOUNCE_MS", 500),
             tts_provider=os.environ.get("DUOCAST_TTS_PROVIDER", "mock"),
+            minimax_key=os.environ.get("DUOCAST_MINIMAX_API_KEY", ""),
+            minimax_base_url=os.environ.get("DUOCAST_MINIMAX_BASE_URL", "https://api.minimaxi.com"),
+            minimax_model=os.environ.get("DUOCAST_MINIMAX_MODEL", "speech-2.8-hd"),
+            minimax_voice_a=os.environ.get("DUOCAST_MINIMAX_VOICE_A", "male-qn-qingse"),
+            minimax_voice_b=os.environ.get("DUOCAST_MINIMAX_VOICE_B", ""),
+            volcengine_key=os.environ.get("DUOCAST_VOLCENGINE_API_KEY", ""),
+            volcengine_base_url=os.environ.get("DUOCAST_VOLCENGINE_BASE_URL", "https://openspeech.bytedance.com"),
+            volcengine_model=os.environ.get("DUOCAST_VOLCENGINE_MODEL", "seed-audio-1.0"),
+            volcengine_voice_a=os.environ.get("DUOCAST_VOLCENGINE_VOICE_A", ""),
+            volcengine_voice_b=os.environ.get("DUOCAST_VOLCENGINE_VOICE_B", ""),
             comfyui_url=os.environ.get("DUOCAST_COMFYUI_URL", "http://127.0.0.1:8188"),
             comfyui_input=Path(os.environ.get(
                 "DUOCAST_COMFYUI_INPUT",
@@ -107,11 +137,15 @@ class Settings:
             image_quality=os.environ.get("DUOCAST_IMAGE_QUALITY", "low"),
             image_resolution=os.environ.get("DUOCAST_IMAGE_RESOLUTION", "1k"),
             video_provider=os.environ.get("DUOCAST_VIDEO_PROVIDER", "mock"),
+            vidu_key=os.environ.get("DUOCAST_VIDU_TOKEN", ""),
+            vidu_base_url=os.environ.get("DUOCAST_VIDU_BASE_URL", "https://service.vidu.cn"),
+            vidu_model=os.environ.get("DUOCAST_VIDU_MODEL", "3.4"),
+            vidu_binary=os.environ.get("DUOCAST_VIDU_PATH", ""),
             text_provider=os.environ.get("DUOCAST_TEXT_PROVIDER", "mock"),
             text_model=os.environ.get("DUOCAST_TEXT_MODEL", "deepseek-flash"),
             video_url=os.environ.get("DUOCAST_VIDEO_URL", "http://127.0.0.1:8191"),
             video_input=Path(os.environ.get("DUOCAST_VIDEO_INPUT", str(PROJECT_ROOT / "runtime" / "video" / "input"))),
-            api_token=os.environ.get("DUOCAST_API_TOKEN", ""),
+            api_token=os.environ.get("DUOCAST_API_TOKEN", "").strip(),
             video_attention=os.environ.get("DUOCAST_VIDEO_ATTENTION", "sdpa"),
             video_blocks_to_swap=cls._env_nonneg_int("DUOCAST_VIDEO_BLOCKS_TO_SWAP", 38),
             video_prefetch_blocks=cls._env_nonneg_int("DUOCAST_VIDEO_PREFETCH_BLOCKS", 0),

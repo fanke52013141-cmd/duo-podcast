@@ -201,7 +201,44 @@ def test_audio_import_rejects_garbage_and_missing_timeline(client, tmp_path):
     res = client.post(f"/api/projects/{empty['id']}/voice/units/U-T01/import-audio",
                       files={"file": ("ok.wav", _make_wav(tmp_path / "ok2.wav").read_bytes(), "audio/wav")})
     assert res.status_code == 422
-    assert "先合成" in res.text
+    assert "脚本" in res.text
+
+
+@pytest.mark.skipif(not HAS_FFMPEG, reason="ffmpeg unavailable")
+def test_audio_upload_without_tts_supports_partial_adoption_then_completion(client, tmp_path):
+    """有脚本即可上传真人录音；全部逐条采用后才允许确认并生成母轨。"""
+    store = client.app.state.project_store
+    p = store.create(f"upload-first-{tmp_path.name[-6:]}")
+    p = store.apply(p.id, {"script_revisions": [_revision()], "current_draft_revision": "R1"}, p.revision)
+    for index, unit_id in enumerate(("U-T01", "U-T02")):
+        upload = _make_wav(tmp_path / f"direct-{index}.wav", 0.5 + index * 0.25)
+        res = client.post(f"/api/projects/{p.id}/voice/units/{unit_id}/import-audio",
+                          files={"file": (f"direct-{index}.wav", upload.read_bytes(), "audio/wav")})
+        assert res.status_code == 200, res.text
+        candidate_id = res.json()["candidateAudioAssetId"]
+        current = client.get(f"/api/projects/{p.id}").json()
+        assert current["audioTimeline"]["revisionId"] == "R1"
+        assert len(current["audioTimeline"]["units"]) == 2
+        adopted = client.post(f"/api/projects/{p.id}/voice/units/{unit_id}/adopt",
+                              json={"candidateAudioAssetId": candidate_id})
+        assert adopted.status_code == 200, adopted.text
+        timeline = adopted.json()["audioTimeline"]
+        if index == 0:
+            assert timeline["units"][0]["sampleCount"] > 0
+            assert timeline["units"][1]["sampleCount"] == 0
+            assert timeline["masterAudioAssetId"] is None
+            approval = client.post(f"/api/projects/{p.id}/approvals", json={
+                "kind": "voice", "inputRevisionId": "R1", "expectedRevision": current["revision"],
+            })
+            assert approval.status_code == 422
+        else:
+            assert all(unit["sampleCount"] > 0 for unit in timeline["units"])
+            assert timeline["masterAudioAssetId"]
+            latest = client.get(f"/api/projects/{p.id}").json()
+            approval = client.post(f"/api/projects/{p.id}/approvals", json={
+                "kind": "voice", "inputRevisionId": "R1", "expectedRevision": latest["revision"],
+            })
+            assert approval.status_code == 200, approval.text
 
 
 # ---------- 图片带区域导入 ----------
@@ -262,6 +299,26 @@ def test_video_import_candidate_and_adopt(client, tmp_path):
 
 
 @pytest.mark.skipif(not HAS_FFMPEG, reason="ffmpeg unavailable")
+def test_video_import_same_token_returns_same_asset_and_job(client, tmp_path):
+    p = _setup_project_with_timeline(client, tmp_path, seconds=0.5)
+    total_sec = p.audio_timeline.sample_count / 48000
+    video = _make_mp4(tmp_path / "external-idempotent.mp4", seconds=total_sec)
+    meta = json.dumps({"clientToken": "video-import-idempotent", "provenance": {"source": "external-upload"}})
+    first = client.post(f"/api/projects/{p.id}/render/import-output",
+                        files={"file": ("external.mp4", video.read_bytes(), "video/mp4")}, data={"meta": meta})
+    assert first.status_code == 200, first.text
+    second = client.post(f"/api/projects/{p.id}/render/import-output",
+                         files={"file": ("external.mp4", video.read_bytes(), "video/mp4")}, data={"meta": meta})
+    assert second.status_code == 200, second.text
+    assert second.json()["jobId"] == first.json()["jobId"]
+    assert second.json()["artifactId"] == first.json()["artifactId"]
+    assert second.json()["idempotent"] is True
+    imported = [entry for entry in client.get("/api/artifacts").json()["artifacts"]
+                if entry.get("paramsSnapshot", {}).get("source") == "outputImport"]
+    assert len(imported) == 1
+
+
+@pytest.mark.skipif(not HAS_FFMPEG, reason="ffmpeg unavailable")
 def test_video_import_duration_mismatch_rejected(client, tmp_path):
     p = _setup_project_with_timeline(client, tmp_path, seconds=0.5)
     video = _make_mp4(tmp_path / "toolong.mp4", seconds=3.0)
@@ -312,9 +369,9 @@ def test_ingest_script_route(client):
 
 
 def test_ingest_token_gate(client, monkeypatch):
+    p = client.post("/api/projects", json={"title": "门禁"}).json()
     monkeypatch.setattr(client.app.state, "runtime_settings",
                         replace(client.app.state.runtime_settings, api_token="secret-token"))
-    p = client.post("/api/projects", json={"title": "门禁"}).json()
     envelope = {"schemaVersion": "1.0", "kind": "script", "projectId": p["id"],
                 "payload": {"turns": [{"speaker": "A", "lines": [{"displayText": "x"}]}]}}
     assert client.post("/api/ingest/script", json=envelope).status_code == 401

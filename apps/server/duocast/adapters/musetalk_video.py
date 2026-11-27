@@ -8,15 +8,22 @@ import uuid
 import wave
 from pathlib import Path
 
+_IDENTITY_HASH_CACHE = {}
+
+
 def engine_root():
     value = os.environ.get('DUOCAST_FAST_ENGINE')
     return Path(value).resolve() if value else None
 
 def require_engine(pinned_root=None):
     root = Path(pinned_root).resolve() if pinned_root else engine_root()
-    required = ['worker.py', 'quality.py', 'render_geometry.py', 'assets/manifest.json', 'venv/Scripts/python.exe', 'assets/stage.png', 'assets/parsing_bisenet.pth',
+    required = ['worker.py', 'motion_worker.py', 'motion_audio_cache.py', 'face_restore.py',
+                'quality.py', 'render_geometry.py', 'assets/manifest.json', 'venv/Scripts/python.exe', 'assets/stage.png', 'assets/parsing_bisenet.pth',
                 'assets/template_A.mp4', 'assets/template_B.mp4', 'assets/face_coordinates.json',
-                'models/musetalkV15/unet.pth', 'models/sd-vae/diffusion_pytorch_model.bin', 'models/whisper/pytorch_model.bin']
+                'models/musetalkV15/unet.pth', 'models/musetalkV15/musetalk.json',
+                'models/sd-vae/config.json', 'models/sd-vae/diffusion_pytorch_model.bin',
+                'models/whisper/config.json', 'models/whisper/pytorch_model.bin',
+                'vendor/MuseTalk/musetalk/models/vae.py']
     if root is None or any(not (root / p).is_file() for p in required):
         raise ValueError('快速模式引擎未安装完整，请检查本机配置')
     if (root / '.runtime-install-pending.json').exists():
@@ -36,8 +43,50 @@ def require_motion_engine(pinned_root=None):
         raise ValueError('运行时安装尚未完成，请先回退记录的发布版本')
     return root
 
+def _release_identity(root):
+    """Hash actual inference code/models/packages while tolerating optional tools."""
+    names = {path.name for path in root.glob('*.py')}
+    names.update(name for name in ('runtime_version.json', 'venv/pyvenv.cfg', 'venv/Scripts/python.exe',
+                                   'assets/parsing_bisenet.pth') if (root / name).is_file())
+    site_packages = root / 'venv/Lib/site-packages'
+    for package in ('torch', 'transformers', 'diffusers', 'numpy', 'opencv_python', 'librosa',
+                    'soxr', 'scipy', 'soundfile', 'einops'):
+        names.update(str(path.relative_to(root)).replace('\\', '/')
+                     for path in site_packages.glob(package + '-*.dist-info/METADATA'))
+    for folder in (root / 'models', root / 'vendor/MuseTalk'):
+        if not folder.is_dir():
+            raise ValueError('快速模板运行时缺少模型或 vendor 代码')
+        names.update(str(path.relative_to(root)).replace('\\', '/') for path in folder.rglob('*')
+                     if path.is_file() and (folder.name == 'models' or path.suffix == '.py'))
+    hashes = {}
+    for name in sorted(names):
+        path = root / name
+        stat = path.stat()
+        stamp = (str(path), stat.st_size, stat.st_mtime_ns, stat.st_ctime_ns)
+        if stamp not in _IDENTITY_HASH_CACHE:
+            digest = hashlib.sha256()
+            with path.open('rb') as source:
+                for chunk in iter(lambda: source.read(1024 * 1024), b''):
+                    digest.update(chunk)
+            _IDENTITY_HASH_CACHE[stamp] = digest.hexdigest()
+        hashes[name] = _IDENTITY_HASH_CACHE[stamp]
+    if not any(name.startswith('models/') for name in hashes):
+        raise ValueError('快速模板运行时模型身份为空')
+    return hashlib.sha256(json.dumps({'root': os.path.normcase(str(root)), 'files': hashes},
+                                    sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+
+
 def template_identity(root):
-    files = ['worker.py', 'quality.py', 'render_geometry.py', 'assets/stage.png', 'assets/manifest.json',
+    """Pin the complete inference release, not only the visible template assets.
+
+    The release hash covers worker code, model weights, vendor Python, parser
+    weights and installed package versions.  Optional resident tooling is hashed
+    when present but is never required for a one-shot template.  Visible studio
+    assets are added separately so re-rendering them also invalidates old pins.
+    """
+    root = Path(root).resolve()
+    release = _release_identity(root)
+    files = ['assets/stage.png', 'assets/manifest.json',
              'assets/template_A.mp4', 'assets/template_B.mp4', 'assets/face_coordinates.json']
     hashes = {}
     for name in files:
@@ -46,8 +95,13 @@ def template_identity(root):
             for chunk in iter(lambda: source.read(1024*1024), b''):
                 digest.update(chunk)
         hashes[name] = digest.hexdigest()
-    version = hashlib.sha256(json.dumps(hashes, sort_keys=True).encode()).hexdigest()
-    return {'id': 'studio-' + version[:12], 'version': version, 'runtimeRoot': str(root), 'fileHashes': hashes}
+    version = hashlib.sha256(json.dumps({
+        'recipe': 'fast-template-complete-runtime-v2',
+        'runtimeIdentity': release,
+        'assets': hashes,
+    }, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+    return {'id': 'studio-' + version[:12], 'version': version, 'runtimeRoot': str(root),
+            'runtimeIdentity': release, 'fileHashes': hashes}
 
 def project_engine(project):
     if project.motion_pack is not None:

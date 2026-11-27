@@ -8,11 +8,12 @@ from __future__ import annotations
 
 import json
 import re
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import ValidationError
 
-from ..domain.project import Project
+from ..domain.project import Approval, Project
 from ..services.motion_binding import resolve_motion_binding
 from ..services.stage_svc import derive_stage_states
 from ..services.render_inputs import dependency_hash, validate_render_options, visual_dependency_hash
@@ -45,6 +46,12 @@ def _init_store(request: Request) -> ProjectStore:
 def _live_video(request: Request) -> bool:
     registry = getattr(request.app.state, "capabilities", None)
     return registry is not None and not registry.video.get("simulated", True)
+
+
+def _landscape_only_video(request: Request) -> bool:
+    """Vidu 支持多种画幅；旧本地数字人引擎仍只允许横屏。"""
+    provider = getattr(getattr(request.app.state, "runtime_settings", None), "video_provider", "mock")
+    return _live_video(request) and provider != "vidu"
 
 
 def _inject_states(request: Request, proj: Project) -> dict:
@@ -101,7 +108,7 @@ async def create_project(request: Request, payload: dict) -> dict:
             raise HTTPException(422, f"模板不存在: {template_id}")
         if generation_mode == "fast" and (tpl.get("config") or {}).get("aspect", "landscape") != "landscape":
             raise HTTPException(422, "快速模式暂只支持横屏双人演播室模板")
-        if _live_video(request) and (tpl.get("config") or {}).get("aspect", "landscape") != "landscape":
+        if _landscape_only_video(request) and (tpl.get("config") or {}).get("aspect", "landscape") != "landscape":
             raise HTTPException(422, "当前真实引擎仅支持横屏，请选择横屏模板")
     # ID 白名单（P1-4 路径穿越）：显式 ID 先过正则，非法直接 422。
     project_id = payload.get("id")
@@ -197,6 +204,37 @@ async def delete_project(project_id: str, request: Request) -> dict:
     return {"deleted": project_id, "jobsMoved": moved_jobs}
 
 
+@router.post("/{project_id}/approvals")
+async def append_approval(project_id: str, payload: dict, request: Request) -> dict:
+    """Append one confirmation atomically; clients never replace the audit list."""
+    store = _init_store(request)
+    project = store.load(project_id)
+    if project is None:
+        raise HTTPException(404, "工程不存在")
+    kind = payload.get("kind")
+    if kind not in CONFIRM_KINDS:
+        raise HTTPException(422, "未知确认类型")
+    spec = payload.get("spec") or {}
+    if not isinstance(spec, dict):
+        raise HTTPException(422, "确认 spec 必须是对象")
+    approval = Approval(
+        kind=kind,
+        input_revision_id=str(payload.get("inputRevisionId") or ""),
+        spec=spec,
+        decision="accepted",
+        note=str(payload.get("note") or "")[:500],
+        at=datetime.now(timezone.utc).isoformat(timespec="milliseconds"),
+    ).model_dump(mode="json", by_alias=True)
+    approvals = [item.model_dump(mode="json", by_alias=True) for item in project.approvals]
+    approvals.append(approval)
+    # Reuse the existing binding/sample validation and revision check. If another
+    # writer wins the race, apply() returns 409 instead of overwriting its record.
+    return await patch_project(project_id, {
+        "expectedRevision": project.revision,
+        "approvals": approvals,
+    }, request)
+
+
 def _validate_confirm_bindings(store: ProjectStore, project_id: str, approvals: list) -> None:
     """新增的默认确认点必须绑定当前草稿；历史确认原样透传（只追加不改写，01 §13.2）。"""
     current = store.load(project_id)
@@ -218,6 +256,11 @@ def _validate_confirm_bindings(store: ProjectStore, project_id: str, approvals: 
                 f"确认记录必须绑定当前草稿 {current.current_draft_revision}，"
                 f"收到的是 {entry.get('inputRevisionId')!r}（kind={entry.get('kind')}，可能已过期）",
             )
+        if entry.get("kind") == "voice":
+            timeline = current.audio_timeline
+            if (timeline is None or timeline.revision_id != current.current_draft_revision
+                    or not timeline.units or any(unit.sample_count <= 0 for unit in timeline.units)):
+                raise HTTPException(422, "仍有话轮缺少已采用音频，请上传并采用或完成合成后再确认配音")
 
 
 @router.patch("/{project_id}")
@@ -234,7 +277,7 @@ async def patch_project(project_id: str, payload: dict, request: Request) -> dic
         locks = patch["cameraLocks"]
         if not isinstance(locks, dict) or set(locks) - {"A", "B"} or any(type(v) is not bool for v in locks.values()):
             raise HTTPException(422, "机位锁定必须是 {A?: bool, B?: bool}")
-    if patch.get("aspect") == "portrait" and _live_video(request):
+    if patch.get("aspect") == "portrait" and _landscape_only_video(request):
         raise HTTPException(422, "当前真实引擎仅支持横屏，请保留横屏画幅")
     if "approvals" in patch and isinstance(patch["approvals"], list):
         _validate_confirm_bindings(store, project_id, patch["approvals"])

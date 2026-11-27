@@ -174,5 +174,7 @@ def validate_render_options(project, payload, pronunciation=None, real_video=Tru
             if payload.get("performanceMode", project.performance_mode) != "legacy":
                 raise HTTPException(422, "过肩机位使用主体表演，请选择已验证表演方式")
     timeline = project.audio_timeline
+    if timeline and (not timeline.units or any(unit.sample_count <= 0 for unit in timeline.units)):
+        raise HTTPException(422, "仍有话轮缺少已采用音频，请先在配音页补齐")
     if timeline and not audio_inputs_match(project, pronunciation):
         raise HTTPException(409, "台词或声线已改变，请重新生成配音")

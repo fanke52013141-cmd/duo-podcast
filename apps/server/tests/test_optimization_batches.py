@@ -80,7 +80,7 @@ def test_creation_draft_is_durable_and_restored(client):
 
 def test_runtime_config_rejects_secrets_and_keeps_budget(client):
     assert client.patch('/api/machine', json={'runtimeConfig':{'api_key':'secret'}}).status_code == 422
-    assert client.patch('/api/machine', json={'runtimeConfig':{'text_base_url':'https://user:secret@example.com'}}).status_code == 422
+    assert client.patch('/api/machine', json={'runtimeConfig':{'text_base_url':'https://user:secret@toapis.com'}}).status_code == 422
     config = {'text_provider':'mock', 'credential_env':'DUOCAST_TOAPIS_KEY', 'budget_yuan':3.5}
     assert client.patch('/api/machine', json={'runtimeConfig':config}).status_code == 200
     assert client.get('/api/machine').json()['runtimeConfig'] == config
@@ -214,6 +214,9 @@ def test_fast_template_pin_detects_changed_worker(tmp_path, monkeypatch):
 
 def test_provider_check_probes_models_and_never_returns_credential(client, monkeypatch):
     import httpx
+    import socket
+    monkeypatch.setattr(socket, 'getaddrinfo', lambda *args, **kwargs: [
+        (socket.AF_INET, socket.SOCK_STREAM, 6, '', ('93.184.216.34', 443))])
     secret = 'test-only-credential-never-echo'
     app.state.runtime_settings = replace(app.state.runtime_settings, toapis_key=secret)
     app.state.capabilities.text = {'simulated':False}

@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from copy import deepcopy
+import hashlib
+import json
 import re
 from typing import Any
 
@@ -136,6 +138,82 @@ def next_revision_id(project: Project) -> str:
         if digits.isdigit():
             max_num = max(max_num, int(digits))
     return f"R{max_num + 1}"
+
+
+def _content_hash(value: Any) -> str:
+    return hashlib.sha256(json.dumps(value, ensure_ascii=False, sort_keys=True,
+                                     separators=(",", ":")).encode("utf-8")).hexdigest()
+
+
+def script_revision_hash(revision: ScriptRevision) -> str:
+    """Fingerprint the exact script content a rewrite candidate was based on."""
+    return _content_hash(revision.model_dump(mode="json", by_alias=True))
+
+
+def turn_hash(turn: Turn) -> str:
+    return _content_hash(turn.model_dump(mode="json", by_alias=True))
+
+
+def accept_rewrite_candidate(store: ProjectStore, project_id: str, job,
+                             expected_revision: int) -> Project:
+    """Apply a succeeded rewrite only when its source script is still unchanged."""
+    from ..domain.job import JobStatus
+
+    project = store.load(project_id)
+    if project is None:
+        raise KeyError("PROJECT_NOT_FOUND")
+    if (job.project_id != project_id or job.kind != "script.rewrite"
+            or job.status != JobStatus.SUCCEEDED or not job.result):
+        raise ValueError("REWRITE_CANDIDATE_INVALID: 候选任务不存在、未成功或不属于本工程")
+    if type(expected_revision) is not int or expected_revision != project.revision:
+        raise ValueError("REWRITE_CANDIDATE_CONFLICT: 工程已变化，请刷新后重新检查")
+    snapshot = job.input_snapshot or {}
+    base_id = snapshot.get("revisionId")
+    base = next((revision for revision in project.script_revisions if revision.id == base_id), None)
+    if base is None:
+        raise ValueError("REWRITE_CANDIDATE_CONFLICT: 候选源版本不存在")
+    if project.current_draft_revision != base.id:
+        raise ValueError("REWRITE_CANDIDATE_CONFLICT: 当前草稿已切换，不能接受旧候选")
+    if script_revision_hash(base) != snapshot.get("baseRevisionHash"):
+        raise ValueError("REWRITE_CANDIDATE_CONFLICT: 候选生成后脚本已变化，请重新生成")
+    candidate = job.result.get("candidate") or {}
+    candidate_turns = candidate.get("turns") or []
+    changed_ids = candidate.get("changedTurnIds") or []
+    if not isinstance(candidate_turns, list) or not isinstance(changed_ids, list):
+        raise ValueError("REWRITE_CANDIDATE_INVALID: 候选结构无效")
+    current_turns = {turn.id: turn for turn in base.turns}
+    candidate_by_id = {turn.get("id"): turn for turn in candidate_turns if isinstance(turn, dict)}
+    expected_turn_hashes = snapshot.get("turnHashes") or {}
+    for turn_id in changed_ids:
+        if not isinstance(turn_id, str) or turn_id not in current_turns or turn_id not in candidate_by_id:
+            raise ValueError("REWRITE_CANDIDATE_INVALID: 候选话轮范围无效")
+        if turn_hash(current_turns[turn_id]) != expected_turn_hashes.get(turn_id):
+            raise ValueError("REWRITE_CANDIDATE_CONFLICT: 候选话轮已被编辑，请重新生成或人工合并")
+    if not changed_ids:
+        return project
+    from ..domain.project import Turn
+    replacements = {turn_id: Turn.model_validate(candidate_by_id[turn_id]) for turn_id in changed_ids}
+    turns = [replacements.get(turn.id, turn.model_copy(deep=True)) for turn in base.turns]
+    approved = any(a.kind == "script" and a.decision == "accepted" and not a.revoked_at
+                   and a.input_revision_id == base.id for a in project.approvals)
+    is_last = bool(project.script_revisions and project.script_revisions[-1].id == base.id)
+    revisions = [revision.model_copy(deep=True) for revision in project.script_revisions]
+    if not approved and is_last:
+        target = next(revision for revision in revisions if revision.id == base.id)
+        target.turns = turns
+        current_id = base.id
+    else:
+        target = ScriptRevision(
+            id=next_revision_id(project), source_input=deepcopy(base.source_input),
+            content_brief=deepcopy(base.content_brief), turns=turns,
+            text_api_config_ref=base.text_api_config_ref, parent_revision_id=base.id,
+            label=f"接受改写 {job.id[-6:]}",
+        )
+        revisions.append(target)
+        current_id = target.id
+    return store.apply(project_id, {"script_revisions": revisions,
+                                    "current_draft_revision": current_id},
+                       expected_revision=expected_revision)
 
 
 def build_script_revision(project: Project, provider: TextProvider, result: dict[str, Any]) -> ScriptRevision:

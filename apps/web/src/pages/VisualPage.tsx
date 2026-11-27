@@ -164,7 +164,7 @@ export function VisualPage({ projectId }: { projectId: string }) {
   const voiceApproved = proj?.stageProgress.voice === 'done';
   const sampleApproved = proj?.stageProgress.visual === 'done';
 
-  const canGenerate = !!proj && !isFast && !!proj.currentDraftRevision && !generating;
+  const canGenerate = !!proj && !isFast && !!proj.currentDraftRevision && !generating && !gen.isPending;
   // 样片当前只承载「生成成功与否」：接受门槛 = 有主图变体 + 样片任务成功。
   const canAccept = (hasMotion?pinnedReady.data?.ready===true:!!selected) && sampleDone && (currentSample?.result?.simulated !== false || checks.length===4);
   const cameraStatus = useMemo<Record<'A' | 'B', CameraStatus>>(() => {
@@ -204,7 +204,7 @@ export function VisualPage({ projectId }: { projectId: string }) {
           : '需先生成样片';
 
   const handleGenerate = () => {
-    if (!proj) return;
+    if (!proj || gen.isPending) return;
     setError(null);
     gen.mutate({
       projectId,
@@ -215,7 +215,7 @@ export function VisualPage({ projectId }: { projectId: string }) {
   };
 
   const handleGenSample = () => {
-    if (!proj || !sampleRange || (hasMotion&&pinnedReady.data?.ready!==true)) return;
+    if (!proj || !sampleRange || genSample.isPending || (hasMotion&&pinnedReady.data?.ready!==true)) return;
     setError(null);
     genSample.mutate({
       projectId,
@@ -245,7 +245,7 @@ export function VisualPage({ projectId }: { projectId: string }) {
       cameraFileRef.current?.click();
       return;
     }
-    if (!proj) return;
+    if (!proj || gen.isPending) return;
     const foreground = camera === 'A' ? 'B' : 'A';
     setOtsNotice(null);
     gen.mutate({
@@ -568,7 +568,7 @@ export function VisualPage({ projectId }: { projectId: string }) {
                   ))}
                   <div className="cta">
                     <Button
-                    variant="secondary" size="sm" icon="sparkle" busy={generating} disabled={!canGenerate}
+                    variant="secondary" size="sm" icon="sparkle" busy={generating || gen.isPending} disabled={!canGenerate}
                     onClick={handleGenerate}
                     >生成同框底图</Button>
                   </div>
@@ -623,7 +623,7 @@ export function VisualPage({ projectId }: { projectId: string }) {
                           <p>{camera.subject}；{camera.foreground}</p>
                         </div>
                         <div className="hf-ots-actions">
-                          <Button variant="secondary" size="sm" icon="sparkle" disabled={locked} onClick={() => handleCameraAction(camera.id, ready ? '重做' : '生成')}>
+                          <Button variant="secondary" size="sm" icon="sparkle" disabled={locked || gen.isPending} onClick={() => handleCameraAction(camera.id, ready ? '重做' : '生成')}>
                             {ready ? '重做' : '生成'}
                           </Button>
                           <Button variant="secondary" size="sm" icon="upload" disabled={locked} aria-label={`${camera.id}机位上传`} onClick={() => handleCameraAction(camera.id, '上传')}>上传</Button>

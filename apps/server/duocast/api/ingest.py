@@ -11,6 +11,7 @@
 from __future__ import annotations
 
 import json
+import secrets
 
 from fastapi import APIRouter, HTTPException, Query, Request
 
@@ -21,12 +22,21 @@ SCHEMA_VERSION = "1.0"
 
 
 async def require_ingest_token(request: Request) -> None:
-    token = getattr(request.app.state.runtime_settings, "api_token", "") or ""
+    token = str(getattr(request.app.state.runtime_settings, "api_token", "") or "").strip()
     if not token:
-        return  # 本地单用户默认：服务只绑 127.0.0.1，不额外设卡
-    auth = request.headers.get("authorization", "")
-    if auth != f"Bearer {token}":
-        raise HTTPException(401, "Ingest 需要有效的 Bearer token（DUOCAST_API_TOKEN）")
+        return  # 本地单用户默认：启动门禁保证服务只绑定回环地址
+    scheme, separator, credential = request.headers.get("authorization", "").partition(" ")
+    if not (
+        separator
+        and scheme.lower() == "bearer"
+        and credential
+        and secrets.compare_digest(credential.encode("utf-8"), token.encode("utf-8"))
+    ):
+        raise HTTPException(
+            401,
+            "Ingest 需要有效的 Bearer token（DUOCAST_API_TOKEN）",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
 
 
 def _validate_envelope(meta: dict, kind: str) -> dict:
@@ -186,10 +196,12 @@ _PAYLOAD_SCHEMAS = {
     },
     "video": {
         "type": "object",
-        "description": "multipart：file=视频（≤2GB）；meta=信封。时长须与权威时间轨一致（±0.2s）；产物成为候选成片，走 /render/adopt 采纳。",
+        "description": "multipart：file=视频（≤2GB）；meta=信封。默认要求时长与权威时间轨一致（±0.2s）；mode=direct 时不依赖时间轨且保留原音轨。产物成为候选，走 /render/adopt 采纳。",
         "properties": {
+            "mode": {"enum": ["timeline", "direct"], "default": "timeline",
+                     "description": "direct=独立成片上传，不运行本地合成，不校验母轨时长"},
             "audioMode": {"enum": ["keep", "master"], "default": "keep",
-                          "description": "master=仅取画面，音轨重混本工程母轨"},
+                          "description": "master=仅取画面，音轨重混本工程母轨；direct 仅支持 keep"},
         },
     },
 }

@@ -3,7 +3,8 @@ import {createHash} from 'node:crypto';
 
 test('浏览器下载备份并导入，媒体内容保持一致',async({page,request},info)=>{
   await page.goto('/');const card=page.locator('.hf-pcard').filter({hasText:'CPU-MEDIA'});
-  const download=page.waitForEvent('download');await card.getByRole('link',{name:'备份工程（含必要媒体）'}).click();
+  await card.getByRole('button',{name:'CPU-MEDIA 更多操作'}).click();
+  const download=page.waitForEvent('download');await page.getByRole('link',{name:'备份工程（含必要媒体）'}).click();
   const file=info.outputPath('backup.zip');await (await download).saveAs(file);
   await page.getByLabel('选择工程备份').setInputFiles(file);
   const result=page.getByRole('region',{name:'工程导入结果'});await expect(result).toBeVisible();
